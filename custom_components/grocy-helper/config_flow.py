@@ -1,5 +1,6 @@
 """Config flow for ICA integration."""
 
+from enum import StrEnum
 import logging
 from typing import Any
 
@@ -36,6 +37,16 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
     }
 )
 
+
+class Step(StrEnum):
+    MAIN_MENU = "main_menu"
+    ADD_RECIPE = "add_recipe"
+    ADD_PRODUCT = "add_product"
+
+MAIN_MENU = [
+    Step.ADD_RECIPE,
+    Step.ADD_PRODUCT,
+]
 
 class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for ICA."""
@@ -117,6 +128,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             # websession = requests.Session()
 
             if form := user_input.get("choose-form"):
+                self.chosen_form = form
                 if form == "get_product":
                     url = f"http://{host}:{port}/api/objects/quantity_units"
                     resp = await async_get(websession, url, auth_key=api_key)
@@ -124,6 +136,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     return self.async_abort(reason="Operation completed")
                 if form == "add_product":
                     return await self.async_step_add_product(user_input=None)
+                if form == "main_menu":
+                    return await self.async_step_main_menu(user_input=user_input)
 
             return self.async_abort(reason="No operation chosen")
 
@@ -138,7 +152,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     "choose-form",
                 ): selector.SelectSelector(
                     selector.SelectSelectorConfig(
-                        options=["get_product", "add_product"],
+                        options=["get_product", "add_product", "main_menu"],
                         mode=selector.SelectSelectorMode.DROPDOWN,
                         multiple=False,
                     )
@@ -152,13 +166,21 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             data_schema=schema,
             errors=errors,
         )
+        # menu_options = MAIN_MENU.copy()
+        # return self.async_show_menu(step_id=Step.MAIN_MENU, menu_options=menu_options)
+
+    async def async_step_main_menu(self, user_input: dict[str, Any]):
+        """Handle the group choice step."""
+        _LOGGER.debug("Options flow - Main_menu: %s #%s", user_input, self.chosen_form)
+        menu = MAIN_MENU.copy()
+        return self.async_show_menu(step_id=Step.MAIN_MENU, menu_options=menu)
 
     async def async_step_add_product(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Handle the initial step."""
         errors: dict[str, str] = {}
-        _LOGGER.debug("Options flow - add_product: %s", user_input)
+        _LOGGER.debug("Options flow - add_product: %s #%s", user_input, self.chosen_form)
 
         config_entry_data = self.config_entry.data.copy()
 
@@ -197,7 +219,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             }
         )
         # ).extend(self.SHOPPING_LIST_SELECTOR_SCHEMA or {})
-
+    
         return self.async_show_form(
             step_id="add_product",
             data_schema=schema,
@@ -244,3 +266,22 @@ class GrocyOptionsFlowHandler(OptionsFlow):
     #             )
     #         ),
     #     }
+    
+    
+    @staticmethod
+    def fill_schema_defaults(
+        data_schema: vol.Schema,
+        options: dict[str, Any],
+    ) -> vol.Schema:
+        """Make a copy of the schema with suggested values set to saved options."""
+        schema = {}
+        for key, val in data_schema.schema.items():
+            new_key = key
+            if key in options and isinstance(key, vol.Marker):
+                if isinstance(key, vol.Optional) and callable(key.default) and key.default():
+                    new_key = vol.Optional(key.schema, default=options.get(key))  # type: ignore
+                elif "suggested_value" not in (new_key.description or {}):
+                    new_key = copy.copy(key)
+                    new_key.description = {"suggested_value": options.get(key)}  # type: ignore
+            schema[new_key] = val
+        return vol.Schema(schema)
