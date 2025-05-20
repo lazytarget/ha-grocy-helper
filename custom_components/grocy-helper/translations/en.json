@@ -65,7 +65,13 @@
                 "title": "Create a group sensor"
             },
             "add_product": {
-                "title": "Add product"
+                "title": "Add product",
+                "data": {
+                    "name": "Product name"
+                },
+                "data_description": {
+                    "name": "The name of the product"
+                }
             }
         }
     }

@@ -1,5 +1,6 @@
 """Config flow for ICA integration."""
 
+import copy
 from enum import StrEnum
 import logging
 from typing import Any
@@ -21,6 +22,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .http_requests import async_get
 
 from .grocyapi import GrocyAPI
+from .grocytypes import GrocyProduct
 
 from .const import (
     DOMAIN,
@@ -103,6 +105,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
     shopping_lists = None
 
     SHOPPING_LIST_SELECTOR_SCHEMA = None
+    
+    current_product: GrocyProduct = None
 
     def __init__(self, config_entry: ConfigEntry) -> None:
         """Initialize Ica options flow"""
@@ -186,16 +190,23 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         # Handle input
         if user_input is not None:
-            host = config_entry_data[CONF_HOST]
-            port = config_entry_data[CONF_PORT]
-            api_key = config_entry_data[CONF_API_KEY]
+            entity = (self.current_product or {}).copy()
+            entity.update(user_input)
 
-            websession = async_get_clientsession(self.hass)
-            # websession = requests.Session()
+            # host = config_entry_data[CONF_HOST]
+            # port = config_entry_data[CONF_PORT]
+            # api_key = config_entry_data[CONF_API_KEY]
+
+            # websession = async_get_clientsession(self.hass)
+            # # websession = requests.Session()
 
             api: GrocyAPI = self.config_entry.runtime_data
-            products = await api.get_products()
-            _LOGGER.info("PRODUCTS: %s", products)
+            try:
+                product = await api.add_product(data=entity)
+            except BaseException as be:
+                _LOGGER.info("Error when adding PRODUCT: %s", entity)
+                return self.async_abort(reason=f"Error: {be}")
+            _LOGGER.info("ADDED PRODUCT: %s", product)
 
             # if form := user_input.get("choose-form"):
             #     if form == "get-product":
@@ -204,7 +215,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             #         _LOGGER.warning("RESP: %s", resp)
             #         return self.async_abort(reason="Operation completed")
 
-            return self.async_abort(reason="Successfully got products")
+            return self.async_abort(reason="Successfully added product")
 
         # # Build dynamic schemas
         # coordinator: IcaCoordinator = self.config_entry.coordinator
@@ -214,14 +225,13 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         schema = vol.Schema(
             {
                 vol.Required(
-                    "identifier",
+                    "name",
                 ): cv.string,
             }
         )
-        # ).extend(self.SHOPPING_LIST_SELECTOR_SCHEMA or {})
     
         return self.async_show_form(
-            step_id="add_product",
+            step_id=Step.ADD_PRODUCT,
             data_schema=schema,
             errors=errors,
         )

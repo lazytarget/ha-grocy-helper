@@ -27,6 +27,6 @@ class GrocyAPI:
         url = self.get_rest_url(API.URLs.GET_PRODUCTS)
         return await async_get(self._session, url, self._api_key)
 
-    async def add_product(self) -> GrocyProduct:
+    async def add_product(self, data: GrocyProduct) -> GrocyProduct:
         url = self.get_rest_url(API.URLs.ADD_PRODUCT)
-        return await async_post(self._session, url, self._api_key)
+        return await async_post(self._session, url, self._api_key, json_data=data)
