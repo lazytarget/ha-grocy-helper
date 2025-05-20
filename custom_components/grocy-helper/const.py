@@ -10,3 +10,5 @@ class API:
         """URLs and API Endpoints"""
 
         GET_PRODUCTS: Final = "api/objects/products"
+        ADD_PRODUCT: Final = "api/objects/products"
+        UPDATE_PRODUCT: Final = "api/objects/products"
