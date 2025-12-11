@@ -43,8 +43,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     # hass.data[DOMAIN][entry.entry_id] = coordinator
     # entry.coordinator = coordinator
-    base_url = f"http://{host}:{port}/"
-    websession = async_get_clientsession(hass)
+    base_url = f"http://{host}:{port}"
+    # websession = async_get_clientsession(hass)
+    def websession():
+        s = async_get_clientsession(hass)
+        _LOGGER.info("Resolved client: %s", s)
+        return s
     entry.runtime_data = GrocyAPI(base_url, api_key, websession)
 
     # await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

@@ -7,7 +7,7 @@ import logging
 _LOGGER = logging.getLogger(__name__)
 
 CONTENT_TYPE = ("Content-Type", "application/json; charset=utf-8")
-AUTHORIZATION = ("GROCY-API-KEY", "Bearer %s")
+AUTHORIZATION = ("GROCY-API-KEY", "%s")
 X_REQUEST_ID = ("X-Request-Id", "%s")
 
 
@@ -23,6 +23,7 @@ def create_headers(
         headers.update([CONTENT_TYPE])
     if request_id:
         headers.update([(X_REQUEST_ID[0], X_REQUEST_ID[1] % request_id)])
+    _LOGGER.debug("HTTP [XXXX] Headers: %s", json.dumps(headers))
     return headers
 
 
@@ -36,6 +37,8 @@ async def async_get(
     _LOGGER.info(
         "HTTP [GET] Req: %s%s", url, f" | Params: {str(params)}" if params else ""
     )
+    if not isinstance(session, Session):
+        session = session()
     response = await session.get(
         url, params=params, headers=create_headers(auth_key=auth_key)
     )
@@ -71,7 +74,10 @@ async def async_post(
         auth_key=auth_key, with_content=bool(data), request_id=request_id
     )
 
-    _LOGGER.info("HTTP [POST] Req: %s", url)
+    _LOGGER.info("HTTP [POST] Req: %s  \t%s", url, session)
+    if not isinstance(session, Session):
+        session = session()
+    _LOGGER.info("Sesh: %s", session)
     response = await session.post(
         url,
         headers=headers,
@@ -106,6 +112,8 @@ def delete(
     headers = create_headers(auth_key=auth_key, request_id=request_id)
 
     _LOGGER.info("HTTP [DELETE] Req: %s", url)
+    if not isinstance(session, Session):
+        session = session()
     response = session.delete(
         url,
         headers=headers,

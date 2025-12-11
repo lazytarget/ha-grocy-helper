@@ -3,8 +3,11 @@
 import copy
 from enum import StrEnum
 import logging
+import aiohttp
 from typing import Any
 
+import aiohttp.http_exceptions
+import aiohttp.web_exceptions
 import voluptuous as vol
 
 from homeassistant import config_entries
@@ -60,8 +63,8 @@ class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Handle the initial step."""
-        if self._async_current_entries():
-            return self.async_abort(reason="single_instance_allowed")
+        # if self._async_current_entries():
+        #     return self.async_abort(reason="single_instance_allowed")
 
         errors: dict[str, str] = {}
         if user_input is not None:
@@ -202,11 +205,27 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
             api: GrocyAPI = self.config_entry.runtime_data
             try:
+                _LOGGER.info("Getting PRODUCTs")
+                products = await api.get_products()
+                _LOGGER.info("PRODUCTs1: %s", products)
+                
                 product = await api.add_product(data=entity)
+                
+            except aiohttp.web_exceptions.HTTPError as be:
+                _LOGGER.info("Error when adding PRODUCT: %s", entity)
+                _LOGGER.warning("Caught error: %s -> %s", be, be.status_code)
+                return self.async_abort(reason=f"Error: {be}")
             except BaseException as be:
                 _LOGGER.info("Error when adding PRODUCT: %s", entity)
+                _LOGGER.info("Caught exception: %s", be)
                 return self.async_abort(reason=f"Error: {be}")
-            _LOGGER.info("ADDED PRODUCT: %s", product)
+            finally:
+                _LOGGER.info("Finally Getting PRODUCTs")
+                products = await api.get_products()
+                _LOGGER.info("PRODUCTs2: %s", products)
+
+            
+            _LOGGER.info("TRY-loop exited with PRODUCTs: %s", product)
 
             # if form := user_input.get("choose-form"):
             #     if form == "get-product":
