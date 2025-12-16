@@ -57,3 +57,22 @@ class ExtendedGrocyProductStockInfo(TypedDict):
     last_used: str
     product: GrocyProduct
     product_barcodes: list[GrocyProduct]
+
+
+class BarcodeBuddyScanRequest(TypedDict):
+    barcode: str
+    price: float | None
+    bestBeforeInDays: int | None
+
+class BarcodeBuddyScanResultResponse(TypedDict):
+    result: str
+    http_code: int
+
+
+class BarcodeBuddyScanDataResponse(TypedDict):
+    result: str
+
+
+class BarcodeBuddyScanResponse(TypedDict):
+    data: BarcodeBuddyScanDataResponse
+    result: BarcodeBuddyScanResultResponse

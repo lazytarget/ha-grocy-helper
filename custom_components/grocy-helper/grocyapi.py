@@ -3,7 +3,7 @@
 from aiohttp import ClientSession
 
 from .const import API, ApiException
-from .grocytypes import GrocyProduct, ExtendedGrocyProductStockInfo
+from .grocytypes import BarcodeBuddyScanRequest, BarcodeBuddyScanResponse, GrocyProduct, ExtendedGrocyProductStockInfo
 from .http_requests import async_get, async_post
 
 
@@ -40,3 +40,7 @@ class GrocyAPI:
     async def add_product(self, data: GrocyProduct) -> GrocyProduct:
         url = self.get_rest_url(API.URLs.ADD_PRODUCT)
         return await async_post(self._session, url, self._api_key, json_data=data)
+
+    async def bbuddy_scan(self, request: BarcodeBuddyScanRequest) -> BarcodeBuddyScanResponse:
+        url = self.get_rest_url(API.URLs.BBUDDY_SCAN)
+        return await async_post(self._session, url, self._api_key, json_data=request)

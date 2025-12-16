@@ -30,3 +30,5 @@ class API:
         GET_PRODUCT_BY_BARCODE: Final = "api/stock/products/by-barcode/%s"
         ADD_PRODUCT: Final = "api/objects/products"
         UPDATE_PRODUCT: Final = "api/objects/products"
+        
+        BBUDDY_SCAN: Final = "api/action/scan"

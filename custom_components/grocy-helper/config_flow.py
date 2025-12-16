@@ -3,6 +3,7 @@
 import copy
 from enum import StrEnum
 import logging
+import json
 import aiohttp
 from typing import Any
 
@@ -26,7 +27,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .http_requests import async_get
 
 from .grocyapi import GrocyAPI
-from .grocytypes import GrocyProduct
+from .grocytypes import GrocyProduct, BarcodeBuddyScanRequest, BarcodeBuddyScanResponse
 
 from .const import (
     DOMAIN,
@@ -233,15 +234,20 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             entity = barcodes_str
 
             api: GrocyAPI = self.config_entry.runtime_data
-            barcodes = barcodes_str.split('\n')
+            barcodes = barcodes_str.split("\n")
             for barcode in barcodes:
-                code = barcode.strip().strip(',').strip()
+                code = barcode.strip().strip(",").strip()
                 product = await api.get_product_by_barcode(code)
                 if product is None:
                     # Product not found, create it after looking up info
                     _LOGGER.info("PRODUCT not found: %s", code)
                 else:
                     _LOGGER.info("PRODUCT: %s -> %s", code, product)
+                    request = BarcodeBuddyScanRequest(
+                        barcode=code, price=None, bestBeforeInDays=None
+                    )
+                    response = await api.bbuddy_scan(request)
+                    _LOGGER.info("SCAN: %s", json.dumps(response))
 
                 # try:
                 #     barcode = barcode.strip()
