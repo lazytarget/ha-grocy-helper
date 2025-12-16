@@ -16,8 +16,9 @@ def create_headers(
     auth_key: str | None = None,
     with_content: bool = False,
     request_id: str | None = None,
+    headers: Dict[str, str] = None
 ) -> Dict[str, str]:
-    headers: Dict[str, str] = {}
+    headers = headers or {}
     if auth_key:
         headers |= [(AUTHORIZATION[0], AUTHORIZATION[1] % auth_key)]
     if with_content:
