@@ -1,8 +1,9 @@
 from __future__ import annotations
 from typing import Any, Dict
-from aiohttp import ClientSession as Session
+from aiohttp import ClientSession as Session, web_exceptions
 import json
 import logging
+from .const import ApiException
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,10 +48,17 @@ async def async_get(
         j = await response.json()
         _LOGGER.debug("HTTP [GET] Resp: %s", json.dumps(j))
         return j
+    elif response.status == 400:
+        j = await response.json() or {}
+        he = ApiException(response.status, j.get("error_message"))
+        raise he
     elif response.status == 404 and return_none_when_404:
         return None
 
     try:
+        _LOGGER.info(
+            "Raising for status: %s -> %s", response.status, await response.text()
+        )
         response.raise_for_status()
     except BaseException as ex:
         _LOGGER.error(
@@ -89,6 +97,9 @@ async def async_post(
         j = await response.json()
         _LOGGER.debug("HTTP [POST] Resp: %s", j)
         return j
+    elif response.status == 400:
+        j = await response.json() or {}
+        raise web_exceptions.HTTPBadRequest(text=j.get("error_message"))
 
     try:
         response.raise_for_status()

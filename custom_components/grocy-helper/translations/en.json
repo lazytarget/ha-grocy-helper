@@ -26,8 +26,9 @@
             "init": {},
             "main_menu": {
                 "menu_options": {
-                    "add_product": "Add product",
-                    "add_recipe": "Add recipe"
+                    "add_product": "Add product [WIP]",
+                    "add_recipe": "Add recipe [WIP]",
+                    "scan": "Scan barcodes [WIP]"
                 },
                 "title": "Choose titl",
                 "description": "Select the type of group sensor you want to create. Choose domain based group if you want to group all entities of a specific domain, or create a sensor summing all your energy sensor. Choose standard group otherwise"
@@ -71,6 +72,15 @@
                 },
                 "data_description": {
                     "name": "The name of the product"
+                }
+            },
+            "scan": {
+                "title": "Scan barcodes to (Provision, Purchase, Consume, etc.)",
+                "data": {
+                    "barcodes": "Barcodes (EAN/GTIN)"
+                },
+                "data_description": {
+                    "barcodes": "A list of barcodes to ensure are created in Grocy"
                 }
             }
         }

@@ -2,8 +2,8 @@
 
 from aiohttp import ClientSession
 
-from .const import API
-from .grocytypes import GrocyProduct
+from .const import API, ApiException
+from .grocytypes import GrocyProduct, ExtendedGrocyProductStockInfo
 from .http_requests import async_get, async_post
 
 
@@ -26,6 +26,16 @@ class GrocyAPI:
     async def get_products(self) -> list[GrocyProduct]:
         url = self.get_rest_url(API.URLs.GET_PRODUCTS)
         return await async_get(self._session, url, self._api_key)
+
+    async def get_product_by_barcode(self, barcode: str) -> ExtendedGrocyProductStockInfo | None:
+        url = self.get_rest_url(API.URLs.GET_PRODUCT_BY_BARCODE) % barcode
+        try:
+            return await async_get(self._session, url, self._api_key)
+        except ApiException as ae:
+            if ae.status_code == 400 and ae.error_message.startswith("No product with barcode "):
+                return None
+            else:
+                raise ae
 
     async def add_product(self, data: GrocyProduct) -> GrocyProduct:
         url = self.get_rest_url(API.URLs.ADD_PRODUCT)

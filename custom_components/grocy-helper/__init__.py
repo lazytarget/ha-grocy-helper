@@ -4,13 +4,14 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.const import CONF_API_KEY, CONF_HOST, CONF_PORT
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .grocyapi import GrocyAPI
 
 from .const import (
     DOMAIN,
+    CONF_GROCY_API_URL,
+    CONF_GROCY_API_KEY,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -27,9 +28,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.data,
     )
 
-    host = entry.data[CONF_HOST]
-    port = entry.data[CONF_PORT]
-    api_key = entry.data[CONF_API_KEY]
+    # host = entry.data[CONF_HOST]
+    # port = entry.data[CONF_PORT]
+    # api_key = entry.data[CONF_API_KEY]
 
     # coordinator = IcaCoordinator(
     #     hass,
@@ -41,15 +42,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # await coordinator.async_config_entry_first_refresh()
 
     hass.data.setdefault(DOMAIN, {})
+
     # hass.data[DOMAIN][entry.entry_id] = coordinator
     # entry.coordinator = coordinator
-    base_url = f"http://{host}:{port}"
+    # base_url = f"http://{host}:{port}"
     # websession = async_get_clientsession(hass)
     def websession():
         s = async_get_clientsession(hass)
         _LOGGER.info("Resolved client: %s", s)
         return s
-    entry.runtime_data = GrocyAPI(base_url, api_key, websession)
+
+    # entry.runtime_data = GrocyAPI(base_url, api_key, websession)
+    entry.runtime_data = GrocyAPI(
+        entry.data[CONF_GROCY_API_URL], entry.data[CONF_GROCY_API_KEY], websession
+    )
 
     # await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 

@@ -3,6 +3,13 @@ from __future__ import annotations
 from typing import List, TypedDict, Union
 
 
+class GrocyProductBarcode(TypedDict):
+    id: int
+    product_id: int
+    barcode: str
+    note: str
+
+
 class GrocyProduct(TypedDict):
     id: int
     name: str
@@ -41,3 +48,12 @@ class GrocyProduct(TypedDict):
     qu_id_price: int
     disable_open: int
     default_purchase_price_type: int
+
+
+class ExtendedGrocyProductStockInfo(TypedDict):
+    stock_amount: int
+    stock_value: int
+    last_purchased: str
+    last_used: str
+    product: GrocyProduct
+    product_barcodes: list[GrocyProduct]
