@@ -75,12 +75,12 @@
                 }
             },
             "scan": {
-                "title": "Scan barcodes to (Provision, Purchase, Consume, etc.)",
+                "title": "Scan barcodes",
                 "data": {
                     "barcodes": "Barcodes (EAN/GTIN)"
                 },
                 "data_description": {
-                    "barcodes": "A list of barcodes to ensure are created in Grocy"
+                    "barcodes": "A list of barcodes to Provision/Purchase/Consume/etc. in Grocy"
                 }
             }
         }

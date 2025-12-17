@@ -14,9 +14,10 @@ CONF_BBUDDY_API_KEY: Final = "BBUDDY_API_KEY"
 class ApiException(Exception):
     def __init__(self, status_code, error_message):
         # message = f"{status_code}: {error_message}"
-        message = error_message
+        # message = error_message
         self.status_code = status_code
-        super().__init__(message)
+        self.error_message = error_message
+        super().__init__()
 
     status_code: int
     error_message: str

@@ -4,8 +4,6 @@ from aiohttp import ClientSession
 
 from .const import API, ApiException
 from .grocytypes import (
-    BarcodeBuddyScanRequest,
-    BarcodeBuddyScanResponse,
     GrocyProduct,
     ExtendedGrocyProductStockInfo,
 )
@@ -30,16 +28,8 @@ class GrocyAPI:
                 # Might have passed func, invoke factory method
                 s = websession()
             # append with default headers
-            create_headers(auth_key=api_key, headers=s.headers)
+            # create_headers(auth_key=api_key, headers=s.headers)
             return s
-
-        self._session = wrap_websession
-        if isinstance(websession, ClientSession):
-            # Passed session instance, wrap with default headers
-            self._session = wrap_websession
-        else:
-            # Might have passed func, invoke and append default headers
-            self._session = websession()
         self._session = wrap_websession
         self._base_url = base_url
         self._api_key = api_key
@@ -68,9 +58,3 @@ class GrocyAPI:
     async def add_product(self, data: GrocyProduct) -> GrocyProduct:
         url = self.get_rest_url(API.URLs.ADD_PRODUCT)
         return await async_post(self._session, url, self._api_key, json_data=data)
-
-    async def bbuddy_scan(
-        self, request: BarcodeBuddyScanRequest
-    ) -> BarcodeBuddyScanResponse:
-        url = self.get_rest_url(API.URLs.BBUDDY_SCAN)
-        return await async_post(self._session, url, self._api_key, json_data=request)

@@ -7,11 +7,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .grocyapi import GrocyAPI
+from .barcodebuddyapi import BarcodeBuddyAPI
 
 from .const import (
     DOMAIN,
     CONF_GROCY_API_URL,
     CONF_GROCY_API_KEY,
+    CONF_BBUDDY_API_URL,
+    CONF_BBUDDY_API_KEY,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -53,9 +56,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         return s
 
     # entry.runtime_data = GrocyAPI(base_url, api_key, websession)
-    entry.runtime_data = GrocyAPI(
-        entry.data[CONF_GROCY_API_URL], entry.data[CONF_GROCY_API_KEY], websession
+    grocy = GrocyAPI(
+        entry.data[CONF_GROCY_API_URL], 
+        ["GROCY-API-KEY", entry.data[CONF_GROCY_API_KEY]], 
+        websession
     )
+    bbuddy = BarcodeBuddyAPI(
+        entry.data[CONF_BBUDDY_API_URL], 
+        ["BBUDDY-API-KEY", entry.data[CONF_BBUDDY_API_KEY]], 
+        websession
+    )
+    entry.runtime_data = {
+        "grocy": grocy,
+        "bbuddy": bbuddy,
+    }
 
     # await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 

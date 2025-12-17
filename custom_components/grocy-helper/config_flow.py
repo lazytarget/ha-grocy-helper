@@ -27,6 +27,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .http_requests import async_get
 
 from .grocyapi import GrocyAPI
+from .barcodebuddyapi import BarcodeBuddyAPI
 from .grocytypes import GrocyProduct, BarcodeBuddyScanRequest, BarcodeBuddyScanResponse
 
 from .const import (
@@ -91,7 +92,7 @@ class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             grocy_url = user_input[CONF_GROCY_API_URL]
             grocy_api_key = user_input[CONF_GROCY_API_KEY]
-            bbuddy_url = user_input[CONF_GROCY_API_URL]
+            bbuddy_url = user_input[CONF_BBUDDY_API_URL]
             bbuddy_api_key = user_input[CONF_BBUDDY_API_KEY]
 
             # Assign unique id based on Host/Port
@@ -114,6 +115,52 @@ class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="user",
+            data_schema=STEP_USER_DATA_SCHEMA,
+            errors=errors,
+        )
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        # return await self.async_step_user(user_input=user_input)
+        """Handle the reconfigure step."""
+        # if self._async_current_entries():
+        #     return self.async_abort(reason="single_instance_allowed")
+
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            grocy_url = user_input[CONF_GROCY_API_URL]
+            grocy_api_key = user_input[CONF_GROCY_API_KEY]
+            bbuddy_url = user_input[CONF_BBUDDY_API_URL]
+            bbuddy_api_key = user_input[CONF_BBUDDY_API_KEY]
+
+            # Assign unique id based on Host/Port
+            # WIP: use api_key to indicate uniqueness, as host might change during dev, in future should make this non-reversable
+            await self.async_set_unique_id(f"{DOMAIN}__{grocy_api_key}")
+
+            # # Abort flow if a config entry with same Host and Port exists
+            # self._abort_if_unique_id_configured()
+
+            self._abort_if_unique_id_mismatch()
+
+            config_entry_data = {
+                CONF_GROCY_API_URL: grocy_url,
+                CONF_GROCY_API_KEY: grocy_api_key,
+                CONF_BBUDDY_API_URL: bbuddy_url,
+                CONF_BBUDDY_API_KEY: bbuddy_api_key,
+            }
+            # return self.async_create_entry(
+            #     # title=f"{host}:{port}",
+            #     title=grocy_url,
+            #     data=config_entry_data,
+            # )
+            return self.async_update_reload_and_abort(
+                self._get_reconfigure_entry(),
+                data_updates=config_entry_data,
+            )
+
+        return self.async_show_form(
+            step_id="reconfigure",
             data_schema=STEP_USER_DATA_SCHEMA,
             errors=errors,
         )
@@ -233,21 +280,29 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             _LOGGER.info("SCAN: %s", barcodes_str)
             entity = barcodes_str
 
-            api: GrocyAPI = self.config_entry.runtime_data
+            grocy: GrocyAPI = self.config_entry.runtime_data["grocy"]
+            bbuddy: BarcodeBuddyAPI = self.config_entry.runtime_data["bbuddy"]
+
             barcodes = barcodes_str.split("\n")
             for barcode in barcodes:
                 code = barcode.strip().strip(",").strip()
-                product = await api.get_product_by_barcode(code)
+                product = await grocy.get_product_by_barcode(code)
                 if product is None:
                     # Product not found, create it after looking up info
                     _LOGGER.info("PRODUCT not found: %s", code)
                 else:
                     _LOGGER.info("PRODUCT: %s -> %s", code, product)
-                    request = BarcodeBuddyScanRequest(
-                        barcode=code, price=None, bestBeforeInDays=None
-                    )
-                    response = await api.bbuddy_scan(request)
-                    _LOGGER.info("SCAN: %s", json.dumps(response))
+                    # request = BarcodeBuddyScanRequest(
+                    #     barcode=code, price=None, bestBeforeInDays=None
+                    # )
+                    request = {
+                        "barcode": str(code),
+                        # "price": None,
+                        # "bestBeforeInDays": None,
+                    }
+                    _LOGGER.info("SCAN-REQ: %s", json.dumps(request))
+                    response = await bbuddy.post_scan(request)
+                    _LOGGER.info("SCAN-RESP: %s", json.dumps(response))
 
                 # try:
                 #     barcode = barcode.strip()
