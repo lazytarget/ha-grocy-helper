@@ -27,10 +27,14 @@ class API:
     class URLs:
         """URLs and API Endpoints"""
 
+        GET_LOCATIONS: Final = "api/objects/locations"
+        GET_QUANTITYUNITS: Final = "api/objects/quantityunits"
         GET_PRODUCTS: Final = "api/objects/products"
         GET_PRODUCT_BY_ID: Final = "api/objects/products/%s"
         GET_PRODUCT_BY_BARCODE: Final = "api/stock/products/by-barcode/%s"
+        GET_PRODUCT_BARCODE_BY_ID: Final = "api/objects/product_barcodes/%s"
         ADD_PRODUCT: Final = "api/objects/products"
+        ADD_PRODUCT_BARCODE: Final = "api/objects/product_barcodes"
         UPDATE_PRODUCT: Final = "api/objects/products"
         
         BBUDDY_SCAN: Final = "api/action/scan"

@@ -4,10 +4,13 @@ from aiohttp import ClientSession
 
 from .const import API, ApiException
 from .grocytypes import (
+    GrocyLocation,
     GrocyProduct,
     ExtendedGrocyProductStockInfo,
+    GrocyProductBarcode,
+    GrocyQuantityUnit,
 )
-from .http_requests import async_get, async_post, create_headers
+from .http_requests import async_get, async_post
 
 
 class GrocyAPI:
@@ -30,6 +33,7 @@ class GrocyAPI:
             # append with default headers
             # create_headers(auth_key=api_key, headers=s.headers)
             return s
+
         self._session = wrap_websession
         self._base_url = base_url
         self._api_key = api_key
@@ -37,15 +41,33 @@ class GrocyAPI:
     def get_rest_url(self, endpoint: str):
         return "/".join([self._base_url, endpoint])
 
+    async def get_locations(self) -> list[GrocyLocation]:
+        url = self.get_rest_url(API.URLs.GET_LOCATIONS)
+        return await async_get(self._session, url, self._api_key)
+
+    async def get_quantityunits(self) -> list[GrocyQuantityUnit]:
+        url = self.get_rest_url(API.URLs.GET_QUANTITYUNITS)
+        return await async_get(self._session, url, self._api_key)
+
     async def get_products(self) -> list[GrocyProduct]:
         url = self.get_rest_url(API.URLs.GET_PRODUCTS)
         return await async_get(self._session, url, self._api_key)
+
+    async def get_product_barcode_by_id(
+        self, product_barcode_id: int
+    ) -> ExtendedGrocyProductStockInfo | None:
+        url = self.get_rest_url(API.URLs.GET_PRODUCT_BARCODE_BY_ID) % product_barcode_id
+        return await async_get(
+            self._session, url, self._api_key, return_none_when_404=True
+        )
 
     async def get_product_by_id(
         self, product_id: int
     ) -> ExtendedGrocyProductStockInfo | None:
         url = self.get_rest_url(API.URLs.GET_PRODUCT_BY_ID) % product_id
-        return await async_get(self._session, url, self._api_key, return_none_when_404=True)
+        return await async_get(
+            self._session, url, self._api_key, return_none_when_404=True
+        )
 
     async def get_product_by_barcode(
         self, barcode: str
@@ -67,5 +89,14 @@ class GrocyAPI:
         obj_id = response["created_object_id"]
         if obj_id > 0:
             product = await self.get_product_by_id(obj_id)
+            return product
+        return response
+
+    async def add_product_barcode(self, data: GrocyProductBarcode) -> GrocyProductBarcode:
+        url = self.get_rest_url(API.URLs.ADD_PRODUCT_BARCODE)
+        response = await async_post(self._session, url, self._api_key, data=data)
+        obj_id = response["created_object_id"]
+        if obj_id > 0:
+            product = await self.get_product_barcode_by_id(obj_id)
             return product
         return response

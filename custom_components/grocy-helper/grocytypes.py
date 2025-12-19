@@ -2,12 +2,33 @@ from __future__ import annotations
 
 from typing import List, TypedDict, Union
 
+class GrocyLocation(TypedDict):
+    id: int
+    name: str
+    description: str | None
+    row_created_timestamp: str
+    is_freezer: int
+    active: int
+
+class GrocyQuantityUnit(TypedDict):
+    id: int
+    name: str
+    description: str | None
+    row_created_timestamp: str
+    name_plural: str
+    plural_forms: str | None
+    active: int
 
 class GrocyProductBarcode(TypedDict):
     id: int
     product_id: int
     barcode: str
     note: str
+    qu_id: int | None
+    amount: float | None
+    shopping_location_id: int | None
+    last_price: float | None
+    row_created_timestamp: str
 
 
 class GrocyProduct(TypedDict):
