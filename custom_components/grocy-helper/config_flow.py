@@ -28,7 +28,12 @@ from .http_requests import async_get
 
 from .grocyapi import GrocyAPI
 from .barcodebuddyapi import BarcodeBuddyAPI
-from .grocytypes import GrocyProduct, BarcodeBuddyScanRequest, BarcodeBuddyScanResponse
+from .grocytypes import (
+    ExtendedGrocyProductStockInfo,
+    GrocyProduct,
+    BarcodeBuddyScanRequest,
+    BarcodeBuddyScanResponse,
+)
 
 from .const import (
     DOMAIN,
@@ -66,6 +71,7 @@ class Step(StrEnum):
     ADD_RECIPE = "add_recipe"
     ADD_PRODUCT = "add_product"
     SCAN = "scan"
+    SCAN_PROCESS = "process_scan"
 
 
 MAIN_MENU = [
@@ -177,6 +183,14 @@ class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 class GrocyOptionsFlowHandler(OptionsFlow):
     """Handle an options flow for grocy-helper."""
 
+    _api_grocy: GrocyAPI = None
+    _api_bbuddy: BarcodeBuddyAPI = None
+
+    scan_options: dict[str, str] = {}
+    current_barcode_schema: vol.Schema = None
+    barcode_queue: list[str] = []
+    barcode_results: list[str] = []
+
     shopping_lists = None
 
     SHOPPING_LIST_SELECTOR_SCHEMA = None
@@ -184,9 +198,12 @@ class GrocyOptionsFlowHandler(OptionsFlow):
     current_product: GrocyProduct = None
 
     def __init__(self, config_entry: ConfigEntry) -> None:
-        """Initialize Ica options flow"""
+        """Initialize Grocy-helper options flow"""
         # pylint: disable=W0613 unused-argument
         super().__init__()
+
+        self._api_grocy = config_entry.runtime_data["grocy"]
+        self._api_bbuddy = config_entry.runtime_data["bbuddy"]
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -284,10 +301,20 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             bbuddy: BarcodeBuddyAPI = self.config_entry.runtime_data["bbuddy"]
 
             barcodes = barcodes_str.split("\n")
+            self.barcode_queue = barcodes
+            self.barcode_results = []
+
+            return await self.async_step_process_scan()
+            # return self.async_show_form(
+            #     step_id=Step.SCAN_PROCESS,
+            #     data_schema=schema,
+            #     errors=errors,
+            # )
+
             for barcode in barcodes:
                 code = barcode.strip().strip(",").strip()
                 product = await grocy.get_product_by_barcode(code)
-                if product is None:
+                if product is None or "BBUDDY-" not in product:
                     # Product not found, create it after looking up info
                     _LOGGER.info("PRODUCT not found: %s", code)
                 else:
@@ -366,6 +393,166 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         return self.async_show_form(
             step_id=Step.SCAN,
+            data_schema=schema,
+            errors=errors,
+        )
+
+    async def async_step_process_scan(self, user_input: dict[str, Any] = None):
+        """Handle the scan-queue."""
+        errors: dict[str, str] = {}
+        schemas: list[vol.Schemable] = []
+        config_entry_data = self.config_entry.data.copy()
+        _LOGGER.debug(
+            "Options flow - process_scan inpt: %s #%s", user_input, self.chosen_form
+        )
+        _LOGGER.debug("Options flow - process_scan ced: %s", config_entry_data)
+        _LOGGER.debug("Options flow - process_scan queue: %s", self.barcode_queue)
+
+        current_barcode = (
+            self.barcode_queue[0] if len(self.barcode_queue) > 0 else None
+        )
+
+        if not current_barcode:
+            # Nothing in queue, show summary
+            # todo: Add result info to message...
+            msg = "\n".join(self.barcode_results)
+            _LOGGER.info(
+                "Options flow - process_scan Nothing more in scan queue!: %s",
+                len(self.barcode_results),
+            )
+            return self.async_abort(reason="Nothing more in scan queue!" + "\n" + msg)
+
+        code = current_barcode.strip().strip(",").strip()
+
+        product: ExtendedGrocyProductStockInfo = None
+        if "BBUDDY-" not in code:
+            # Not a BarcodeBuddy code...
+            # Lookup product in Grocy
+            try:
+                product = await self._api_grocy.get_product_by_barcode(code)
+
+                if not product:
+                    # New barcode (Not provisioned in Grocy)
+                    # todo: Lookup in other providers...
+
+                    # Handle input, for required fields
+                    if user_input is not None:
+                        pass
+                    pass
+
+                if not product:
+                    # todo: If still not found, then show input's for manual registration?
+                    _LOGGER.error("No product info found!: %s", code)
+                    errors["NoProduct"] = "No product found!"
+
+                    # Handle input, for required fields
+                    if user_input is not None:
+                        # input has been passed
+                        # todo: create product
+                        # todo: append barcode to product
+                        pass
+
+                    # ask for input...
+                    return self.async_show_form(
+                        step_id=Step.SCAN_PROCESS,
+                        data_schema=self.current_barcode_schema,
+                        errors=errors,
+                    )
+            except BaseException as be:
+                _LOGGER.error("Get product excep: %s", be)
+                errors["Exception"] = be
+
+                return self.async_show_form(
+                    step_id=Step.SCAN_PROCESS,
+                    data_schema=self.current_barcode_schema,
+                    errors=errors,
+                )
+
+        # Handle input, for Price/BestBeforeInDays
+        price = user_input.get("price") if user_input else None
+        bestBeforeInDays = user_input.get("bestBeforeInDays") if user_input else None
+
+        if price is None and self.scan_options.get("input_price"):
+            _LOGGER.info("Price input enabled: append schema field, value: %s", price)
+            schemas.append(
+                {
+                    vol.Optional(
+                        "price", description={"suggested_value": price}
+                    ): selector.TextSelector({"type": "text"})
+                }
+            )
+        if bestBeforeInDays is None and self.scan_options.get("input_bestBeforeInDays"):
+            _LOGGER.info("BestBeforeInDays input enabled: append schema field, value: %s", bestBeforeInDays)
+            schemas.append(
+                {
+                    vol.Optional(
+                        "bestBeforeInDays",
+                        description={"suggested_value": bestBeforeInDays},
+                    ): selector.TextSelector({"type": "text"})
+                }
+            )
+
+        if len(schemas) > 0:
+            self.current_barcode_schema = vol.Schema(schemas)
+            return self.async_show_form(
+                step_id=Step.SCAN_PROCESS,
+                data_schema=self.current_barcode_schema,
+                errors=errors,
+            )
+
+        # Once product has been ensured to exist in Grocy, we can continue with BBuddy call
+        # todo: Input for price?
+        # todo: Input for bestBeforeInDays?
+        request = {
+            "barcode": str(code),
+            # "price": price,
+            # "bestBeforeInDays": bestBeforeInDays,
+        }
+        if price is not None:
+            request["price"] = price
+        if bestBeforeInDays is not None:
+            request["bestBeforeInDays"] = bestBeforeInDays
+        try:
+            _LOGGER.info("SCAN-REQ: %s", json.dumps(request))
+            response = await self._api_bbuddy.post_scan(request)
+            # todo: handle responses with HTML-tags (warning/error messages)
+            _LOGGER.info("SCAN-RESP: %s", response)
+
+            # if success, then remove from queue, and re-run this method again
+            self.barcode_queue.pop(0)
+
+            # todo: handle responses with HTML-tags (warning/error messages)
+            self.barcode_results.append(str(response))
+
+            # Re-run process method until queue is empty...
+            return await self.async_step_process_scan(user_input=None)
+        except BaseException as be:
+            # if error, then display error and give chance to edit or retry, or even skip?
+            _LOGGER.error("BB-Scan excpt: %s", be)
+            errors["Exception"] = be
+
+            return self.async_show_form(
+                step_id=Step.SCAN_PROCESS,
+                data_schema=self.current_barcode_schema,
+                errors=errors,
+            )
+
+        # # Build dynamic schemas
+        # coordinator: IcaCoordinator = self.config_entry.coordinator
+        # await self._ensure_dynamic_schemas_are_built(coordinator)
+
+        # Format form schema
+        schema = vol.Schema(
+            {
+                # vol.Optional("barcodes", description={"suggested_value": current_data.get(CONF_STATS_TEMPLATE, "")}): TextSelector({"type": "text", "multiline": True}),
+                vol.Required(
+                    "barcodes", description={"suggested_value": "4011800420413"}
+                ): selector.TextSelector({"type": "text", "multiline": True}),
+            }
+        )
+
+        return self.async_show_form(
+            step_id=Step.SCAN_PROCESS,
             data_schema=schema,
             errors=errors,
         )

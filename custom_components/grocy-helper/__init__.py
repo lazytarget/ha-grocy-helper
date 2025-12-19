@@ -52,7 +52,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # websession = async_get_clientsession(hass)
     def websession():
         s = async_get_clientsession(hass)
-        _LOGGER.info("Resolved client: %s", s)
         return s
 
     # entry.runtime_data = GrocyAPI(base_url, api_key, websession)
