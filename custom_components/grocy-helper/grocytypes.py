@@ -12,14 +12,19 @@ class GrocyProductBarcode(TypedDict):
 
 class GrocyProduct(TypedDict):
     id: int
+    # Required
     name: str
+    location_id: int
+    qu_id_purchase: int
+    qu_id_stock: int
+    qu_id_price: int
+    qu_id_consume: int
+    row_created_timestamp: str
+    # Optional
     description: None
     product_group_id: Union[None, int]
     active: int
-    location_id: int
     shopping_location_id: Union[None, int]
-    qu_id_purchase: int
-    qu_id_stock: int
     min_stock_amount: int
     default_best_before_days: int
     default_best_before_days_after_open: int
@@ -41,11 +46,8 @@ class GrocyProduct(TypedDict):
     no_own_stock: int
     default_consume_location_id: Union[None, int]
     move_on_open: int
-    row_created_timestamp: str
-    qu_id_consume: int
     auto_reprint_stock_label: int
     quick_open_amount: int
-    qu_id_price: int
     disable_open: int
     default_purchase_price_type: int
 

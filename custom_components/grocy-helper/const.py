@@ -28,6 +28,7 @@ class API:
         """URLs and API Endpoints"""
 
         GET_PRODUCTS: Final = "api/objects/products"
+        GET_PRODUCT_BY_ID: Final = "api/objects/products/%s"
         GET_PRODUCT_BY_BARCODE: Final = "api/stock/products/by-barcode/%s"
         ADD_PRODUCT: Final = "api/objects/products"
         UPDATE_PRODUCT: Final = "api/objects/products"
