@@ -19,7 +19,6 @@ from homeassistant.config_entries import (
     OptionsFlow,
 )
 from homeassistant.core import callback
-from homeassistant.const import CONF_API_KEY, CONF_HOST, CONF_PORT
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import selector
 import homeassistant.helpers.config_validation as cv
@@ -181,7 +180,10 @@ class GrocyOptionsFlowHandler(OptionsFlow):
     _api_grocy: GrocyAPI = None
     _api_bbuddy: BarcodeBuddyAPI = None
 
-    scan_options: dict[str, str] = {}
+    scan_options: dict[str, str] = {
+        "input_price": True,
+        "input_bestBeforeInDays": True,
+    }
     current_barcode_schema: vol.Schema = None
     barcode_queue: list[str] = []
     barcode_results: list[str] = []
@@ -352,16 +354,16 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                         new_product["name"] = user_input["name"]
                         new_product["location_id"] = user_input["location_id"]
                         new_product["qu_id_purchase"] = user_input.get(
-                            "qu_id_purchase", user_input.get("qui_id")
+                            "qu_id_purchase", user_input.get("qu_id")
                         )
                         new_product["qu_id_stock"] = user_input.get(
-                            "qu_id_stock", user_input.get("qui_id")
+                            "qu_id_stock", user_input.get("qu_id")
                         )
                         new_product["qu_id_price"] = user_input.get(
-                            "qu_id_price", user_input.get("qui_id")
+                            "qu_id_price", user_input.get("qu_id")
                         )
                         new_product["qu_id_consume"] = user_input.get(
-                            "qu_id_consume", user_input.get("qui_id")
+                            "qu_id_consume", user_input.get("qu_id")
                         )
                         new_product["row_created_timestamp"] = (
                             dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -392,98 +394,101 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                         return await self.async_step_process_scan(user_input=None)
 
                     masterdata = self.config_entry.runtime_data["master"]
-                    schemas.update(
-                        {
-                            vol.Required(
-                                "name",
-                                description={
-                                    "suggested_value": new_product.get("name")
-                                },
-                            ): selector.TextSelector({"type": "text"})
-                        }
+                    # schemas.update(
+                    #     {
+                    #         vol.Required(
+                    #             "name",
+                    #             description={
+                    #                 "suggested_value": new_product.get("name")
+                    #             },
+                    #         ): selector.TextSelector({"type": "text"})
+                    #     }
+                    # )
+                    # locs = [
+                    #     selector.SelectOptionDict(
+                    #         value=str(loc["id"]),
+                    #         label=loc["name"],
+                    #     )
+                    #     for loc in masterdata["locations"]
+                    # ]
+                    # qu = [
+                    #     selector.SelectOptionDict(
+                    #         value=str(qu["id"]),
+                    #         label=qu["name"],
+                    #     )
+                    #     for qu in masterdata["quantity_units"]
+                    # ]
+                    # schemas.update(
+                    #     {
+                    #         vol.Required(
+                    #             "location_id",
+                    #         ): selector.SelectSelector(
+                    #             selector.SelectSelectorConfig(
+                    #                 options=locs,
+                    #                 mode=selector.SelectSelectorMode.DROPDOWN,
+                    #                 multiple=False,
+                    #             )
+                    #         ),
+                    #     }
+                    # )
+                    # schemas.update(
+                    #     {
+                    #         vol.Required(
+                    #             "qu_id_stock",
+                    #         ): selector.SelectSelector(
+                    #             selector.SelectSelectorConfig(
+                    #                 options=qu,
+                    #                 mode=selector.SelectSelectorMode.DROPDOWN,
+                    #                 multiple=False,
+                    #             )
+                    #         ),
+                    #     }
+                    # )
+                    # schemas.update(
+                    #     {
+                    #         vol.Required(
+                    #             "qu_id_purchase",
+                    #         ): selector.SelectSelector(
+                    #             selector.SelectSelectorConfig(
+                    #                 options=qu,
+                    #                 mode=selector.SelectSelectorMode.DROPDOWN,
+                    #                 multiple=False,
+                    #             )
+                    #         ),
+                    #     }
+                    # )
+                    # schemas.update(
+                    #     {
+                    #         vol.Required(
+                    #             "qu_id_consume",
+                    #         ): selector.SelectSelector(
+                    #             selector.SelectSelectorConfig(
+                    #                 options=qu,
+                    #                 mode=selector.SelectSelectorMode.DROPDOWN,
+                    #                 multiple=False,
+                    #             )
+                    #         ),
+                    #     }
+                    # )
+                    # schemas.update(
+                    #     {
+                    #         vol.Required(
+                    #             "qu_id_price",
+                    #         ): selector.SelectSelector(
+                    #             selector.SelectSelectorConfig(
+                    #                 options=qu,
+                    #                 mode=selector.SelectSelectorMode.DROPDOWN,
+                    #                 multiple=False,
+                    #             )
+                    #         ),
+                    #     }
+                    # )
+                    # self.current_barcode_schema = vol.Schema(schemas)
+                    self.current_barcode_schema = GENERATE_CREATE_PRODUCT_SCHEMA(
+                        masterdata, user_input or {}
                     )
-                    locs = [
-                        selector.SelectOptionDict(
-                            value=str(loc["id"]),
-                            label=loc["name"],
-                        )
-                        for loc in masterdata["locations"]
-                    ]
-                    qu = [
-                        selector.SelectOptionDict(
-                            value=str(qu["id"]),
-                            label=qu["name"],
-                        )
-                        for qu in masterdata["quantity_units"]
-                    ]
-                    schemas.update(
-                        {
-                            vol.Required(
-                                "location_id",
-                            ): selector.SelectSelector(
-                                selector.SelectSelectorConfig(
-                                    options=locs,
-                                    mode=selector.SelectSelectorMode.DROPDOWN,
-                                    multiple=False,
-                                )
-                            ),
-                        }
-                    )
-                    schemas.update(
-                        {
-                            vol.Required(
-                                "qu_id_stock",
-                            ): selector.SelectSelector(
-                                selector.SelectSelectorConfig(
-                                    options=qu,
-                                    mode=selector.SelectSelectorMode.DROPDOWN,
-                                    multiple=False,
-                                )
-                            ),
-                        }
-                    )
-                    schemas.update(
-                        {
-                            vol.Required(
-                                "qu_id_purchase",
-                            ): selector.SelectSelector(
-                                selector.SelectSelectorConfig(
-                                    options=qu,
-                                    mode=selector.SelectSelectorMode.DROPDOWN,
-                                    multiple=False,
-                                )
-                            ),
-                        }
-                    )
-                    schemas.update(
-                        {
-                            vol.Required(
-                                "qu_id_consume",
-                            ): selector.SelectSelector(
-                                selector.SelectSelectorConfig(
-                                    options=qu,
-                                    mode=selector.SelectSelectorMode.DROPDOWN,
-                                    multiple=False,
-                                )
-                            ),
-                        }
-                    )
-                    schemas.update(
-                        {
-                            vol.Required(
-                                "qu_id_price",
-                            ): selector.SelectSelector(
-                                selector.SelectSelectorConfig(
-                                    options=qu,
-                                    mode=selector.SelectSelectorMode.DROPDOWN,
-                                    multiple=False,
-                                )
-                            ),
-                        }
-                    )
-                    self.current_barcode_schema = vol.Schema(schemas)
                     self.add_suggested_values_to_schema(
-                        self.current_barcode_schema, user_input
+                        self.current_barcode_schema, user_input or {}
                     )
 
                     # ask for input...
@@ -708,3 +713,132 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     new_key.description = {"suggested_value": options.get(key)}  # type: ignore
             schema[new_key] = val
         return vol.Schema(schema)
+
+
+def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
+    masterdata, suggested_values: dict[str, str]
+) -> vol.Schema:
+    prods = [
+        selector.SelectOptionDict(
+            value=str(prod["id"]),
+            label=prod["name"],
+        )
+        for prod in masterdata["products"]
+    ]
+    prods.insert(0, selector.SelectOptionDict(value="", label="--CREATE NEW--"))
+
+    schemas: vol.VolDictType = {}
+    schemas.update(
+        {
+            vol.Optional(
+                "product_id",
+                description={
+                    "suggested_value": suggested_values.get("product_id"),
+                },
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=prods,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                    multiple=False,
+                )
+            ),
+        }
+    )
+    return vol.Schema(schemas)
+
+
+def GENERATE_CREATE_PRODUCT_SCHEMA(
+    masterdata, suggested_values: dict[str, str]
+) -> vol.Schema:
+    locs = [
+        selector.SelectOptionDict(
+            value=str(loc["id"]),
+            label=loc["name"],
+        )
+        for loc in masterdata["locations"]
+    ]
+    qu = [
+        selector.SelectOptionDict(
+            value=str(qu["id"]),
+            label=qu["name"],
+        )
+        for qu in masterdata["quantity_units"]
+    ]
+
+    schemas: vol.VolDictType = {}
+    schemas.update(
+        {
+            vol.Required(
+                "name",
+                description={
+                    "suggested_value": suggested_values.get("name"),
+                },
+            ): selector.TextSelector({"type": "text"})
+        }
+    )
+    schemas.update(
+        {
+            vol.Required(
+                "location_id",
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=locs,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                    multiple=False,
+                )
+            ),
+        }
+    )
+    schemas.update(
+        {
+            vol.Required(
+                "qu_id_stock",
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=qu,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                    multiple=False,
+                )
+            ),
+        }
+    )
+    schemas.update(
+        {
+            vol.Required(
+                "qu_id_purchase",
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=qu,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                    multiple=False,
+                )
+            ),
+        }
+    )
+    schemas.update(
+        {
+            vol.Required(
+                "qu_id_consume",
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=qu,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                    multiple=False,
+                )
+            ),
+        }
+    )
+    schemas.update(
+        {
+            vol.Required(
+                "qu_id_price",
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=qu,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                    multiple=False,
+                )
+            ),
+        }
+    )
+    return vol.Schema(schemas)
