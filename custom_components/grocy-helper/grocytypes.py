@@ -99,3 +99,7 @@ class BarcodeBuddyScanDataResponse(TypedDict):
 class BarcodeBuddyScanResponse(TypedDict):
     data: BarcodeBuddyScanDataResponse
     result: BarcodeBuddyScanResultResponse
+
+class GrocyMasterData(TypedDict):
+    locations: list[GrocyLocation]
+    quantity_units: list[GrocyQuantityUnit]

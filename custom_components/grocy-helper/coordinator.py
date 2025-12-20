@@ -1,0 +1,66 @@
+"""DataUpdateCoordinator for the Grocy-helper component."""
+
+import logging
+import traceback
+from datetime import timedelta
+
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+
+from .grocyapi import GrocyAPI
+from .barcodebuddyapi import BarcodeBuddyAPI
+from .grocytypes import GrocyMasterData
+
+_LOGGER = logging.getLogger(__name__)
+
+
+class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
+    """Coordinator for updating data from Grocy."""
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        config_entry: ConfigEntry,
+        grocy_api: GrocyAPI,
+        barcodebuddy_api: BarcodeBuddyAPI,
+        logger: logging.Logger,
+        update_interval: timedelta,
+    ) -> None:
+        """Initialize the Grocy-helper coordinator."""
+        super().__init__(
+            hass, logger, name="Grocy-helper", update_interval=update_interval
+        )
+        self.SCAN_INTERVAL = update_interval
+        self._config_entry = config_entry
+        self._api_grocy: GrocyAPI = grocy_api
+        self._api_bbuddy: BarcodeBuddyAPI = barcodebuddy_api
+        self._hass = hass
+
+    async def _async_setup(self) -> None:
+        """Initialize coordinator."""
+        _LOGGER.info("Init coordinator")
+
+    async def _async_update_data(self) -> None:
+        """Fetch data from Grocy."""
+        _LOGGER.info("Update data")
+        await self.refresh_data()
+
+    async def refresh_data(self) -> GrocyMasterData:
+        """Fetch masterdata from Grocy."""
+        try:
+            locations = await self._api_grocy.get_locations()
+            _LOGGER.debug("Loaded locations: %s", locations)
+
+            quantity_units = await self._api_grocy.get_quantityunits()
+            _LOGGER.debug("Loaded quantity_units: %s", quantity_units)
+
+            masterdata: GrocyMasterData = {
+                "locations": locations,
+                "quantity_units": quantity_units,
+            }
+            return masterdata
+        except Exception as err:
+            _LOGGER.error("Exception when getting data. Err: %s", err)
+            _LOGGER.error(traceback.format_exc())
+            raise UpdateFailed(f"Error communicating with API: {err}") from err
