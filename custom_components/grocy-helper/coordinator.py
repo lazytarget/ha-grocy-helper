@@ -41,12 +41,13 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
         """Initialize coordinator."""
         _LOGGER.info("Init coordinator")
 
-    async def _async_update_data(self) -> None:
+    async def _async_update_data(self) -> GrocyMasterData:
         """Fetch data from Grocy."""
         _LOGGER.info("Update data")
-        await self.refresh_data()
+        data = await self.fetch_data()
+        return data
 
-    async def refresh_data(self) -> GrocyMasterData:
+    async def fetch_data(self) -> GrocyMasterData:
         """Fetch masterdata from Grocy."""
         try:
             locations = await self._api_grocy.get_locations()

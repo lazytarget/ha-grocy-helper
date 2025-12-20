@@ -26,12 +26,14 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .http_requests import async_get
 
+from .coordinator import GrocyHelperCoordinator
 from .grocyapi import GrocyAPI
 from .barcodebuddyapi import BarcodeBuddyAPI
 from .grocytypes import (
     ExtendedGrocyProductStockInfo,
     GrocyProduct,
     GrocyProductBarcode,
+    GrocyMasterData,
 )
 
 from .const import (
@@ -177,6 +179,7 @@ class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 class GrocyOptionsFlowHandler(OptionsFlow):
     """Handle an options flow for grocy-helper."""
 
+    _coordinator: GrocyHelperCoordinator = None
     _api_grocy: GrocyAPI = None
     _api_bbuddy: BarcodeBuddyAPI = None
 
@@ -198,8 +201,9 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         # pylint: disable=W0613 unused-argument
         super().__init__()
 
-        self._api_grocy = config_entry.runtime_data["grocy"]
-        self._api_bbuddy = config_entry.runtime_data["bbuddy"]
+        self._coordinator = config_entry.coordinator
+        self._api_grocy = self._coordinator._api_grocy
+        self._api_bbuddy = self._coordinator._api_bbuddy
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -393,7 +397,10 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                         # todo: in-future this could be merged to same process-work (avoid extra form)
                         return await self.async_step_process_scan(user_input=None)
 
-                    masterdata = self.config_entry.runtime_data["master"]
+                    # masterdata = self.config_entry.runtime_data["master"]
+                    masterdata = self._coordinator.data
+                    _LOGGER.debug("masterdata: %s", masterdata)
+
                     # schemas.update(
                     #     {
                     #         vol.Required(
@@ -487,9 +494,11 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     self.current_barcode_schema = GENERATE_CREATE_PRODUCT_SCHEMA(
                         masterdata, user_input or {}
                     )
+                    _LOGGER.info("schem: %s", self.current_barcode_schema)
                     self.add_suggested_values_to_schema(
                         self.current_barcode_schema, user_input or {}
                     )
+                    _LOGGER.info("sugg schem: %s", self.current_barcode_schema)
 
                     # ask for input...
                     return self.async_show_form(
@@ -716,7 +725,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
 
 def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
-    masterdata, suggested_values: dict[str, str]
+    masterdata: GrocyMasterData, suggested_values: dict[str, str]
 ) -> vol.Schema:
     prods = [
         selector.SelectOptionDict(
@@ -748,7 +757,7 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
 
 
 def GENERATE_CREATE_PRODUCT_SCHEMA(
-    masterdata, suggested_values: dict[str, str]
+    masterdata: GrocyMasterData, suggested_values: dict[str, str]
 ) -> vol.Schema:
     locs = [
         selector.SelectOptionDict(
