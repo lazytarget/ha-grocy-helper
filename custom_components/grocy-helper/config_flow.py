@@ -1,4 +1,4 @@
-"""Config flow for ICA integration."""
+"""Config flow for Grocy-helper integration."""
 
 import copy
 from enum import StrEnum
@@ -33,8 +33,6 @@ from .grocytypes import (
     ExtendedGrocyProductStockInfo,
     GrocyProduct,
     GrocyProductBarcode,
-    BarcodeBuddyScanRequest,
-    BarcodeBuddyScanResponse,
 )
 
 from .const import (
@@ -157,11 +155,6 @@ class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_BBUDDY_API_URL: bbuddy_url,
                 CONF_BBUDDY_API_KEY: bbuddy_api_key,
             }
-            # return self.async_create_entry(
-            #     # title=f"{host}:{port}",
-            #     title=grocy_url,
-            #     data=config_entry_data,
-            # )
             return self.async_update_reload_and_abort(
                 self._get_reconfigure_entry(),
                 data_updates=config_entry_data,
@@ -194,7 +187,6 @@ class GrocyOptionsFlowHandler(OptionsFlow):
     barcode_results: list[str] = []
 
     shopping_lists = None
-
     SHOPPING_LIST_SELECTOR_SCHEMA = None
 
     current_product: GrocyProduct = None
@@ -218,16 +210,10 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         # Handle input
         if user_input is not None:
-            # host = config_entry_data[CONF_HOST]
-            # port = config_entry_data[CONF_PORT]
-            # api_key = config_entry_data[CONF_API_KEY]
-
             if form := user_input.get("choose-form"):
                 self.chosen_form = form
                 if form == "get_product":
                     websession = async_get_clientsession(self.hass)
-                    # websession = requests.Session()
-
                     # url = f"http://{host}:{port}/api/objects/quantity_units"
                     url = f"{config_entry_data[CONF_GROCY_API_URL]}/api/objects/quantity_units"
                     resp = await async_get(
@@ -284,104 +270,16 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         errors: dict[str, str] = {}
         _LOGGER.debug("Options flow - scan: %s #%s", user_input, self.chosen_form)
 
-        config_entry_data = self.config_entry.data.copy()
-
         # Handle input
         if user_input is not None:
-            # host = config_entry_data[CONF_HOST]
-            # port = config_entry_data[CONF_PORT]
-            # api_key = config_entry_data[CONF_API_KEY]
-
-            # websession = async_get_clientsession(self.hass)
-            # # websession = requests.Session()
-
             barcodes_str = user_input["barcodes"]
             _LOGGER.info("SCAN: %s", barcodes_str)
-            entity = barcodes_str
-
-            grocy: GrocyAPI = self.config_entry.runtime_data["grocy"]
-            bbuddy: BarcodeBuddyAPI = self.config_entry.runtime_data["bbuddy"]
 
             barcodes = barcodes_str.split("\n")
             self.barcode_queue = barcodes
             self.barcode_results = []
 
             return await self.async_step_process_scan()
-            # return self.async_show_form(
-            #     step_id=Step.SCAN_PROCESS,
-            #     data_schema=schema,
-            #     errors=errors,
-            # )
-
-            for barcode in barcodes:
-                code = barcode.strip().strip(",").strip()
-                product = await grocy.get_product_by_barcode(code)
-                if product is None or "BBUDDY-" not in product:
-                    # Product not found, create it after looking up info
-                    _LOGGER.info("PRODUCT not found: %s", code)
-                else:
-                    _LOGGER.info("PRODUCT: %s -> %s", code, product)
-                    # request = BarcodeBuddyScanRequest(
-                    #     barcode=code, price=None, bestBeforeInDays=None
-                    # )
-                    request = {
-                        "barcode": str(code),
-                        # "price": None,
-                        # "bestBeforeInDays": None,
-                    }
-                    _LOGGER.info("SCAN-REQ: %s", json.dumps(request))
-                    response = await bbuddy.post_scan(request)
-                    _LOGGER.info("SCAN-RESP: %s", json.dumps(response))
-
-                # try:
-                #     barcode = barcode.strip()
-                #     _LOGGER.info("SCAN Barcode: %s", barcode)
-                #     product = await api.get_product_by_barcode(barcode)
-                #     _LOGGER.info("PRODUCT: %s", product)
-
-                #     # product = await api.add_product(data=entity)
-                # except aiohttp.web_exceptions.HTTPBadRequest as br:
-                #     if br.text.startswith("No product with barcode "):
-                #         product = None
-                #         _LOGGER.info("PRODUCT not found!")
-                #     else:
-                #         _LOGGER.info("br ex: %s", br.text)
-                #         raise br
-                # except aiohttp.web_exceptions.HTTPError as he:
-                #     _LOGGER.info("Error when scanning he PRODUCT: %s", entity)
-                #     _LOGGER.warning("Caught error: %s -> %s", he, he.status_code)
-                #     return self.async_abort(reason=f"Error: {he}")
-                # except aiohttp.client_exceptions.ClientResponseError as cre:
-                #     _LOGGER.info("Error when scanning cre PRODUCT: %s", barcode)
-                #     if cre.code == 400 and cre.message.startswith("No product with barcode "):
-                #         product = None
-                #         _LOGGER.info("PRODUCT not found!")
-                #     else:
-                #         _LOGGER.warning("Raised error: %s -> %s", cre.code, cre.message)
-                #         raise cre
-                # except BaseException as he:
-                #     _LOGGER.info("Error when scanning be PRODUCT: %s", entity)
-                #     _LOGGER.info("Caught exception: [%s] %s", he.__class__.__name__, he)
-                #     return self.async_abort(reason=f"Error: {he}")
-                # # finally:
-                # #     _LOGGER.info("Finally Getting PRODUCTs")
-                # #     products = await api.get_products()
-                # #     _LOGGER.info("PRODUCTs2: %s", products)
-
-            _LOGGER.info("TRY-loop exited with PRODUCTs: %s", entity)
-
-            # if form := user_input.get("choose-form"):
-            #     if form == "get-product":
-            #         url = f"http://{host}:{port}/api/objects/quantity_units"
-            #         resp = await async_get(websession, url, auth_key=api_key)
-            #         _LOGGER.warning("RESP: %s", resp)
-            #         return self.async_abort(reason="Operation completed")
-
-            return self.async_abort(reason="Successfully scanned")
-
-        # # Build dynamic schemas
-        # coordinator: IcaCoordinator = self.config_entry.coordinator
-        # await self._ensure_dynamic_schemas_are_built(coordinator)
 
         # Format form schema
         schema = vol.Schema(
@@ -392,7 +290,6 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 ): selector.TextSelector({"type": "text", "multiline": True}),
             }
         )
-
         return self.async_show_form(
             step_id=Step.SCAN,
             data_schema=schema,
@@ -609,6 +506,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         price = user_input.get("price") if user_input else None
         bestBeforeInDays = user_input.get("bestBeforeInDays") if user_input else None
 
+        # Input for price
         if price is None and self.scan_options.get("input_price"):
             _LOGGER.info("Price input enabled: append schema field, value: %s", price)
             schemas.update(
@@ -618,6 +516,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     ): selector.TextSelector({"type": "text"})
                 }
             )
+        # Input for bestBeforeInDays
         if bestBeforeInDays is None and self.scan_options.get("input_bestBeforeInDays"):
             _LOGGER.info(
                 "BestBeforeInDays input enabled: append schema field, value: %s",
@@ -641,17 +540,14 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             )
 
         # Once product has been ensured to exist in Grocy, we can continue with BBuddy call
-        # todo: Input for price?
-        # todo: Input for bestBeforeInDays?
+        # todo: ignore BBuddy call if scan-mode is "lookup-barcode" or "provision-barcode"
         request = {
             "barcode": str(code),
-            # "price": price,
-            # "bestBeforeInDays": bestBeforeInDays,
         }
-        if price is not None:
-            request["price"] = price
-        if bestBeforeInDays is not None:
-            request["bestBeforeInDays"] = bestBeforeInDays
+        if price is not None and len(str(price)) > 0:
+            request["price"] = float(price)
+        if bestBeforeInDays is not None and len(str(bestBeforeInDays)) > 0:
+            request["bestBeforeInDays"] = int(bestBeforeInDays)
         try:
             _LOGGER.info("SCAN-REQ: %s", json.dumps(request))
             response = await self._api_bbuddy.post_scan(request)
@@ -670,32 +566,11 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             # if error, then display error and give chance to edit or retry, or even skip?
             _LOGGER.error("BB-Scan excpt: %s", be)
             errors["Exception"] = be
-
             return self.async_show_form(
                 step_id=Step.SCAN_PROCESS,
                 data_schema=self.current_barcode_schema,
                 errors=errors,
             )
-
-        # # Build dynamic schemas
-        # coordinator: IcaCoordinator = self.config_entry.coordinator
-        # await self._ensure_dynamic_schemas_are_built(coordinator)
-
-        # Format form schema
-        schema = vol.Schema(
-            {
-                # vol.Optional("barcodes", description={"suggested_value": current_data.get(CONF_STATS_TEMPLATE, "")}): TextSelector({"type": "text", "multiline": True}),
-                vol.Required(
-                    "barcodes", description={"suggested_value": "4011800420413"}
-                ): selector.TextSelector({"type": "text", "multiline": True}),
-            }
-        )
-
-        return self.async_show_form(
-            step_id=Step.SCAN_PROCESS,
-            data_schema=schema,
-            errors=errors,
-        )
 
     async def async_step_add_product(
         self, user_input: dict[str, Any] | None = None
