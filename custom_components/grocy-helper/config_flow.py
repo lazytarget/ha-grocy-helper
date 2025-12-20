@@ -2,6 +2,7 @@
 
 import copy
 from enum import StrEnum
+import datetime as dt
 import logging
 import json
 import aiohttp
@@ -31,6 +32,7 @@ from .barcodebuddyapi import BarcodeBuddyAPI
 from .grocytypes import (
     ExtendedGrocyProductStockInfo,
     GrocyProduct,
+    GrocyProductBarcode,
     BarcodeBuddyScanRequest,
     BarcodeBuddyScanResponse,
 )
@@ -400,7 +402,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
     async def async_step_process_scan(self, user_input: dict[str, Any] = None):
         """Handle the scan-queue."""
         errors: dict[str, str] = {}
-        schemas: list[vol.Schemable] = []
+        schemas: vol.VolDictType = {}
         config_entry_data = self.config_entry.data.copy()
         _LOGGER.debug(
             "Options flow - process_scan inpt: %s #%s", user_input, self.chosen_form
@@ -408,9 +410,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         _LOGGER.debug("Options flow - process_scan ced: %s", config_entry_data)
         _LOGGER.debug("Options flow - process_scan queue: %s", self.barcode_queue)
 
-        current_barcode = (
-            self.barcode_queue[0] if len(self.barcode_queue) > 0 else None
-        )
+        current_barcode = self.barcode_queue[0] if len(self.barcode_queue) > 0 else None
 
         if not current_barcode:
             # Nothing in queue, show summary
@@ -431,26 +431,163 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             try:
                 product = await self._api_grocy.get_product_by_barcode(code)
 
+                new_product: GrocyProduct = {}
                 if not product:
                     # New barcode (Not provisioned in Grocy)
                     # todo: Lookup in other providers...
+                    openfoodfacts_product: dict = {}
+                    ica_product: dict = None
+
+                    if openfoodfacts_product is None and ica_product is None:
+                        # todo: Not found in other providers, then show input's for manual registration?
+                        _LOGGER.error("No product info found!: %s", code)
+                        errors["NoProduct"] = "No product found!"
+                        return self.async_show_form(
+                            step_id=Step.SCAN_PROCESS,
+                            data_schema=self.current_barcode_schema,
+                            errors=errors,
+                        )
 
                     # Handle input, for required fields
                     if user_input is not None:
-                        pass
-                    pass
+                        # Input has been passed!
+                        # more friendly name (barcode has specific name/"note")
+                        new_product["name"] = user_input["name"]
+                        new_product["location_id"] = user_input["location_id"]
+                        new_product["qu_id_purchase"] = user_input.get(
+                            "qu_id_purchase", user_input.get("qui_id")
+                        )
+                        new_product["qu_id_stock"] = user_input.get(
+                            "qu_id_stock", user_input.get("qui_id")
+                        )
+                        new_product["qu_id_price"] = user_input.get(
+                            "qu_id_price", user_input.get("qui_id")
+                        )
+                        new_product["qu_id_consume"] = user_input.get(
+                            "qu_id_consume", user_input.get("qui_id")
+                        )
+                        new_product["row_created_timestamp"] = (
+                            dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        )
 
-                if not product:
-                    # todo: If still not found, then show input's for manual registration?
-                    _LOGGER.error("No product info found!: %s", code)
-                    errors["NoProduct"] = "No product found!"
-
-                    # Handle input, for required fields
-                    if user_input is not None:
-                        # input has been passed
                         # todo: create product
+                        _LOGGER.info("user_input: %s", user_input)
+                        _LOGGER.info("new_product: %s", new_product)
+                        product = await self._api_grocy.add_product(new_product)
+                        _LOGGER.info("created prod: %s", product)
+                        # todo: check for success!
+
+                        d: GrocyProductBarcode = {
+                            "barcode": code,
+                            # todo: name of the barcode lookup
+                            "note": user_input["name"],
+                            "qu_id": user_input["qu_id_purchase"],
+                            "product_id": product["id"],
+                            # todo: add form fields for Amount + Quantity Unit
+                            # "row_created_timestamp"
+                        }
+                        pcode = await self._api_grocy.add_product_barcode(d)
+                        _LOGGER.info("pcode: %s", pcode)
                         # todo: append barcode to product
-                        pass
+
+                        # created product, now re-run process for same barcode
+                        # todo: in-future this could be merged to same process-work (avoid extra form)
+                        return await self.async_step_process_scan(user_input=None)
+
+                    masterdata = self.config_entry.runtime_data["master"]
+                    schemas.update(
+                        {
+                            vol.Required(
+                                "name",
+                                description={
+                                    "suggested_value": new_product.get("name")
+                                },
+                            ): selector.TextSelector({"type": "text"})
+                        }
+                    )
+                    locs = [
+                        selector.SelectOptionDict(
+                            value=str(loc["id"]),
+                            label=loc["name"],
+                        )
+                        for loc in masterdata["locations"]
+                    ]
+                    qu = [
+                        selector.SelectOptionDict(
+                            value=str(qu["id"]),
+                            label=qu["name"],
+                        )
+                        for qu in masterdata["quantity_units"]
+                    ]
+                    schemas.update(
+                        {
+                            vol.Required(
+                                "location_id",
+                            ): selector.SelectSelector(
+                                selector.SelectSelectorConfig(
+                                    options=locs,
+                                    mode=selector.SelectSelectorMode.DROPDOWN,
+                                    multiple=False,
+                                )
+                            ),
+                        }
+                    )
+                    schemas.update(
+                        {
+                            vol.Required(
+                                "qu_id_stock",
+                            ): selector.SelectSelector(
+                                selector.SelectSelectorConfig(
+                                    options=qu,
+                                    mode=selector.SelectSelectorMode.DROPDOWN,
+                                    multiple=False,
+                                )
+                            ),
+                        }
+                    )
+                    schemas.update(
+                        {
+                            vol.Required(
+                                "qu_id_purchase",
+                            ): selector.SelectSelector(
+                                selector.SelectSelectorConfig(
+                                    options=qu,
+                                    mode=selector.SelectSelectorMode.DROPDOWN,
+                                    multiple=False,
+                                )
+                            ),
+                        }
+                    )
+                    schemas.update(
+                        {
+                            vol.Required(
+                                "qu_id_consume",
+                            ): selector.SelectSelector(
+                                selector.SelectSelectorConfig(
+                                    options=qu,
+                                    mode=selector.SelectSelectorMode.DROPDOWN,
+                                    multiple=False,
+                                )
+                            ),
+                        }
+                    )
+                    schemas.update(
+                        {
+                            vol.Required(
+                                "qu_id_price",
+                            ): selector.SelectSelector(
+                                selector.SelectSelectorConfig(
+                                    options=qu,
+                                    mode=selector.SelectSelectorMode.DROPDOWN,
+                                    multiple=False,
+                                )
+                            ),
+                        }
+                    )
+                    self.current_barcode_schema = vol.Schema(schemas)
+                    self.add_suggested_values_to_schema(
+                        self.current_barcode_schema, user_input
+                    )
 
                     # ask for input...
                     return self.async_show_form(
@@ -474,7 +611,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         if price is None and self.scan_options.get("input_price"):
             _LOGGER.info("Price input enabled: append schema field, value: %s", price)
-            schemas.append(
+            schemas.update(
                 {
                     vol.Optional(
                         "price", description={"suggested_value": price}
@@ -482,8 +619,11 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 }
             )
         if bestBeforeInDays is None and self.scan_options.get("input_bestBeforeInDays"):
-            _LOGGER.info("BestBeforeInDays input enabled: append schema field, value: %s", bestBeforeInDays)
-            schemas.append(
+            _LOGGER.info(
+                "BestBeforeInDays input enabled: append schema field, value: %s",
+                bestBeforeInDays,
+            )
+            schemas.update(
                 {
                     vol.Optional(
                         "bestBeforeInDays",

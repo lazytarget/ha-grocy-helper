@@ -65,9 +65,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         ["BBUDDY-API-KEY", entry.data[CONF_BBUDDY_API_KEY]], 
         websession
     )
+
+    # Load master data
+    locations = await grocy.get_locations()
+    _LOGGER.debug("Loaded locations: %s", locations)
+    quantity_units = await grocy.get_quantityunits()
+    _LOGGER.debug("Loaded quantity_units: %s", quantity_units)
     entry.runtime_data = {
         "grocy": grocy,
         "bbuddy": bbuddy,
+        "master": {
+            "locations": locations,
+            "quantity_units": quantity_units
+        }
     }
 
     # await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
