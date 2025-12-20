@@ -387,7 +387,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                             "qu_id": user_input["qu_id_purchase"],
                             "product_id": product["id"],
                             # todo: add form fields for Amount + Quantity Unit
-                            # "row_created_timestamp"
+                            "row_created_timestamp": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         }
                         pcode = await self._api_grocy.add_product_barcode(d)
                         _LOGGER.info("pcode: %s", pcode)
@@ -397,102 +397,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                         # todo: in-future this could be merged to same process-work (avoid extra form)
                         return await self.async_step_process_scan(user_input=None)
 
-                    # masterdata = self.config_entry.runtime_data["master"]
-                    masterdata = self._coordinator.data
-                    _LOGGER.debug("masterdata: %s", masterdata)
-
-                    # schemas.update(
-                    #     {
-                    #         vol.Required(
-                    #             "name",
-                    #             description={
-                    #                 "suggested_value": new_product.get("name")
-                    #             },
-                    #         ): selector.TextSelector({"type": "text"})
-                    #     }
-                    # )
-                    # locs = [
-                    #     selector.SelectOptionDict(
-                    #         value=str(loc["id"]),
-                    #         label=loc["name"],
-                    #     )
-                    #     for loc in masterdata["locations"]
-                    # ]
-                    # qu = [
-                    #     selector.SelectOptionDict(
-                    #         value=str(qu["id"]),
-                    #         label=qu["name"],
-                    #     )
-                    #     for qu in masterdata["quantity_units"]
-                    # ]
-                    # schemas.update(
-                    #     {
-                    #         vol.Required(
-                    #             "location_id",
-                    #         ): selector.SelectSelector(
-                    #             selector.SelectSelectorConfig(
-                    #                 options=locs,
-                    #                 mode=selector.SelectSelectorMode.DROPDOWN,
-                    #                 multiple=False,
-                    #             )
-                    #         ),
-                    #     }
-                    # )
-                    # schemas.update(
-                    #     {
-                    #         vol.Required(
-                    #             "qu_id_stock",
-                    #         ): selector.SelectSelector(
-                    #             selector.SelectSelectorConfig(
-                    #                 options=qu,
-                    #                 mode=selector.SelectSelectorMode.DROPDOWN,
-                    #                 multiple=False,
-                    #             )
-                    #         ),
-                    #     }
-                    # )
-                    # schemas.update(
-                    #     {
-                    #         vol.Required(
-                    #             "qu_id_purchase",
-                    #         ): selector.SelectSelector(
-                    #             selector.SelectSelectorConfig(
-                    #                 options=qu,
-                    #                 mode=selector.SelectSelectorMode.DROPDOWN,
-                    #                 multiple=False,
-                    #             )
-                    #         ),
-                    #     }
-                    # )
-                    # schemas.update(
-                    #     {
-                    #         vol.Required(
-                    #             "qu_id_consume",
-                    #         ): selector.SelectSelector(
-                    #             selector.SelectSelectorConfig(
-                    #                 options=qu,
-                    #                 mode=selector.SelectSelectorMode.DROPDOWN,
-                    #                 multiple=False,
-                    #             )
-                    #         ),
-                    #     }
-                    # )
-                    # schemas.update(
-                    #     {
-                    #         vol.Required(
-                    #             "qu_id_price",
-                    #         ): selector.SelectSelector(
-                    #             selector.SelectSelectorConfig(
-                    #                 options=qu,
-                    #                 mode=selector.SelectSelectorMode.DROPDOWN,
-                    #                 multiple=False,
-                    #             )
-                    #         ),
-                    #     }
-                    # )
-                    # self.current_barcode_schema = vol.Schema(schemas)
                     self.current_barcode_schema = GENERATE_CREATE_PRODUCT_SCHEMA(
-                        masterdata, user_input or {}
+                        self._coordinator.data, user_input or {}
                     )
                     _LOGGER.info("schem: %s", self.current_barcode_schema)
                     self.add_suggested_values_to_schema(

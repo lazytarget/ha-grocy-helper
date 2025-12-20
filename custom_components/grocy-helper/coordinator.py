@@ -56,9 +56,13 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
             quantity_units = await self._api_grocy.get_quantityunits()
             _LOGGER.debug("Loaded quantity_units: %s", quantity_units)
 
+            products = await self._api_grocy.get_products()
+            _LOGGER.debug("Loaded products: %s", len(products))
+
             masterdata: GrocyMasterData = {
                 "locations": locations,
                 "quantity_units": quantity_units,
+                "products": products,
             }
             return masterdata
         except Exception as err:
