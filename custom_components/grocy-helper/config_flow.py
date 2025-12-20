@@ -280,6 +280,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         if user_input is not None:
             barcodes_str = user_input["barcodes"]
             _LOGGER.info("SCAN: %s", barcodes_str)
+            _LOGGER.info("SCAN-mode: %s", user_input.get("mode"))
 
             barcodes = barcodes_str.split("\n")
             self.barcode_queue = barcodes
@@ -287,18 +288,9 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
             return await self.async_step_process_scan()
 
-        # Format form schema
-        schema = vol.Schema(
-            {
-                # vol.Optional("barcodes", description={"suggested_value": current_data.get(CONF_STATS_TEMPLATE, "")}): TextSelector({"type": "text", "multiline": True}),
-                vol.Required(
-                    "barcodes", description={"suggested_value": "4011800420413"}
-                ): selector.TextSelector({"type": "text", "multiline": True}),
-            }
-        )
         return self.async_show_form(
             step_id=Step.SCAN,
-            data_schema=schema,
+            data_schema=STEP_SCAN_START,
             errors=errors,
         )
 
@@ -628,6 +620,65 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     new_key.description = {"suggested_value": options.get(key)}  # type: ignore
             schema[new_key] = val
         return vol.Schema(schema)
+
+STEP_SCAN_START = vol.Schema(
+    {
+        vol.Optional(
+            "mode", description={"suggested_value": "purchase"} # During DEV.... 
+        ): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=[
+                    selector.SelectOptionDict(
+                        value="",
+                        label="(Inherit)"
+                    ),
+                    selector.SelectOptionDict(
+                        value="consume",
+                        label="Consume"
+                    ),
+                    # selector.SelectOptionDict(
+                    #     value="consume-cs",
+                    #     label="Consume (Spoiled)"
+                    # ),
+                    # selector.SelectOptionDict(
+                    #     value="consume-ca",
+                    #     label="Consume (All)"
+                    # ),
+                    selector.SelectOptionDict(
+                        value="purchase",
+                        label="Purchase"
+                    ),
+                    selector.SelectOptionDict(
+                        value="open",
+                        label="Open"
+                    ),
+                    selector.SelectOptionDict(
+                        value="inventory",
+                        label="Inventory"
+                    ),
+                    selector.SelectOptionDict(
+                        value="add-shopping-list",
+                        label="Add to Shopping list"
+                    ),
+                    # selector.SelectOptionDict(    # merge with Inventory-action
+                    #     value="lookup-barcode",
+                    #     label="Lookup"
+                    # ),
+                    selector.SelectOptionDict(
+                        value="provision-barcode",
+                        label="Provision barcode"
+                    ),
+                ],
+                mode=selector.SelectSelectorMode.LIST,
+                multiple=False
+            )),
+
+        # vol.Optional("barcodes", description={"suggested_value": current_data.get(CONF_STATS_TEMPLATE, "")}): TextSelector({"type": "text", "multiline": True}),
+        vol.Required(
+            "barcodes", description={"suggested_value": "4011800420413"}    # During DEV...
+        ): selector.TextSelector({"type": "text", "multiline": True}),
+    }
+)
 
 
 def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
