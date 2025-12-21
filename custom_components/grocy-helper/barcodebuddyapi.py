@@ -38,6 +38,22 @@ class BarcodeBuddyAPI:
     def get_rest_url(self, endpoint: str):
         return "/".join([self._base_url, endpoint])
 
+    async def set_mode(
+        self, mode: int
+    ):
+        # STATE_CONSUME = 0; STATE_CONSUME_SPOILED = 1; STATE_PURCHASE = 2; STATE_OPEN = 3; STATE_GETSTOCK = 4; STATE_ADD_SL = 5; STATE_CONSUME_ALL = 6;
+        url = self.get_rest_url(API.URLs.BBUDDY_SET_MODE)
+        fd = FormData({
+            "state": mode,
+        })
+        # fd.add_field("barcode", request.get("barcode"))
+        # fd.add_field("price", request.get("price"))
+        # fd.add_field("bestBeforeInDays", request.get("bestBeforeInDays"))
+        # with MultipartWriter() as mpwriter:
+        #     mpwriter.append_json(request)
+        # return await async_post(self._session, url, self._api_key, data=fd, content_type="multipart/form-data")
+        return await async_post(self._session, url, self._api_key, data=fd, content_type=False)
+
     async def post_scan(
         self, request: BarcodeBuddyScanRequest
     ) -> BarcodeBuddyScanResponse:

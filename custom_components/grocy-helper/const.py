@@ -1,5 +1,6 @@
 """Constants for grocy-helper component."""
 
+from enum import StrEnum
 from typing import Final
 
 DOMAIN: Final = "grocy-helper"
@@ -11,6 +12,16 @@ CONF_GROCY_API_KEY: Final = "GROCY_API_KEY"
 CONF_BBUDDY_API_URL: Final = "BBUDDY_API_URL"
 CONF_BBUDDY_API_KEY: Final = "BBUDDY_API_KEY"
 
+class SCAN_MODE(StrEnum):
+    CONSUME = "BBUDDY-C"
+    CONSUME_SPOILED = "BBUDDY-CS"
+    CONSUME_ALL = "BBUDDY-CA"
+    PURCHASE = "BBUDDY-P"
+    OPEN = "BBUDDY-O"
+    INVENTORY = "BBUDDY-I"
+    ADD_TO_SHOPPING_LIST = "BBUDDY-AS"
+    QUANTITY = "BBUDDY-Q-"
+    PROVISION = "PROVISION-BARCODE"
 
 class ApiException(Exception):
     def __init__(self, status_code, error_message):
@@ -38,5 +49,6 @@ class API:
         ADD_PRODUCT: Final = "api/objects/products"
         ADD_PRODUCT_BARCODE: Final = "api/objects/product_barcodes"
         UPDATE_PRODUCT: Final = "api/objects/products"
-        
+
         BBUDDY_SCAN: Final = "api/action/scan"
+        BBUDDY_SET_MODE: Final = "api/state/setmode"

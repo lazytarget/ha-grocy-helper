@@ -42,6 +42,7 @@ from .const import (
     CONF_GROCY_API_KEY,
     CONF_BBUDDY_API_URL,
     CONF_BBUDDY_API_KEY,
+    SCAN_MODE,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -348,6 +349,16 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     errors=errors,
                 )
 
+        if self.barcode_scan_mode == SCAN_MODE.PROVISION:
+            # Mode is to simply ensure product/barcode exists
+            # remove from queue, and then restart the queue...
+            self.barcode_queue.pop(0)
+
+            p = (product or {}).get("product") or self.current_product
+            self.barcode_results.append(f"{code} maps to {p["name"]}")
+
+            return await self.async_step_scan_queue(user_input=None)
+
         return await self.async_step_scan_process(user_input=None)
 
         # Handle input, for Price/BestBeforeInDays
@@ -553,10 +564,12 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         price = user_input.get("price") if user_input else None
         bestBeforeInDays = user_input.get("bestBeforeInDays") if user_input else None
 
-        if self.barcode_scan_mode in ["purchase"]:
+        if self.barcode_scan_mode in [SCAN_MODE.PURCHASE]:
             # Input for price
             if price is None and self.scan_options.get("input_price"):
-                _LOGGER.info("Price input enabled: append schema field, value: %s", price)
+                _LOGGER.info(
+                    "Price input enabled: append schema field, value: %s", price
+                )
                 schemas.update(
                     {
                         vol.Optional(
@@ -565,7 +578,9 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     }
                 )
             # Input for bestBeforeInDays
-            if bestBeforeInDays is None and self.scan_options.get("input_bestBeforeInDays"):
+            if bestBeforeInDays is None and self.scan_options.get(
+                "input_bestBeforeInDays"
+            ):
                 _LOGGER.info(
                     "BestBeforeInDays input enabled: append schema field, value: %s",
                     bestBeforeInDays,
@@ -592,11 +607,14 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         request = {
             "barcode": str(code),
         }
-        if self.barcode_scan_mode in ["purchase"]:
+        if self.barcode_scan_mode in [SCAN_MODE.PURCHASE]:
             if price is not None and len(str(price)) > 0:
                 request["price"] = float(price)
             if bestBeforeInDays is not None and len(str(bestBeforeInDays)) > 0:
                 request["bestBeforeInDays"] = int(bestBeforeInDays)
+
+        await self._api_bbuddy.set_mode()
+
         try:
             _LOGGER.info("SCAN-REQ: %s", json.dumps(request))
             response = await self._api_bbuddy.post_scan(request)
@@ -763,32 +781,37 @@ STEP_SCAN_START = vol.Schema(
     {
         vol.Optional(
             "mode",
-            description={"suggested_value": "purchase"},  # During DEV....
+            description={"suggested_value": SCAN_MODE.PURCHASE},  # During DEV....
         ): selector.SelectSelector(
             selector.SelectSelectorConfig(
                 options=[
                     selector.SelectOptionDict(value="", label="(Inherit)"),
-                    selector.SelectOptionDict(value="consume", label="Consume"),
+                    selector.SelectOptionDict(value=SCAN_MODE.CONSUME, label="Consume"),
                     # selector.SelectOptionDict(
-                    #     value="consume-cs",
+                    #     value=SCAN_MODE.CONSUME_SPOILED,
                     #     label="Consume (Spoiled)"
                     # ),
                     # selector.SelectOptionDict(
-                    #     value="consume-ca",
+                    #     value=SCAN_MODE.CONSUME_ALL,
                     #     label="Consume (All)"
                     # ),
-                    selector.SelectOptionDict(value="purchase", label="Purchase"),
-                    selector.SelectOptionDict(value="open", label="Open"),
-                    selector.SelectOptionDict(value="inventory", label="Inventory"),
                     selector.SelectOptionDict(
-                        value="add-shopping-list", label="Add to Shopping list"
+                        value=SCAN_MODE.PURCHASE, label="Purchase"
+                    ),
+                    selector.SelectOptionDict(value=SCAN_MODE.OPEN, label="Open"),
+                    selector.SelectOptionDict(
+                        value=SCAN_MODE.INVENTORY, label="Inventory"
+                    ),
+                    selector.SelectOptionDict(
+                        value=SCAN_MODE.ADD_TO_SHOPPING_LIST,
+                        label="Add to Shopping list",
                     ),
                     # selector.SelectOptionDict(    # merge with Inventory-action
                     #     value="lookup-barcode",
                     #     label="Lookup"
                     # ),
                     selector.SelectOptionDict(
-                        value="provision-barcode", label="Provision barcode"
+                        value=SCAN_MODE.PROVISION, label="Provision barcode"
                     ),
                 ],
                 mode=selector.SelectSelectorMode.LIST,
