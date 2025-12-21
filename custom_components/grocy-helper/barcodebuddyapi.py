@@ -46,12 +46,6 @@ class BarcodeBuddyAPI:
         fd = FormData({
             "state": mode,
         })
-        # fd.add_field("barcode", request.get("barcode"))
-        # fd.add_field("price", request.get("price"))
-        # fd.add_field("bestBeforeInDays", request.get("bestBeforeInDays"))
-        # with MultipartWriter() as mpwriter:
-        #     mpwriter.append_json(request)
-        # return await async_post(self._session, url, self._api_key, data=fd, content_type="multipart/form-data")
         return await async_post(self._session, url, self._api_key, data=fd, content_type=False)
 
     async def post_scan(
@@ -59,10 +53,4 @@ class BarcodeBuddyAPI:
     ) -> BarcodeBuddyScanResponse:
         url = self.get_rest_url(API.URLs.BBUDDY_SCAN)
         fd = FormData(request)
-        # fd.add_field("barcode", request.get("barcode"))
-        # fd.add_field("price", request.get("price"))
-        # fd.add_field("bestBeforeInDays", request.get("bestBeforeInDays"))
-        # with MultipartWriter() as mpwriter:
-        #     mpwriter.append_json(request)
-        # return await async_post(self._session, url, self._api_key, data=fd, content_type="multipart/form-data")
         return await async_post(self._session, url, self._api_key, data=fd, content_type=False)
