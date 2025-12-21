@@ -530,7 +530,10 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             if bestBeforeInDays is not None and len(str(bestBeforeInDays)) > 0:
                 request["bestBeforeInDays"] = int(bestBeforeInDays)
 
-        await self._api_bbuddy.set_mode()
+        bb_mode = self._api_bbuddy.convert_scan_mode_to_bbuddy_mode(self.barcode_scan_mode)
+        if bb_mode >= 0:
+            _LOGGER.info("Setting BBuddy mode to: %s (%s)", bb_mode, self.barcode_scan_mode)
+            await self._api_bbuddy.set_mode(bb_mode)
 
         try:
             _LOGGER.info("SCAN-REQ: %s", json.dumps(request))

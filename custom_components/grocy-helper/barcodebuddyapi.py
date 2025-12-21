@@ -2,7 +2,7 @@
 
 from aiohttp import ClientSession, MultipartWriter, FormData
 
-from .const import API, ApiException
+from .const import API, SCAN_MODE, ApiException
 from .grocytypes import (
     BarcodeBuddyScanRequest,
     BarcodeBuddyScanResponse,
@@ -37,6 +37,23 @@ class BarcodeBuddyAPI:
 
     def get_rest_url(self, endpoint: str):
         return "/".join([self._base_url, endpoint])
+
+    def convert_scan_mode_to_bbuddy_mode(self, mode: SCAN_MODE) -> int:
+        if mode == SCAN_MODE.CONSUME:
+            return 0
+        elif mode == SCAN_MODE.CONSUME_SPOILED:
+            return 1
+        elif mode == SCAN_MODE.PURCHASE:
+            return 2
+        elif mode == SCAN_MODE.OPEN:
+            return 3
+        elif mode == SCAN_MODE.INVENTORY:
+            return 4
+        elif mode == SCAN_MODE.ADD_TO_SHOPPING_LIST:
+            return 5
+        elif mode == SCAN_MODE.CONSUME_ALL:
+            return 6
+        return -1
 
     async def set_mode(
         self, mode: int
