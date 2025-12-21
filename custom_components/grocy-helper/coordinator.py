@@ -53,6 +53,9 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
             locations = await self._api_grocy.get_locations()
             _LOGGER.debug("Loaded locations: %s", locations)
 
+            shopping_locations = await self._api_grocy.get_shopping_locations()
+            _LOGGER.debug("Loaded stores: %s", shopping_locations)
+
             quantity_units = await self._api_grocy.get_quantityunits()
             _LOGGER.debug("Loaded quantity_units: %s", quantity_units)
 
@@ -61,6 +64,7 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
 
             masterdata: GrocyMasterData = {
                 "locations": locations,
+                "shopping_locations": shopping_locations,
                 "quantity_units": quantity_units,
                 "products": products,
             }

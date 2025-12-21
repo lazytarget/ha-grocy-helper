@@ -9,6 +9,7 @@ from .grocytypes import (
     ExtendedGrocyProductStockInfo,
     GrocyProductBarcode,
     GrocyQuantityUnit,
+    GrocyShoppingLocation,
 )
 from .http_requests import async_get, async_post
 
@@ -43,6 +44,10 @@ class GrocyAPI:
 
     async def get_locations(self) -> list[GrocyLocation]:
         url = self.get_rest_url(API.URLs.GET_LOCATIONS)
+        return await async_get(self._session, url, self._api_key)
+
+    async def get_shopping_locations(self) -> list[GrocyShoppingLocation]:
+        url = self.get_rest_url(API.URLs.GET_SHOPPING_LOCATIONS)
         return await async_get(self._session, url, self._api_key)
 
     async def get_quantityunits(self) -> list[GrocyQuantityUnit]:

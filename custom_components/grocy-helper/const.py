@@ -29,6 +29,7 @@ class API:
         """URLs and API Endpoints"""
 
         GET_LOCATIONS: Final = "api/objects/locations"
+        GET_SHOPPING_LOCATIONS: Final = "api/objects/shopping_locations"
         GET_QUANTITYUNITS: Final = "api/objects/quantity_units"
         GET_PRODUCTS: Final = "api/objects/products"
         GET_PRODUCT_BY_ID: Final = "api/objects/products/%s"

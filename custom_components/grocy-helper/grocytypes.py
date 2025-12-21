@@ -10,6 +10,13 @@ class GrocyLocation(TypedDict):
     is_freezer: int
     active: int
 
+class GrocyShoppingLocation(TypedDict):
+    id: int
+    name: str
+    description: str | None
+    row_created_timestamp: str
+    active: int
+
 class GrocyQuantityUnit(TypedDict):
     id: int
     name: str
