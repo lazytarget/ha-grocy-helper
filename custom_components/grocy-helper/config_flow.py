@@ -553,30 +553,31 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         price = user_input.get("price") if user_input else None
         bestBeforeInDays = user_input.get("bestBeforeInDays") if user_input else None
 
-        # Input for price
-        if price is None and self.scan_options.get("input_price"):
-            _LOGGER.info("Price input enabled: append schema field, value: %s", price)
-            schemas.update(
-                {
-                    vol.Optional(
-                        "price", description={"suggested_value": price}
-                    ): selector.TextSelector({"type": "text"})
-                }
-            )
-        # Input for bestBeforeInDays
-        if bestBeforeInDays is None and self.scan_options.get("input_bestBeforeInDays"):
-            _LOGGER.info(
-                "BestBeforeInDays input enabled: append schema field, value: %s",
-                bestBeforeInDays,
-            )
-            schemas.update(
-                {
-                    vol.Optional(
-                        "bestBeforeInDays",
-                        description={"suggested_value": bestBeforeInDays},
-                    ): selector.TextSelector({"type": "text"})
-                }
-            )
+        if self.barcode_scan_mode in ["purchase"]:
+            # Input for price
+            if price is None and self.scan_options.get("input_price"):
+                _LOGGER.info("Price input enabled: append schema field, value: %s", price)
+                schemas.update(
+                    {
+                        vol.Optional(
+                            "price", description={"suggested_value": price}
+                        ): selector.TextSelector({"type": "text"})
+                    }
+                )
+            # Input for bestBeforeInDays
+            if bestBeforeInDays is None and self.scan_options.get("input_bestBeforeInDays"):
+                _LOGGER.info(
+                    "BestBeforeInDays input enabled: append schema field, value: %s",
+                    bestBeforeInDays,
+                )
+                schemas.update(
+                    {
+                        vol.Optional(
+                            "bestBeforeInDays",
+                            description={"suggested_value": bestBeforeInDays},
+                        ): selector.TextSelector({"type": "text"})
+                    }
+                )
 
         if len(schemas) > 0:
             self.current_barcode_schema = vol.Schema(schemas)
@@ -609,7 +610,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             self.barcode_results.append(str(response))
 
             # Re-run process method until queue is empty...
-            return await self.async_step_process_scan(user_input=None)
+            return await self.async_step_scan_queue(user_input=None)
         except BaseException as be:
             # if error, then display error and give chance to edit or retry, or even skip?
             _LOGGER.error("BB-Scan excpt: %s", be)
