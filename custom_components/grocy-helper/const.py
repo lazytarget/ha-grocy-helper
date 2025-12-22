@@ -52,3 +52,16 @@ class API:
 
         BBUDDY_SCAN: Final = "api/action/scan"
         BBUDDY_SET_MODE: Final = "api/state/setmode"
+
+class OpenFoodFacts:
+    APIv2 = "https://world.openfoodfacts.org/api/v2/product/{}.json"
+    DEFAULT_FIELDS: Final = [
+        "brand_owner",
+        "brands",
+        "quantity",
+        "product_name",
+        "product_type",
+        "expiration_date",
+        "categories_hierarchy",
+        "nutriments",
+    ]

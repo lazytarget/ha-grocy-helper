@@ -3,14 +3,17 @@
 import logging
 import traceback
 from datetime import timedelta
+from typing import Optional
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .grocyapi import GrocyAPI
 from .barcodebuddyapi import BarcodeBuddyAPI
-from .grocytypes import GrocyMasterData
+from .grocytypes import GrocyMasterData, OpenFoodFactsProduct
+from .const import OpenFoodFacts
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,6 +39,7 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
         self._api_grocy: GrocyAPI = grocy_api
         self._api_bbuddy: BarcodeBuddyAPI = barcodebuddy_api
         self._hass = hass
+        self._websession = async_get_clientsession(hass)
 
     async def _async_setup(self) -> None:
         """Initialize coordinator."""
@@ -73,3 +77,78 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
             _LOGGER.error("Exception when getting data. Err: %s", err)
             _LOGGER.error(traceback.format_exc())
             raise UpdateFailed(f"Error communicating with API: {err}") from err
+
+    async def get_product_from_open_food_facts(
+        self,
+        code: str,
+        fields: Optional[list[str]] = None,
+        raise_if_invalid: bool = False,
+    ) -> Optional[OpenFoodFactsProduct]:
+        """Return a product.
+
+        If the product does not exist, None is returned.
+
+        :param code: barcode of the product
+        :param fields: a list of fields to return. If None, all fields are
+            returned.
+        :param raise_if_invalid: if True, a ValueError is raised if the
+            barcode is invalid, defaults to False.
+        :return: the API response
+        """
+        if not code or not isinstance(code, str):
+            raise ValueError("code must be a non-empty string")
+        url = OpenFoodFacts.APIv2.format(code)
+        if fields := fields or OpenFoodFacts.DEFAULT_FIELDS:
+            # requests escape comma in URLs, as expected, but openfoodfacts
+            # server does not recognize escaped commas.
+            # See
+            # https://github.com/openfoodfacts/openfoodfacts-server/issues/1607
+            url += f"?fields={','.join(fields)}"
+
+        response = await self._websession.get(
+            url,
+            headers={"User-Agent": "ha-ica-todo"},
+            timeout=10,
+        )
+
+        try:
+            if response.status == 404 and not raise_if_invalid:
+                return None
+            response.raise_for_status()
+        except BaseException as ex:
+            _LOGGER.error(
+                "Error getting info from OpenFoodFacts. HTTP [GET] Resp: %s -> %s",
+                response.status,
+                response.text,
+            )
+            raise ex
+        else:
+            resp = await response.json()
+            if resp is None:
+                # product not found
+                return None
+            if resp.get("status", None) is None:
+                raise ValueError(
+                    "Seems like the API call to OpenFoodFacts failed. HTTP [GET] Resp: %s -> %s",
+                    response.status,
+                    response.text,
+                )
+            if resp["status"] == 0:
+                # invalid barcode
+                if raise_if_invalid:
+                    raise ValueError(f"invalid barcode: {code}")
+                return None
+
+            p = resp["product"] if resp is not None else None
+            nutriments = p.get("nutriments", {})
+            return OpenFoodFactsProduct(
+                brand_owner=p.get("brand_owner"),
+                brands=p.get("brands"),
+                product_name=p.get("product_name"),
+                product_type=p.get("product_type"),
+                quantity=p.get("quantity"),
+                energy_kcal_value=nutriments.get(
+                    "energy-kcal_value", nutriments.get("energy-kcal_100g")
+                ),
+                categories=p.get("categories_hierarchy"),
+            )

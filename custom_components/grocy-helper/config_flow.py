@@ -34,6 +34,7 @@ from .grocytypes import (
     GrocyProduct,
     GrocyProductBarcode,
     GrocyMasterData,
+    OpenFoodFactsProduct,
 )
 
 from .const import (
@@ -196,7 +197,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
     current_barcode: str = None
     current_barcode_schema: vol.Schema = None
-    current_product: GrocyProduct = None
+    current_product: GrocyProduct | None = None
+    current_product_openfoodfacts: OpenFoodFactsProduct | None = None
 
     def __init__(self, config_entry: ConfigEntry) -> None:
         """Initialize Grocy-helper options flow"""
@@ -216,9 +218,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         # Handle input
         if user_input is None and len(MAIN_MENU) == 1:
-            user_input = {
-                "choose-form": MAIN_MENU[0]
-            }
+            user_input = {"choose-form": MAIN_MENU[0]}
 
         if user_input is not None:
             if form := user_input.get("choose-form"):
@@ -333,7 +333,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
             p = (product or {}).get("product") or self.current_product
             _LOGGER.info("Provisioned: %s", p)
-            self.barcode_results.append(f"{code} maps to {p["name"]}")
+            self.barcode_results.append(f"{code} maps to {p['name']}")
             return await self.async_step_scan_queue(user_input=None)
 
         return await self.async_step_scan_process(user_input=None)
@@ -350,10 +350,17 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         # New barcode (Not provisioned in Grocy)
         # todo: Lookup in other providers...
-        openfoodfacts_product: dict = {}
-        ica_product: dict = None
+        self.current_product_openfoodfacts = (
+            await self._coordinator.get_product_from_open_food_facts(code)
+        )
+        _LOGGER.info("OpenFoodFacts product: %s", self.current_product_openfoodfacts)
+        self.current_product_ica: dict = {}
+        # _LOGGER.info("OpenFoodFacts product: %s", self.current_product_ica)
 
-        if openfoodfacts_product is None and ica_product is None:
+        if (
+            self.current_product_openfoodfacts is None
+            and self.current_product_ica is None
+        ):
             # todo: Not found in other providers, then show input's for manual registration?
             _LOGGER.error("No product info found!: %s", code)
             errors["NoProduct"] = "No product found!"
@@ -365,6 +372,14 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         # Handle input, for required fields
         if user_input is None:
+            user_input = user_input or {}
+            if self.current_product_openfoodfacts is not None:
+                # Fill in from OpenFoodFacts
+                user_input["name"] = (
+                    user_input.get("name")
+                    or self.current_product_openfoodfacts["product_name"]
+                )
+
             schema = GENERATE_CREATE_PRODUCT_SCHEMA(
                 self._coordinator.data, user_input or {}
             )
@@ -520,9 +535,13 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             if bestBeforeInDays is not None and len(str(bestBeforeInDays)) > 0:
                 request["bestBeforeInDays"] = int(bestBeforeInDays)
 
-        bb_mode = self._api_bbuddy.convert_scan_mode_to_bbuddy_mode(self.barcode_scan_mode)
+        bb_mode = self._api_bbuddy.convert_scan_mode_to_bbuddy_mode(
+            self.barcode_scan_mode
+        )
         if bb_mode >= 0:
-            _LOGGER.info("Setting BBuddy mode to: %s (%s)", bb_mode, self.barcode_scan_mode)
+            _LOGGER.info(
+                "Setting BBuddy mode to: %s (%s)", bb_mode, self.barcode_scan_mode
+            )
             await self._api_bbuddy.set_mode(bb_mode)
 
         try:
@@ -548,7 +567,6 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 data_schema=self.current_barcode_schema,
                 errors=errors,
             )
-
 
     # def _build_shopping_list_selector_schema(self, lists):
     #     return {
