@@ -23,6 +23,7 @@ from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import selector
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.typing import VolDictType
 
 from .http_requests import async_get
 
@@ -341,6 +342,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
     async def async_step_scan_add_product(self, user_input: dict[str, Any] = None):
         """Handle input for adding a new product."""
         errors: dict[str, str] = {}
+        _LOGGER.info("add-product: %s", user_input)
 
         # code = current_barcode.strip().strip(",").strip()
         # code = user_input["code"]
@@ -381,16 +383,36 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 )
                 unit = self.current_product_openfoodfacts.get("product_quantity_unit")
                 if unit:
-                    for qq in filter(lambda qu: qu.get("name") == unit, self._coordinator.data["quantity_units"]):
+                    for qq in filter(
+                        lambda qu: qu.get("name") == unit,
+                        self._coordinator.data["quantity_units"],
+                    ):
                         user_input["qu_id"] = str(qq["id"])
                         _LOGGER.warning("Unit: %s, QQ: %s", unit, qq)
                 # todo: fill in guess of QuantityUnit...
 
-            schema = GENERATE_CREATE_PRODUCT_SCHEMA(
-                self._coordinator.data, user_input
-            )
-            self.add_suggested_values_to_schema(schema, user_input)
+            schema = GENERATE_CREATE_PRODUCT_SCHEMA(self._coordinator.data, user_input)
+            # self.add_suggested_values_to_schema(schema, user_input)
+            _LOGGER.info("schema: %s", schema)
             _LOGGER.info("form 'add_product' user_input: %s", user_input)
+
+            for matching_product_by_name in filter(
+                lambda p: p.get("name") == user_input["name"],
+                self._coordinator.data["products"],
+            ):
+                _LOGGER.warning("Matching product: %s", matching_product_by_name)
+                first_schema = GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
+                    self._coordinator.data,
+                    {"product_id": matching_product_by_name["id"]},
+                )
+                first_schema = vol.Schema(first_schema)
+                _LOGGER.info("first-schema: %s", first_schema)
+                schema = first_schema.extend(schema)
+                _LOGGER.info("result-schema: %s", schema)
+                break
+
+            # schema = vol.Schema(schema)
+            self.add_suggested_values_to_schema(schema, user_input)
 
             # ask for input...
             return self.async_show_form(
@@ -400,32 +422,41 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             )
 
         # Input has been passed!
-        # more friendly name (barcode has specific name/"note")
-        new_product["name"] = user_input["name"]
-        new_product["location_id"] = user_input["location_id"]
-        new_product["qu_id_purchase"] = user_input.get(
-            "qu_id_purchase", user_input.get("qu_id")
-        )
-        new_product["qu_id_stock"] = user_input.get(
-            "qu_id_stock", user_input.get("qu_id")
-        )
-        new_product["qu_id_price"] = user_input.get(
-            "qu_id_price", user_input.get("qu_id")
-        )
-        new_product["qu_id_consume"] = user_input.get(
-            "qu_id_consume", user_input.get("qu_id")
-        )
-        new_product["row_created_timestamp"] = dt.datetime.now().strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
+        if user_input.get("product_id"):
+            # A specific product was chosen, use that instead of creation...
+            self.current_product = await self._api_grocy.get_product_by_id(
+                int(user_input["product_id"])
+            )
+        else:
+            # Create a new product
 
-        # todo: create product
-        _LOGGER.info("user_input: %s", user_input)
-        _LOGGER.info("new_product: %s", new_product)
-        product = await self._api_grocy.add_product(new_product)
-        _LOGGER.info("created prod: %s", product)
-        # todo: check for success!
-        self.current_product = product
+            # more friendly name (barcode has specific name/"note")
+            new_product["name"] = user_input["name"]
+            new_product["location_id"] = user_input["location_id"]
+            new_product["qu_id_purchase"] = user_input.get(
+                "qu_id_purchase", user_input.get("qu_id")
+            )
+            new_product["qu_id_stock"] = user_input.get(
+                "qu_id_stock", user_input.get("qu_id")
+            )
+            new_product["qu_id_price"] = user_input.get(
+                "qu_id_price", user_input.get("qu_id")
+            )
+            new_product["qu_id_consume"] = user_input.get(
+                "qu_id_consume", user_input.get("qu_id")
+            )
+            new_product["row_created_timestamp"] = dt.datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
+            # todo: create product
+            _LOGGER.info("user_input: %s", user_input)
+            _LOGGER.info("new_product: %s", new_product)
+            product = await self._api_grocy.add_product(new_product)
+            _LOGGER.info("created prod: %s", product)
+            # todo: check for success!
+            self.current_product = product
+
         return await self.async_step_scan_add_product_barcode(user_input=None)
 
     async def async_step_scan_add_product_barcode(
@@ -444,7 +475,9 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         if user_input is None:
             user_input = user_input or {}
             user_input["note"] = user_input.get("note", new_product["name"])
-            user_input["qu_id"] = str(user_input.get("qu_id", new_product["qu_id_purchase"]))
+            user_input["qu_id"] = str(
+                user_input.get("qu_id", new_product["qu_id_purchase"])
+            )
 
             schema = GENERATE_CREATE_PRODUCT_BARCODESCHEMA(
                 self._coordinator.data, user_input
@@ -465,6 +498,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             "note": user_input["note"],
             "product_id": new_product["id"],
             "qu_id": user_input["qu_id"],
+            "shopping_location_id": user_input.get("shopping_location_id"),
             "amount": user_input.get("amount"),
             "row_created_timestamp": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
@@ -479,7 +513,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
     async def async_step_scan_process(self, user_input: dict[str, Any] = None):
         """Handle the scanned barcode (product exists)."""
         errors: dict[str, str] = {}
-        schemas: vol.VolDictType = {}
+        schemas: VolDictType = {}
 
         # code = current_barcode.strip().strip(",").strip()
         code = self.current_barcode
@@ -667,7 +701,7 @@ STEP_SCAN_START = vol.Schema(
 
 def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
     masterdata: GrocyMasterData, suggested_values: dict[str, str]
-) -> vol.Schema:
+) -> VolDictType:
     prods = [
         selector.SelectOptionDict(
             value=str(prod["id"]),
@@ -677,7 +711,7 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
     ]
     prods.insert(0, selector.SelectOptionDict(value="", label="--CREATE NEW--"))
 
-    schemas: vol.VolDictType = {}
+    schemas: VolDictType = {}
     schemas.update(
         {
             vol.Optional(
@@ -694,12 +728,12 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
             ),
         }
     )
-    return vol.Schema(schemas)
+    return schemas
 
 
 def GENERATE_CREATE_PRODUCT_SCHEMA(
     masterdata: GrocyMasterData, suggested_values: dict[str, str]
-) -> vol.Schema:
+) -> VolDictType:
     locs = [
         selector.SelectOptionDict(
             value=str(loc["id"]),
@@ -715,7 +749,7 @@ def GENERATE_CREATE_PRODUCT_SCHEMA(
         for qu in masterdata["quantity_units"]
     ]
 
-    schemas: vol.VolDictType = {}
+    schemas: VolDictType = {}
     schemas.update(
         {
             vol.Required(
@@ -744,7 +778,9 @@ def GENERATE_CREATE_PRODUCT_SCHEMA(
             vol.Required(
                 "qu_id_stock",
                 description={
-                    "suggested_value": suggested_values.get("qu_id_stock", suggested_values.get("qu_id")),
+                    "suggested_value": suggested_values.get(
+                        "qu_id_stock", suggested_values.get("qu_id")
+                    ),
                 },
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
@@ -760,7 +796,9 @@ def GENERATE_CREATE_PRODUCT_SCHEMA(
             vol.Required(
                 "qu_id_purchase",
                 description={
-                    "suggested_value": suggested_values.get("qu_id_purchase", suggested_values.get("qu_id")),
+                    "suggested_value": suggested_values.get(
+                        "qu_id_purchase", suggested_values.get("qu_id")
+                    ),
                 },
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
@@ -776,7 +814,9 @@ def GENERATE_CREATE_PRODUCT_SCHEMA(
             vol.Required(
                 "qu_id_consume",
                 description={
-                    "suggested_value": suggested_values.get("qu_id_consume", suggested_values.get("qu_id")),
+                    "suggested_value": suggested_values.get(
+                        "qu_id_consume", suggested_values.get("qu_id")
+                    ),
                 },
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
@@ -792,7 +832,9 @@ def GENERATE_CREATE_PRODUCT_SCHEMA(
             vol.Required(
                 "qu_id_price",
                 description={
-                    "suggested_value": suggested_values.get("qu_id_price", suggested_values.get("qu_id")),
+                    "suggested_value": suggested_values.get(
+                        "qu_id_price", suggested_values.get("qu_id")
+                    ),
                 },
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
@@ -803,7 +845,7 @@ def GENERATE_CREATE_PRODUCT_SCHEMA(
             ),
         }
     )
-    return vol.Schema(schemas)
+    return schemas
 
 
 def GENERATE_CREATE_PRODUCT_BARCODESCHEMA(
@@ -824,7 +866,7 @@ def GENERATE_CREATE_PRODUCT_BARCODESCHEMA(
         for qu in masterdata["quantity_units"]
     ]
 
-    schemas: vol.VolDictType = {}
+    schemas: VolDictType = {}
     schemas.update(
         {
             vol.Optional(
