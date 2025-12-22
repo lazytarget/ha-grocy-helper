@@ -300,12 +300,12 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         if not current_barcode:
             # Nothing in queue, show summary
             # todo: Add result info to message...
-            msg = "\n".join(self.barcode_results)
+            msg = "\r\n".join(self.barcode_results)
             _LOGGER.info(
                 "Options flow - process_scan Nothing more in scan queue!: %s",
                 len(self.barcode_results),
             )
-            return self.async_abort(reason="Nothing more in scan queue!" + "\n" + msg)
+            return self.async_abort(reason=msg)
 
         code = current_barcode.strip().strip(",").strip()
         self.current_barcode = code
@@ -379,6 +379,11 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     user_input.get("name")
                     or self.current_product_openfoodfacts["product_name"]
                 )
+                unit = self.current_product_openfoodfacts.get("product_quantity_unit")
+                if unit:
+                    for qq in filter(lambda qu: qu.get("name") == unit, self._coordinator.data["quantity_units"]):
+                        user_input["qu_id"] = str(qq["id"])
+                        _LOGGER.warning("Unit: %s, QQ: %s", unit, qq)
                 # todo: fill in guess of QuantityUnit...
 
             schema = GENERATE_CREATE_PRODUCT_SCHEMA(
@@ -439,7 +444,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         if user_input is None:
             user_input = user_input or {}
             user_input["note"] = user_input.get("note", new_product["name"])
-            user_input["qu_id"] = user_input.get("qu_id", new_product["qu_id_purchase"])
+            user_input["qu_id"] = str(user_input.get("qu_id", new_product["qu_id_purchase"]))
 
             schema = GENERATE_CREATE_PRODUCT_BARCODESCHEMA(
                 self._coordinator.data, user_input
@@ -738,6 +743,9 @@ def GENERATE_CREATE_PRODUCT_SCHEMA(
         {
             vol.Required(
                 "qu_id_stock",
+                description={
+                    "suggested_value": suggested_values.get("qu_id_stock", suggested_values.get("qu_id")),
+                },
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=qu,
@@ -751,6 +759,9 @@ def GENERATE_CREATE_PRODUCT_SCHEMA(
         {
             vol.Required(
                 "qu_id_purchase",
+                description={
+                    "suggested_value": suggested_values.get("qu_id_purchase", suggested_values.get("qu_id")),
+                },
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=qu,
@@ -764,6 +775,9 @@ def GENERATE_CREATE_PRODUCT_SCHEMA(
         {
             vol.Required(
                 "qu_id_consume",
+                description={
+                    "suggested_value": suggested_values.get("qu_id_consume", suggested_values.get("qu_id")),
+                },
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=qu,
@@ -777,6 +791,9 @@ def GENERATE_CREATE_PRODUCT_SCHEMA(
         {
             vol.Required(
                 "qu_id_price",
+                description={
+                    "suggested_value": suggested_values.get("qu_id_price", suggested_values.get("qu_id")),
+                },
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=qu,

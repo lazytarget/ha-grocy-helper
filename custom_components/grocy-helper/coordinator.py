@@ -146,6 +146,8 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
                 brands=p.get("brands"),
                 product_name=p.get("product_name"),
                 product_type=p.get("product_type"),
+                product_quantity=p.get("product_quantity"),
+                product_quantity_unit=p.get("product_quantity_unit"),
                 quantity=p.get("quantity"),
                 energy_kcal_value=nutriments.get(
                     "energy-kcal_value", nutriments.get("energy-kcal_100g")

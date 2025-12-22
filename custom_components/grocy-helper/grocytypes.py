@@ -109,7 +109,9 @@ class BarcodeBuddyScanResponse(TypedDict):
 
 class GrocyMasterData(TypedDict):
     locations: list[GrocyLocation]
+    shopping_locations: list[GrocyShoppingLocation]
     quantity_units: list[GrocyQuantityUnit]
+    products: list[GrocyProduct]
 
 class OpenFoodFactsProduct(TypedDict):
     brand_owner: str | None
