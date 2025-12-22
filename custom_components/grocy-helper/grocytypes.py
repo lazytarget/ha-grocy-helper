@@ -115,6 +115,8 @@ class OpenFoodFactsProduct(TypedDict):
     brand_owner: str | None
     brands: str | None
     quantity: str | None
+    product_quantity: float | None
+    product_quantity_unit: str | None
     product_name: str | None
     product_type: str | None
     energy_kcal_value: int | None

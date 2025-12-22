@@ -379,13 +379,13 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     user_input.get("name")
                     or self.current_product_openfoodfacts["product_name"]
                 )
+                # todo: fill in guess of QuantityUnit...
 
             schema = GENERATE_CREATE_PRODUCT_SCHEMA(
-                self._coordinator.data, user_input or {}
+                self._coordinator.data, user_input
             )
-            _LOGGER.info("schem: %s", schema)
-            self.add_suggested_values_to_schema(schema, user_input or {})
-            _LOGGER.info("sugg schem: %s", schema)
+            self.add_suggested_values_to_schema(schema, user_input)
+            _LOGGER.info("form 'add_product' user_input: %s", user_input)
 
             # ask for input...
             return self.async_show_form(
@@ -438,16 +438,14 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         # Handle input, for required fields
         if user_input is None:
             user_input = user_input or {}
+            user_input["note"] = user_input.get("note", new_product["name"])
+            user_input["qu_id"] = user_input.get("qu_id", new_product["qu_id_purchase"])
+
             schema = GENERATE_CREATE_PRODUCT_BARCODESCHEMA(
-                self._coordinator.data,
-                {
-                    "note": user_input.get("note", new_product["name"]),
-                    "qu_id": user_input.get("qu_id", new_product["qu_id_purchase"]),
-                },
+                self._coordinator.data, user_input
             )
-            _LOGGER.info("schem: %s", schema)
             self.add_suggested_values_to_schema(schema, user_input)
-            _LOGGER.info("sugg schem: %s", schema)
+            _LOGGER.info("form 'add_barcode' user_input: %s", user_input)
 
             # ask for input...
             return self.async_show_form(
@@ -461,7 +459,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             "barcode": code,
             "note": user_input["note"],
             "product_id": new_product["id"],
-            "qu_id": user_input["qu_id_purchase"],
+            "qu_id": user_input["qu_id"],
             "amount": user_input.get("amount"),
             "row_created_timestamp": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
@@ -812,7 +810,7 @@ def GENERATE_CREATE_PRODUCT_BARCODESCHEMA(
     schemas: vol.VolDictType = {}
     schemas.update(
         {
-            vol.Required(
+            vol.Optional(
                 "note",
                 description={
                     "suggested_value": suggested_values.get("note"),
@@ -822,7 +820,7 @@ def GENERATE_CREATE_PRODUCT_BARCODESCHEMA(
     )
     schemas.update(
         {
-            vol.Required(
+            vol.Optional(
                 "shopping_location_id",
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
@@ -835,10 +833,12 @@ def GENERATE_CREATE_PRODUCT_BARCODESCHEMA(
     )
     schemas.update(
         {
-            vol.Required(
+            vol.Optional(
                 "qu_id",
                 description={
-                    "suggested_value": suggested_values.get("qu_id"),
+                    "suggested_value": suggested_values.get(
+                        "qu_id", suggested_values.get("qu_id_purchase")
+                    ),
                 },
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
@@ -851,9 +851,11 @@ def GENERATE_CREATE_PRODUCT_BARCODESCHEMA(
     )
     schemas.update(
         {
-            vol.Required(
+            vol.Optional(
                 "amount",
-            ): selector.TextSelector({"type": "text"})
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(mode=selector.NumberSelectorMode.BOX)
+            )
         }
     )
     return vol.Schema(schemas)

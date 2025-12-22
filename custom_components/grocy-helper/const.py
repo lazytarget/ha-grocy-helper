@@ -59,6 +59,8 @@ class OpenFoodFacts:
         "brand_owner",
         "brands",
         "quantity",
+        "product_quantity",
+        "product_quantity_unit",
         "product_name",
         "product_type",
         "expiration_date",
