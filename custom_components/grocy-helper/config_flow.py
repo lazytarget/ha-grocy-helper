@@ -71,7 +71,6 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 class Step(StrEnum):
     MAIN_MENU = "main_menu"
     ADD_RECIPE = "add_recipe"
-    ADD_PRODUCT = "add_product"
 
     SCAN_START = "scan_start"
     SCAN_QUEUE = "scan_queue"
@@ -81,9 +80,8 @@ class Step(StrEnum):
 
 
 MAIN_MENU = [
-    Step.ADD_RECIPE,
-    Step.ADD_PRODUCT,
     Step.SCAN_START,
+    # Step.ADD_RECIPE,
 ]
 
 
@@ -193,13 +191,11 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         "input_bestBeforeInDays": True,
     }
     barcode_scan_mode: str = None
-    current_barcode_schema: vol.Schema = None
     barcode_queue: list[str] = []
     barcode_results: list[str] = []
 
-    shopping_lists = None
-    SHOPPING_LIST_SELECTOR_SCHEMA = None
-
+    current_barcode: str = None
+    current_barcode_schema: vol.Schema = None
     current_product: GrocyProduct = None
 
     def __init__(self, config_entry: ConfigEntry) -> None:
@@ -218,23 +214,15 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         errors: dict[str, str] = {}
         _LOGGER.debug("Options flow - data: %s", self.config_entry.data)
 
-        config_entry_data = self.config_entry.data.copy()
-
         # Handle input
+        if user_input is None and len(MAIN_MENU) == 1:
+            user_input = {
+                "choose-form": MAIN_MENU[0]
+            }
+
         if user_input is not None:
             if form := user_input.get("choose-form"):
                 self.chosen_form = form
-                if form == "get_product":
-                    websession = async_get_clientsession(self.hass)
-                    # url = f"http://{host}:{port}/api/objects/quantity_units"
-                    url = f"{config_entry_data[CONF_GROCY_API_URL]}/api/objects/quantity_units"
-                    resp = await async_get(
-                        websession, url, auth_key=config_entry_data[CONF_GROCY_API_KEY]
-                    )
-                    _LOGGER.warning("RESP: %s", resp)
-                    return self.async_abort(reason="Operation completed")
-                if form == "add_product":
-                    return await self.async_step_add_product(user_input=None)
                 if form == "main_menu":
                     return await self.async_step_main_menu(user_input=user_input)
                 if form == "scan_start":
@@ -320,13 +308,14 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             return self.async_abort(reason="Nothing more in scan queue!" + "\n" + msg)
 
         code = current_barcode.strip().strip(",").strip()
+        self.current_barcode = code
+        self.current_product = None
 
         product: ExtendedGrocyProductStockInfo = None
         if "BBUDDY-" not in code:
             # Not a BarcodeBuddy code...
             # Lookup product in Grocy
             try:
-                self.current_barcode = code
                 product = await self._api_grocy.get_product_by_barcode(code)
                 self.current_product = product
 
@@ -354,7 +343,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         errors: dict[str, str] = {}
 
         # code = current_barcode.strip().strip(",").strip()
-        code = user_input["code"]
+        # code = user_input["code"]
+        code = self.current_barcode
 
         new_product: GrocyProduct = {}
 
@@ -415,7 +405,6 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         product = await self._api_grocy.add_product(new_product)
         _LOGGER.info("created prod: %s", product)
         # todo: check for success!
-        self.current_barcode = code
         self.current_product = product
         return await self.async_step_scan_add_product_barcode(user_input=None)
 
@@ -433,6 +422,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         # Handle input, for required fields
         if user_input is None:
+            user_input = user_input or {}
             schema = GENERATE_CREATE_PRODUCT_BARCODESCHEMA(
                 self._coordinator.data,
                 {
@@ -441,7 +431,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 },
             )
             _LOGGER.info("schem: %s", schema)
-            self.add_suggested_values_to_schema(schema, user_input or {})
+            self.add_suggested_values_to_schema(schema, user_input)
             _LOGGER.info("sugg schem: %s", schema)
 
             # ask for input...
@@ -559,100 +549,6 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 errors=errors,
             )
 
-    async def async_step_add_product(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Handle the initial step."""
-        errors: dict[str, str] = {}
-        _LOGGER.debug(
-            "Options flow - add_product: %s #%s", user_input, self.chosen_form
-        )
-
-        config_entry_data = self.config_entry.data.copy()
-
-        # Handle input
-        if user_input is not None:
-            entity = (self.current_product or {}).copy()
-            entity.update(user_input)
-
-            # host = config_entry_data[CONF_HOST]
-            # port = config_entry_data[CONF_PORT]
-            # api_key = config_entry_data[CONF_API_KEY]
-
-            # websession = async_get_clientsession(self.hass)
-            # # websession = requests.Session()
-
-            api: GrocyAPI = self.config_entry.runtime_data
-            try:
-                _LOGGER.info("Getting PRODUCTs")
-                products = await api.get_products()
-                _LOGGER.info("PRODUCTs1: %s", products)
-
-                product = await api.add_product(data=entity)
-
-            except aiohttp.web_exceptions.HTTPError as be:
-                _LOGGER.info("Error when adding PRODUCT: %s", entity)
-                _LOGGER.warning("Caught error: %s -> %s", be, be.status_code)
-                return self.async_abort(reason=f"Error: {be}")
-            except BaseException as be:
-                _LOGGER.info("Error when adding PRODUCT: %s", entity)
-                _LOGGER.info("Caught exception: %s", be)
-                return self.async_abort(reason=f"Error: {be}")
-            finally:
-                _LOGGER.info("Finally Getting PRODUCTs")
-                products = await api.get_products()
-                _LOGGER.info("PRODUCTs2: %s", products)
-
-            _LOGGER.info("TRY-loop exited with PRODUCTs: %s", product)
-
-            # if form := user_input.get("choose-form"):
-            #     if form == "get-product":
-            #         url = f"http://{host}:{port}/api/objects/quantity_units"
-            #         resp = await async_get(websession, url, auth_key=api_key)
-            #         _LOGGER.warning("RESP: %s", resp)
-            #         return self.async_abort(reason="Operation completed")
-
-            return self.async_abort(reason="Successfully added product")
-
-        # # Build dynamic schemas
-        # coordinator: IcaCoordinator = self.config_entry.coordinator
-        # await self._ensure_dynamic_schemas_are_built(coordinator)
-
-        # Format form schema
-        schema = vol.Schema(
-            {
-                vol.Required(
-                    "name",
-                ): cv.string,
-            }
-        )
-
-        return self.async_show_form(
-            step_id=Step.ADD_PRODUCT,
-            data_schema=schema,
-            errors=errors,
-        )
-
-    # async def _ensure_data_is_loaded_for_dynamic_schemas(
-    #     self, coordinator: IcaCoordinator
-    # ):
-    #     if not self.shopping_lists:
-    #         # Re-uses the coordinator on the config_entry for communicating with ICA api
-    #         # Therefore no need to instantiate and authenticate a API new instance
-    #         # Get shopping_lists directly from API as it will not limit the chosen shopping lists
-    #         data = await coordinator.api.get_shopping_lists()
-    #         if data and "shoppingLists" in data:
-    #             y = data["shoppingLists"]
-    #             lists = [z for z in y if z["offlineId"] and z["title"]]
-    #             self.shopping_lists = lists
-
-    # async def _ensure_dynamic_schemas_are_built(self, coordinator: IcaCoordinator):
-    #     # Shopping list selector
-    #     if not self.SHOPPING_LIST_SELECTOR_SCHEMA:
-    #         await self._ensure_data_is_loaded_for_dynamic_schemas(coordinator)
-    #         self.SHOPPING_LIST_SELECTOR_SCHEMA = (
-    #             self._build_shopping_list_selector_schema(self.shopping_lists)
-    #         )
 
     # def _build_shopping_list_selector_schema(self, lists):
     #     return {
@@ -742,6 +638,7 @@ STEP_SCAN_START = vol.Schema(
         vol.Required(
             "barcodes",
             description={"suggested_value": "4011800420413"},  # During DEV...
+            default="7311070347326",
         ): selector.TextSelector({"type": "text", "multiline": True}),
     }
 )
