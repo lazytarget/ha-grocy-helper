@@ -193,6 +193,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         "input_price": True,
         "input_bestBeforeInDays": True,
     }
+    current_bb_mode: int = -1
     barcode_scan_mode: str = None
     barcode_queue: list[str] = []
     barcode_results: list[str] = []
@@ -271,9 +272,17 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         # Handle input
         if user_input is None:
+            bb_mode = await self._api_bbuddy.get_mode()
+            if bb_mode is not None and bb_mode >= 0:
+                self.current_bb_mode = bb_mode
+            scan_mode_from_bbuddy = self._api_bbuddy.convert_bbuddy_mode_to_scan_mode(
+                self.current_bb_mode
+            )
+            _LOGGER.info("BBuddy mode is: %s (%s)", bb_mode, scan_mode_from_bbuddy)
             return self.async_show_form(
                 step_id=Step.SCAN_START,
-                data_schema=STEP_SCAN_START,
+                # data_schema=STEP_SCAN_START,
+                data_schema=GENERATE_STEP_SCAN_START_SCHEMA(scan_mode_from_bbuddy),
                 errors=errors,
             )
 
@@ -316,7 +325,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         if self.barcode_scan_mode == SCAN_MODE.SCAN_BBUDDY:
             bb_mode = await self._api_bbuddy.get_mode()
-            if bb_mode >= 0:
+            if bb_mode is not None and bb_mode >= 0:
                 _LOGGER.info("BBuddy mode is: %s (%s)", bb_mode, self.barcode_scan_mode)
                 self.current_bb_mode = bb_mode
         else:
@@ -889,55 +898,64 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         return vol.Schema(schema)
 
 
-STEP_SCAN_START = vol.Schema(
-    {
-        vol.Optional(
-            "mode",
-            description={"suggested_value": SCAN_MODE.SCAN_BBUDDY},  # During DEV....
-        ): selector.SelectSelector(
-            selector.SelectSelectorConfig(
-                options=[
-                    selector.SelectOptionDict(value=SCAN_MODE.SCAN_BBUDDY, label="Barcode Buddy"),
-                    selector.SelectOptionDict(value=SCAN_MODE.CONSUME, label="Consume"),
-                    # selector.SelectOptionDict(
-                    #     value=SCAN_MODE.CONSUME_SPOILED,
-                    #     label="Consume (Spoiled)"
-                    # ),
-                    # selector.SelectOptionDict(
-                    #     value=SCAN_MODE.CONSUME_ALL,
-                    #     label="Consume (All)"
-                    # ),
-                    selector.SelectOptionDict(
-                        value=SCAN_MODE.PURCHASE, label="Purchase"
-                    ),
-                    selector.SelectOptionDict(value=SCAN_MODE.OPEN, label="Open"),
-                    selector.SelectOptionDict(
-                        value=SCAN_MODE.INVENTORY, label="Inventory"
-                    ),
-                    selector.SelectOptionDict(
-                        value=SCAN_MODE.ADD_TO_SHOPPING_LIST,
-                        label="Add to Shopping list",
-                    ),
-                    # selector.SelectOptionDict(    # merge with Inventory-action
-                    #     value="lookup-barcode",
-                    #     label="Lookup"
-                    # ),
-                    selector.SelectOptionDict(
-                        value=SCAN_MODE.PROVISION, label="Provision barcode"
-                    ),
-                ],
-                mode=selector.SelectSelectorMode.LIST,
-                multiple=False,
-            )
-        ),
-        # vol.Optional("barcodes", description={"suggested_value": current_data.get(CONF_STATS_TEMPLATE, "")}): TextSelector({"type": "text", "multiline": True}),
-        vol.Required(
-            "barcodes",
-            description={"suggested_value": "4011800420413"},  # During DEV...
-            default="7311070347326",
-        ): selector.TextSelector({"type": "text", "multiline": True}),
-    }
-)
+def GENERATE_STEP_SCAN_START_SCHEMA(scan_mode: SCAN_MODE) -> vol.Schema:
+    bbuddy_mode_str = scan_mode.name if scan_mode is not None else "Unknown"
+    return vol.Schema(
+        {
+            vol.Optional(
+                "mode",
+                description={
+                    "suggested_value": SCAN_MODE.SCAN_BBUDDY
+                },  # During DEV....
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        selector.SelectOptionDict(
+                            value=SCAN_MODE.SCAN_BBUDDY,
+                            label=f"Barcode Buddy ({bbuddy_mode_str})",
+                        ),
+                        selector.SelectOptionDict(
+                            value=SCAN_MODE.CONSUME, label="Consume"
+                        ),
+                        # selector.SelectOptionDict(
+                        #     value=SCAN_MODE.CONSUME_SPOILED,
+                        #     label="Consume (Spoiled)"
+                        # ),
+                        # selector.SelectOptionDict(
+                        #     value=SCAN_MODE.CONSUME_ALL,
+                        #     label="Consume (All)"
+                        # ),
+                        selector.SelectOptionDict(
+                            value=SCAN_MODE.PURCHASE, label="Purchase"
+                        ),
+                        selector.SelectOptionDict(value=SCAN_MODE.OPEN, label="Open"),
+                        selector.SelectOptionDict(
+                            value=SCAN_MODE.INVENTORY, label="Inventory"
+                        ),
+                        selector.SelectOptionDict(
+                            value=SCAN_MODE.ADD_TO_SHOPPING_LIST,
+                            label="Add to Shopping list",
+                        ),
+                        # selector.SelectOptionDict(    # merge with Inventory-action
+                        #     value="lookup-barcode",
+                        #     label="Lookup"
+                        # ),
+                        selector.SelectOptionDict(
+                            value=SCAN_MODE.PROVISION, label="Provision barcode"
+                        ),
+                    ],
+                    mode=selector.SelectSelectorMode.LIST,
+                    multiple=False,
+                )
+            ),
+            # vol.Optional("barcodes", description={"suggested_value": current_data.get(CONF_STATS_TEMPLATE, "")}): TextSelector({"type": "text", "multiline": True}),
+            vol.Required(
+                "barcodes",
+                description={"suggested_value": "4011800420413"},  # During DEV...
+                default="7311070347326",
+            ): selector.TextSelector({"type": "text", "multiline": True}),
+        }
+    )
 
 
 def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
