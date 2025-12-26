@@ -270,22 +270,22 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         _LOGGER.debug("Options flow - scan: %s #%s", user_input, self.chosen_form)
 
         # Handle input
-        if user_input is not None:
-            barcodes_str = user_input["barcodes"]
-            self.barcode_scan_mode = user_input.get("mode")
-            _LOGGER.info("SCAN: %s", barcodes_str)
-            _LOGGER.info("SCAN-mode: %s", self.barcode_scan_mode)
+        if user_input is None:
+            return self.async_show_form(
+                step_id=Step.SCAN_START,
+                data_schema=STEP_SCAN_START,
+                errors=errors,
+            )
 
-            barcodes = barcodes_str.split("\n")
-            self.barcode_queue = barcodes
-            self.barcode_results = []
-            return await self.async_step_scan_queue()
+        barcodes_str = user_input["barcodes"]
+        self.barcode_scan_mode = user_input.get("mode")
+        _LOGGER.info("SCAN: %s", barcodes_str)
+        _LOGGER.info("SCAN-mode: %s", self.barcode_scan_mode)
 
-        return self.async_show_form(
-            step_id=Step.SCAN_START,
-            data_schema=STEP_SCAN_START,
-            errors=errors,
-        )
+        barcodes = barcodes_str.split("\n")
+        self.barcode_queue = barcodes
+        self.barcode_results = []
+        return await self.async_step_scan_queue()
 
     async def async_step_scan_queue(self, user_input: dict[str, Any] = None):
         """Handle the scan-queue."""
@@ -313,6 +313,14 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         code = current_barcode.strip().strip(",").strip()
         self.current_barcode = code
         self.current_product = None
+
+        if self.barcode_scan_mode == SCAN_MODE.SCAN_BBUDDY:
+            bb_mode = await self._api_bbuddy.get_mode()
+            if bb_mode >= 0:
+                _LOGGER.info("BBuddy mode is: %s (%s)", bb_mode, self.barcode_scan_mode)
+                self.current_bb_mode = bb_mode
+        else:
+            self.current_bb_mode = None
 
         product: ExtendedGrocyProductStockInfo = None
         if self.barcode_scan_mode == SCAN_MODE.PROVISION or (
@@ -748,7 +756,14 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         price = user_input.get("price") if user_input else None
         bestBeforeInDays = user_input.get("bestBeforeInDays") if user_input else None
 
-        if self.barcode_scan_mode in [SCAN_MODE.PURCHASE]:
+        in_purchase_mode = self.barcode_scan_mode in [SCAN_MODE.PURCHASE] or (
+            self.barcode_scan_mode == SCAN_MODE.SCAN_BBUDDY
+            and self.current_bb_mode
+            == self._api_bbuddy.convert_scan_mode_to_bbuddy_mode(SCAN_MODE.PURCHASE)
+        )
+        if in_purchase_mode:
+            # If is in a "Purchase"-context
+
             # Input for price
             if price is None and self.scan_options.get("input_price"):
                 _LOGGER.info(
@@ -791,7 +806,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         request = {
             "barcode": str(code),
         }
-        if self.barcode_scan_mode in [SCAN_MODE.PURCHASE]:
+        if in_purchase_mode:
             if price is not None and len(str(price)) > 0:
                 request["price"] = float(price)
             if bestBeforeInDays is not None and len(str(bestBeforeInDays)) > 0:
@@ -805,6 +820,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 "Setting BBuddy mode to: %s (%s)", bb_mode, self.barcode_scan_mode
             )
             await self._api_bbuddy.set_mode(bb_mode)
+            self.current_bb_mode = bb_mode
 
         try:
             _LOGGER.info("SCAN-REQ: %s", json.dumps(request))
@@ -877,11 +893,11 @@ STEP_SCAN_START = vol.Schema(
     {
         vol.Optional(
             "mode",
-            description={"suggested_value": SCAN_MODE.PURCHASE},  # During DEV....
+            description={"suggested_value": SCAN_MODE.SCAN_BBUDDY},  # During DEV....
         ): selector.SelectSelector(
             selector.SelectSelectorConfig(
                 options=[
-                    selector.SelectOptionDict(value="", label="(Inherit)"),
+                    selector.SelectOptionDict(value=SCAN_MODE.SCAN_BBUDDY, label="Barcode Buddy"),
                     selector.SelectOptionDict(value=SCAN_MODE.CONSUME, label="Consume"),
                     # selector.SelectOptionDict(
                     #     value=SCAN_MODE.CONSUME_SPOILED,

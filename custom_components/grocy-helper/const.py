@@ -13,6 +13,7 @@ CONF_BBUDDY_API_URL: Final = "BBUDDY_API_URL"
 CONF_BBUDDY_API_KEY: Final = "BBUDDY_API_KEY"
 
 class SCAN_MODE(StrEnum):
+    # BBuddy
     CONSUME = "BBUDDY-C"
     CONSUME_SPOILED = "BBUDDY-CS"
     CONSUME_ALL = "BBUDDY-CA"
@@ -21,6 +22,8 @@ class SCAN_MODE(StrEnum):
     INVENTORY = "BBUDDY-I"
     ADD_TO_SHOPPING_LIST = "BBUDDY-AS"
     QUANTITY = "BBUDDY-Q-"
+    # Custom
+    SCAN_BBUDDY = "SCAN-BBUDDY"
     PROVISION = "PROVISION-BARCODE"
 
 class ApiException(Exception):
@@ -51,6 +54,7 @@ class API:
         UPDATE_PRODUCT: Final = "api/objects/products"
 
         BBUDDY_SCAN: Final = "api/action/scan"
+        BBUDDY_GET_MODE: Final = "api/state/getmode"
         BBUDDY_SET_MODE: Final = "api/state/setmode"
 
 class OpenFoodFacts:

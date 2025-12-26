@@ -55,19 +55,28 @@ class BarcodeBuddyAPI:
             return 6
         return -1
 
-    async def set_mode(
-        self, mode: int
-    ):
+    async def get_mode(self):
+        url = self.get_rest_url(API.URLs.BBUDDY_GET_MODE)
+        j = await async_get(self._session, url, self._api_key)
+        return j["data"]["mode"]
+
+    async def set_mode(self, mode: int):
         # STATE_CONSUME = 0; STATE_CONSUME_SPOILED = 1; STATE_PURCHASE = 2; STATE_OPEN = 3; STATE_GETSTOCK = 4; STATE_ADD_SL = 5; STATE_CONSUME_ALL = 6;
         url = self.get_rest_url(API.URLs.BBUDDY_SET_MODE)
-        fd = FormData({
-            "state": mode,
-        })
-        return await async_post(self._session, url, self._api_key, data=fd, content_type=False)
+        fd = FormData(
+            {
+                "state": mode,
+            }
+        )
+        return await async_post(
+            self._session, url, self._api_key, data=fd, content_type=False
+        )
 
     async def post_scan(
         self, request: BarcodeBuddyScanRequest
     ) -> BarcodeBuddyScanResponse:
         url = self.get_rest_url(API.URLs.BBUDDY_SCAN)
         fd = FormData(request)
-        return await async_post(self._session, url, self._api_key, data=fd, content_type=False)
+        return await async_post(
+            self._session, url, self._api_key, data=fd, content_type=False
+        )
