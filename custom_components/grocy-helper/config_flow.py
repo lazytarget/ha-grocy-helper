@@ -76,6 +76,7 @@ class Step(StrEnum):
 
     SCAN_START = "scan_start"
     SCAN_QUEUE = "scan_queue"
+    SCAN_MATCH_PRODUCT = "scan_match_to_product"
     SCAN_ADD_PRODUCT = "scan_add_product"
     SCAN_ADD_PRODUCT_BARCODE = "scan_add_product_barcode"
     SCAN_PROCESS = "scan_process"
@@ -200,6 +201,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
     current_barcode_schema: vol.Schema = None
     current_product: GrocyProduct | None = None
     current_product_openfoodfacts: OpenFoodFactsProduct | None = None
+    matching_products: list[GrocyProduct] = []
 
     def __init__(self, config_entry: ConfigEntry) -> None:
         """Initialize Grocy-helper options flow"""
@@ -319,9 +321,52 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             try:
                 product = await self._api_grocy.get_product_by_barcode(code)
                 self.current_product = product
+                self.matching_products: list[GrocyProduct] = []
 
                 if not product:
-                    return await self.async_step_scan_add_product(user_input=None)
+                    # New barcode (Not provisioned in Grocy)
+                    # todo: Lookup in other providers...
+                    self.current_product_openfoodfacts: (
+                        OpenFoodFactsProduct | None
+                    ) = await self._coordinator.get_product_from_open_food_facts(code)
+                    _LOGGER.info(
+                        "OpenFoodFacts product: %s", self.current_product_openfoodfacts
+                    )
+                    self.current_product_ica: dict = {}
+                    # _LOGGER.info("ICA product: %s", self.current_product_ica)
+
+                    for matching_product in filter(
+                        lambda p: (
+                            (
+                                self.current_product_openfoodfacts is not None
+                                and p["name"]
+                                == self.current_product_openfoodfacts.get(
+                                    "product_name"
+                                )
+                            )
+                            or (
+                                self.current_product_ica is not None
+                                and p["name"] == self.current_product_ica.get("name")
+                            )
+                        ),
+                        self._coordinator.data["products"],
+                    ):
+                        # todo: also loop through ProductBarcode notes
+                        _LOGGER.info("Match: %s", matching_product)
+                        self.matching_products.append(matching_product)
+
+                    # always give option to map to an existing product...
+                    return await self.async_step_scan_match_to_product(
+                        user_input=None
+                    )
+
+                    if len(self.matching_products) > 0:
+                        # Has possible matches...
+                        return await self.async_step_scan_match_to_product(
+                            user_input=None
+                        )
+                    else:
+                        return await self.async_step_scan_add_product(user_input=None)
             except BaseException as be:
                 _LOGGER.error("Get product excep: %s", be)
                 errors["Exception"] = be
@@ -337,7 +382,154 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             self.barcode_results.append(f"{code} maps to {p['name']}")
             return await self.async_step_scan_queue(user_input=None)
 
+        # Proceed with BarcodeBuddy processing
         return await self.async_step_scan_process(user_input=None)
+
+    async def async_step_scan_match_to_product(self, user_input: dict[str, Any] = None):
+        """Handle input for adding barcode to a product."""
+        errors: dict[str, str] = {}
+        _LOGGER.info("match-product: %s", user_input)
+        _LOGGER.info("matches: %s", self.matching_products)
+
+        # code = current_barcode.strip().strip(",").strip()
+        # code = user_input["code"]
+        code = self.current_barcode
+
+        new_product: GrocyProduct = {}
+
+        # # # New barcode (Not provisioned in Grocy)
+        # # # todo: Lookup in other providers...
+        # # self.current_product_openfoodfacts = (
+        # #     await self._coordinator.get_product_from_open_food_facts(code)
+        # # )
+        # # _LOGGER.info("OpenFoodFacts product: %s", self.current_product_openfoodfacts)
+        # # self.current_product_ica: dict = {}
+        # # # _LOGGER.info("OpenFoodFacts product: %s", self.current_product_ica)
+
+        if (
+            self.current_product_openfoodfacts is None
+            and self.current_product_ica is None
+        ):
+            # todo: Not found in other providers, then show input's for manual registration?
+            _LOGGER.error("No product info found!: %s", code)
+            # errors["NoProduct"] = "No product found!"
+            # return self.async_show_form(
+            #     step_id=Step.SCAN_ADD_PRODUCT,
+            #     data_schema=self.current_barcode_schema,
+            #     errors=errors,
+            # )
+            return self.async_step_scan_add_product(user_input=None)
+
+        # Handle input, for required fields
+        if user_input is None:
+            user_input = user_input or {}
+
+            # if self.current_product_openfoodfacts is not None:
+            #     # Fill in from OpenFoodFacts
+            #     user_input["name"] = (
+            #         user_input.get("name")
+            #         or self.current_product_openfoodfacts["product_name"]
+            #     )
+            #     unit = self.current_product_openfoodfacts.get("product_quantity_unit")
+            #     if unit:
+            #         for qq in filter(
+            #             lambda qu: qu.get("name") == unit,
+            #             self._coordinator.data["quantity_units"],
+            #         ):
+            #             user_input["qu_id"] = str(qq["id"])
+            #             _LOGGER.warning("Unit: %s, QQ: %s", unit, qq)
+            #     # todo: fill in guess of QuantityUnit...
+
+            schema: VolDictType = None
+            # schema = GENERATE_CREATE_PRODUCT_SCHEMA(self._coordinator.data, user_input)
+            # self.add_suggested_values_to_schema(schema, user_input)
+
+            # for matching_product_by_name in filter(
+            #     lambda p: p.get("name") == user_input["name"],
+            #     self._coordinator.data["products"],
+            # ):
+            #     # _LOGGER.warning("Matching product: %s", matching_product_by_name)
+            #     # first_schema = GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
+            #     #     self._coordinator.data,
+            #     #     {"product_id": matching_product_by_name["id"]},
+            #     # )
+            #     # first_schema = vol.Schema(first_schema)
+            #     # _LOGGER.info("first-schema: %s", first_schema)
+            #     # schema = first_schema.extend(schema)
+            #     # _LOGGER.info("result-schema: %s", schema)
+            #     self.matching_product = matching_product_by_name
+            #     break
+
+            # if self.matching_product:
+            # Has matching product, display as a suggestion
+            _LOGGER.warning("Matching products: %s", self.matching_products)
+            first_schema = GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
+                self._coordinator.data,
+                self.matching_products,
+                # {"product_id": self.matching_product["id"]},
+            )
+            # first_schema = vol.Schema(first_schema)
+            _LOGGER.info("first-schema: %s", first_schema)
+            # schema = first_schema.extend(schema)
+            schema = first_schema
+            _LOGGER.info("result-schema: %s", schema)
+            # else:
+            #     # Create a new product...
+            #     schema = GENERATE_CREATE_PRODUCT_SCHEMA(self._coordinator.data, user_input)
+
+            _LOGGER.info("schema: %s", schema)
+            _LOGGER.info("form 'match_product' user_input: %s", user_input)
+
+            schema = vol.Schema(schema)
+            # self.add_suggested_values_to_schema(schema, user_input)
+
+            # ask for input...
+            return self.async_show_form(
+                step_id=Step.SCAN_MATCH_PRODUCT,
+                data_schema=schema,
+                errors=errors,
+            )
+
+        # Input has been passed!
+        if user_input.get("product_id") and user_input["product_id"] != "-1":
+            # A specific product was chosen, use that instead of creation...
+            _LOGGER.info("exist_products: %s", self.matching_products)
+            self.current_product = await self._api_grocy.get_product_by_id(
+                int(user_input["product_id"])
+            )
+        else:
+            # Create a new product
+            _LOGGER.info("no-product-id: %s", user_input)
+            return await self.async_step_scan_add_product(user_input=None)
+
+            # more friendly name (barcode has specific name/"note")
+            new_product["name"] = user_input["name"]
+            new_product["location_id"] = user_input["location_id"]
+            new_product["qu_id_purchase"] = user_input.get(
+                "qu_id_purchase", user_input.get("qu_id")
+            )
+            new_product["qu_id_stock"] = user_input.get(
+                "qu_id_stock", user_input.get("qu_id")
+            )
+            new_product["qu_id_price"] = user_input.get(
+                "qu_id_price", user_input.get("qu_id")
+            )
+            new_product["qu_id_consume"] = user_input.get(
+                "qu_id_consume", user_input.get("qu_id")
+            )
+            new_product["row_created_timestamp"] = dt.datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
+            # todo: create product
+            _LOGGER.info("user_input: %s", user_input)
+            _LOGGER.info("new_product: %s", new_product)
+            product = await self._api_grocy.add_product(new_product)
+            _LOGGER.info("created prod: %s", product)
+            # todo: check for success!
+            self.current_product = product
+
+        return await self.async_step_scan_add_product_barcode(user_input=None)
 
     async def async_step_scan_add_product(self, user_input: dict[str, Any] = None):
         """Handle input for adding a new product."""
@@ -350,14 +542,14 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         new_product: GrocyProduct = {}
 
-        # New barcode (Not provisioned in Grocy)
-        # todo: Lookup in other providers...
-        self.current_product_openfoodfacts = (
-            await self._coordinator.get_product_from_open_food_facts(code)
-        )
-        _LOGGER.info("OpenFoodFacts product: %s", self.current_product_openfoodfacts)
-        self.current_product_ica: dict = {}
-        # _LOGGER.info("OpenFoodFacts product: %s", self.current_product_ica)
+        # # # New barcode (Not provisioned in Grocy)
+        # # # todo: Lookup in other providers...
+        # # self.current_product_openfoodfacts = (
+        # #     await self._coordinator.get_product_from_open_food_facts(code)
+        # # )
+        # # _LOGGER.info("OpenFoodFacts product: %s", self.current_product_openfoodfacts)
+        # # self.current_product_ica: dict = {}
+        # # # _LOGGER.info("OpenFoodFacts product: %s", self.current_product_ica)
 
         if (
             self.current_product_openfoodfacts is None
@@ -375,8 +567,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         # Handle input, for required fields
         if user_input is None:
             user_input = user_input or {}
-            self.matching_product = None
-            
+            # self.matching_product = None
+
             if self.current_product_openfoodfacts is not None:
                 # Fill in from OpenFoodFacts
                 user_input["name"] = (
@@ -397,42 +589,41 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             # schema = GENERATE_CREATE_PRODUCT_SCHEMA(self._coordinator.data, user_input)
             # self.add_suggested_values_to_schema(schema, user_input)
 
-            for matching_product_by_name in filter(
-                lambda p: p.get("name") == user_input["name"],
-                self._coordinator.data["products"],
-            ):
-                # _LOGGER.warning("Matching product: %s", matching_product_by_name)
-                # first_schema = GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
-                #     self._coordinator.data,
-                #     {"product_id": matching_product_by_name["id"]},
-                # )
-                # first_schema = vol.Schema(first_schema)
-                # _LOGGER.info("first-schema: %s", first_schema)
-                # schema = first_schema.extend(schema)
-                # _LOGGER.info("result-schema: %s", schema)
-                self.matching_product = matching_product_by_name
-                break
-            
+            # for matching_product_by_name in filter(
+            #     lambda p: p.get("name") == user_input["name"],
+            #     self._coordinator.data["products"],
+            # ):
+            #     # _LOGGER.warning("Matching product: %s", matching_product_by_name)
+            #     # first_schema = GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
+            #     #     self._coordinator.data,
+            #     #     {"product_id": matching_product_by_name["id"]},
+            #     # )
+            #     # first_schema = vol.Schema(first_schema)
+            #     # _LOGGER.info("first-schema: %s", first_schema)
+            #     # schema = first_schema.extend(schema)
+            #     # _LOGGER.info("result-schema: %s", schema)
+            #     self.matching_product = matching_product_by_name
+            #     break
 
-            if self.matching_product:
-                # Has matching product, display as a suggestion
-                _LOGGER.warning("Matching product: %s", self.matching_product)
-                first_schema = GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
-                    self._coordinator.data,
-                    {"product_id": self.matching_product["id"]},
-                )
-                # first_schema = vol.Schema(first_schema)
-                _LOGGER.info("first-schema: %s", first_schema)
-                # schema = first_schema.extend(schema)
-                schema = first_schema
-                _LOGGER.info("result-schema: %s", schema)
-            else:
-                # Create a new product...
-                schema = GENERATE_CREATE_PRODUCT_SCHEMA(self._coordinator.data, user_input)
+            # if self.matching_product:
+            #     # Has matching product, display as a suggestion
+            #     _LOGGER.warning("Matching product: %s", self.matching_product)
+            #     first_schema = GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
+            #         self._coordinator.data,
+            #         {"product_id": self.matching_product["id"]},
+            #     )
+            #     # first_schema = vol.Schema(first_schema)
+            #     _LOGGER.info("first-schema: %s", first_schema)
+            #     # schema = first_schema.extend(schema)
+            #     schema = first_schema
+            #     _LOGGER.info("result-schema: %s", schema)
+            # else:
+            # Create a new product...
+            schema = GENERATE_CREATE_PRODUCT_SCHEMA(self._coordinator.data, user_input)
 
             _LOGGER.info("schema: %s", schema)
             _LOGGER.info("form 'add_product' user_input: %s", user_input)
-            
+
             schema = vol.Schema(schema)
             self.add_suggested_values_to_schema(schema, user_input)
 
@@ -446,7 +637,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         # Input has been passed!
         if user_input.get("product_id") and user_input["product_id"] != "-1":
             # A specific product was chosen, use that instead of creation...
-            _LOGGER.info("exist_product: %s", self.matching_product)
+            _LOGGER.info("exist_products: %s", self.matching_products)
+            _LOGGER.info("usr_inp: %s", user_input)
             self.current_product = await self._api_grocy.get_product_by_id(
                 int(user_input["product_id"])
             )
@@ -723,16 +915,38 @@ STEP_SCAN_START = vol.Schema(
 
 
 def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
-    masterdata: GrocyMasterData, suggested_values: dict[str, str]
+    masterdata: GrocyMasterData,
+    suggested_products: list[GrocyProduct],
+    suggested_values: dict[str, str] = {},
 ) -> VolDictType:
+    suggested_product_ids = [prod["id"] for prod in suggested_products]
+    non_suggested_prods = [
+        prod
+        for prod in masterdata["products"]
+        if prod["id"] not in suggested_product_ids
+    ]
+    sorted(non_suggested_prods, key=lambda p: p["name"])
+
+    product_options: list[GrocyProduct] = []
+    product_options = product_options + suggested_products
+    product_options = product_options + non_suggested_prods
+
     prods = [
         selector.SelectOptionDict(
             value=str(prod["id"]),
             label=prod["name"],
         )
-        for prod in masterdata["products"]
+        for prod in product_options
     ]
-    prods.insert(0, selector.SelectOptionDict(value="-1", label="--CREATE NEW--"))
+    prods.insert(
+        len(suggested_products),
+        selector.SelectOptionDict(value="-1", label="--CREATE NEW--"),
+    )
+
+    selected_product_id = "-1"
+    if len(suggested_products) > 0:
+        selected_product_id = suggested_values.get("product_id", suggested_products[0]["id"])
+    selected_product_id = str(selected_product_id)
 
     schemas: VolDictType = {}
     schemas.update(
@@ -740,9 +954,9 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
             vol.Optional(
                 "product_id",
                 description={
-                    "suggested_value": suggested_values.get("product_id"),
+                    "suggested_value": selected_product_id,
                 },
-                default=suggested_values.get("product_id"),
+                default=selected_product_id,
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=prods,
