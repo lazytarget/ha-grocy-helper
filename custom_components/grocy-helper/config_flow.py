@@ -375,6 +375,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         # Handle input, for required fields
         if user_input is None:
             user_input = user_input or {}
+            self.matching_product = None
+            
             if self.current_product_openfoodfacts is not None:
                 # Fill in from OpenFoodFacts
                 user_input["name"] = (
@@ -391,27 +393,47 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                         _LOGGER.warning("Unit: %s, QQ: %s", unit, qq)
                 # todo: fill in guess of QuantityUnit...
 
-            schema = GENERATE_CREATE_PRODUCT_SCHEMA(self._coordinator.data, user_input)
+            schema: VolDictType = None
+            # schema = GENERATE_CREATE_PRODUCT_SCHEMA(self._coordinator.data, user_input)
             # self.add_suggested_values_to_schema(schema, user_input)
-            _LOGGER.info("schema: %s", schema)
-            _LOGGER.info("form 'add_product' user_input: %s", user_input)
 
             for matching_product_by_name in filter(
                 lambda p: p.get("name") == user_input["name"],
                 self._coordinator.data["products"],
             ):
-                _LOGGER.warning("Matching product: %s", matching_product_by_name)
+                # _LOGGER.warning("Matching product: %s", matching_product_by_name)
+                # first_schema = GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
+                #     self._coordinator.data,
+                #     {"product_id": matching_product_by_name["id"]},
+                # )
+                # first_schema = vol.Schema(first_schema)
+                # _LOGGER.info("first-schema: %s", first_schema)
+                # schema = first_schema.extend(schema)
+                # _LOGGER.info("result-schema: %s", schema)
+                self.matching_product = matching_product_by_name
+                break
+            
+
+            if self.matching_product:
+                # Has matching product, display as a suggestion
+                _LOGGER.warning("Matching product: %s", self.matching_product)
                 first_schema = GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
                     self._coordinator.data,
-                    {"product_id": matching_product_by_name["id"]},
+                    {"product_id": self.matching_product["id"]},
                 )
-                first_schema = vol.Schema(first_schema)
+                # first_schema = vol.Schema(first_schema)
                 _LOGGER.info("first-schema: %s", first_schema)
-                schema = first_schema.extend(schema)
+                # schema = first_schema.extend(schema)
+                schema = first_schema
                 _LOGGER.info("result-schema: %s", schema)
-                break
+            else:
+                # Create a new product...
+                schema = GENERATE_CREATE_PRODUCT_SCHEMA(self._coordinator.data, user_input)
 
-            # schema = vol.Schema(schema)
+            _LOGGER.info("schema: %s", schema)
+            _LOGGER.info("form 'add_product' user_input: %s", user_input)
+            
+            schema = vol.Schema(schema)
             self.add_suggested_values_to_schema(schema, user_input)
 
             # ask for input...
@@ -422,8 +444,9 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             )
 
         # Input has been passed!
-        if user_input.get("product_id"):
+        if user_input.get("product_id") and user_input["product_id"] != "-1":
             # A specific product was chosen, use that instead of creation...
+            _LOGGER.info("exist_product: %s", self.matching_product)
             self.current_product = await self._api_grocy.get_product_by_id(
                 int(user_input["product_id"])
             )
@@ -709,7 +732,7 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
         )
         for prod in masterdata["products"]
     ]
-    prods.insert(0, selector.SelectOptionDict(value="", label="--CREATE NEW--"))
+    prods.insert(0, selector.SelectOptionDict(value="-1", label="--CREATE NEW--"))
 
     schemas: VolDictType = {}
     schemas.update(
@@ -719,6 +742,7 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
                 description={
                     "suggested_value": suggested_values.get("product_id"),
                 },
+                default=suggested_values.get("product_id"),
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=prods,
