@@ -315,62 +315,72 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         self.current_product = None
 
         product: ExtendedGrocyProductStockInfo = None
-        if "BBUDDY-" not in code:
-            # Not a BarcodeBuddy code...
-            # Lookup product in Grocy
-            try:
-                product = await self._api_grocy.get_product_by_barcode(code)
-                self.current_product = product
-                self.matching_products: list[GrocyProduct] = []
+        if self.barcode_scan_mode == SCAN_MODE.PROVISION or (
+            self.barcode_scan_mode != SCAN_MODE.INVENTORY
+            and self.barcode_scan_mode != SCAN_MODE.QUANTITY
+        ):
+            if "BBUDDY-" not in code:
+                # Not a BarcodeBuddy code...
+                # Lookup product in Grocy
+                try:
+                    product = await self._api_grocy.get_product_by_barcode(code)
+                    self.current_product = product
+                    self.matching_products: list[GrocyProduct] = []
 
-                if not product:
-                    # New barcode (Not provisioned in Grocy)
-                    # todo: Lookup in other providers...
-                    self.current_product_openfoodfacts: (
-                        OpenFoodFactsProduct | None
-                    ) = await self._coordinator.get_product_from_open_food_facts(code)
-                    _LOGGER.info(
-                        "OpenFoodFacts product: %s", self.current_product_openfoodfacts
-                    )
-                    self.current_product_ica: dict = {}
-                    # _LOGGER.info("ICA product: %s", self.current_product_ica)
+                    if not product:
+                        # New barcode (Not provisioned in Grocy)
+                        # todo: Lookup in other providers...
+                        self.current_product_openfoodfacts: (
+                            OpenFoodFactsProduct | None
+                        ) = await self._coordinator.get_product_from_open_food_facts(
+                            code
+                        )
+                        _LOGGER.info(
+                            "OpenFoodFacts product: %s",
+                            self.current_product_openfoodfacts,
+                        )
+                        self.current_product_ica: dict = {}
+                        # _LOGGER.info("ICA product: %s", self.current_product_ica)
 
-                    for matching_product in filter(
-                        lambda p: (
-                            (
-                                self.current_product_openfoodfacts is not None
-                                and p["name"]
-                                == self.current_product_openfoodfacts.get(
-                                    "product_name"
+                        for matching_product in filter(
+                            lambda p: (
+                                (
+                                    self.current_product_openfoodfacts is not None
+                                    and p["name"]
+                                    == self.current_product_openfoodfacts.get(
+                                        "product_name"
+                                    )
                                 )
-                            )
-                            or (
-                                self.current_product_ica is not None
-                                and p["name"] == self.current_product_ica.get("name")
-                            )
-                        ),
-                        self._coordinator.data["products"],
-                    ):
-                        # todo: also loop through ProductBarcode notes
-                        _LOGGER.info("Match: %s", matching_product)
-                        self.matching_products.append(matching_product)
+                                or (
+                                    self.current_product_ica is not None
+                                    and p["name"]
+                                    == self.current_product_ica.get("name")
+                                )
+                            ),
+                            self._coordinator.data["products"],
+                        ):
+                            # todo: also loop through ProductBarcode notes
+                            _LOGGER.info("Match: %s", matching_product)
+                            self.matching_products.append(matching_product)
 
-                    # always give option to map to an existing product...
-                    return await self.async_step_scan_match_to_product(
-                        user_input=None
-                    )
-
-                    if len(self.matching_products) > 0:
-                        # Has possible matches...
+                        # always give option to map to an existing product...
                         return await self.async_step_scan_match_to_product(
                             user_input=None
                         )
-                    else:
-                        return await self.async_step_scan_add_product(user_input=None)
-            except BaseException as be:
-                _LOGGER.error("Get product excep: %s", be)
-                errors["Exception"] = be
-                raise be
+
+                        if len(self.matching_products) > 0:
+                            # Has possible matches...
+                            return await self.async_step_scan_match_to_product(
+                                user_input=None
+                            )
+                        else:
+                            return await self.async_step_scan_add_product(
+                                user_input=None
+                            )
+                except BaseException as be:
+                    _LOGGER.error("Get product excep: %s", be)
+                    errors["Exception"] = be
+                    raise be
 
         if self.barcode_scan_mode == SCAN_MODE.PROVISION:
             # Mode is to simply ensure product/barcode exists
@@ -945,7 +955,9 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
 
     selected_product_id = "-1"
     if len(suggested_products) > 0:
-        selected_product_id = suggested_values.get("product_id", suggested_products[0]["id"])
+        selected_product_id = suggested_values.get(
+            "product_id", suggested_products[0]["id"]
+        )
     selected_product_id = str(selected_product_id)
 
     schemas: VolDictType = {}
