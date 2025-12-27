@@ -504,7 +504,14 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                         user_input["qu_id"] = str(qq["id"])
                         _LOGGER.warning("Unit: %s, QQ: %s", unit, qq)
                 # todo: fill in guess of QuantityUnit...
-            
+
+                user_input["calories"] = (
+                    user_input.get("calories")
+                    or self.current_product_openfoodfacts.get("nutriments", {}).get(
+                        "energy_kcal_100g"
+                    ),
+                )
+
             if self.current_product_ica is not None:
                 # todo: fill in info from ICA...
                 pass
@@ -551,6 +558,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             new_product["qu_id_consume"] = user_input.get(
                 "qu_id_consume", user_input.get("qu_id")
             )
+            new_product["calories"] = user_input.get("calories")
             new_product["row_created_timestamp"] = dt.datetime.now().strftime(
                 "%Y-%m-%d %H:%M:%S"
             )
@@ -584,6 +592,14 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             user_input["qu_id"] = str(
                 user_input.get("qu_id", new_product["qu_id_purchase"])
             )
+
+            if self.current_product_openfoodfacts is not None:
+                q = self.current_product_openfoodfacts.get("product_quantity")
+                qu = self.current_product_openfoodfacts.get("product_quantity_unit")
+                if q and qu:
+                    # todo: compare qu, against the defaulted "qu_id_purchase" or "qui_id_stock"
+                    # todo: make conversion, if necessary...
+                    user_input["amount"] = q
 
             schema = GENERATE_CREATE_PRODUCT_BARCODESCHEMA(
                 self._coordinator.data, user_input
@@ -632,7 +648,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             and self.current_bb_mode
             == self._api_bbuddy.convert_scan_mode_to_bbuddy_mode(SCAN_MODE.PURCHASE)
         )
-        if in_purchase_mode:
+        if user_input is None and in_purchase_mode:
             # If is in a "Purchase"-context
 
             # Input for price
@@ -970,6 +986,20 @@ def GENERATE_CREATE_PRODUCT_SCHEMA(
             ),
         }
     )
+    schemas.update(
+        {
+            vol.Optional(
+                "calories",
+                description={
+                    "suggested_value": suggested_values.get("calories"),
+                },
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    mode=selector.NumberSelectorMode.BOX, step=1
+                )
+            ),
+        }
+    )
     return schemas
 
 
@@ -1037,6 +1067,11 @@ def GENERATE_CREATE_PRODUCT_BARCODESCHEMA(
         {
             vol.Optional(
                 "amount",
+                description={
+                    "suggested_value": suggested_values.get(
+                        "amount"
+                    ),
+                },
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(mode=selector.NumberSelectorMode.BOX)
             )
