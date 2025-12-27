@@ -113,6 +113,15 @@ class GrocyMasterData(TypedDict):
     quantity_units: list[GrocyQuantityUnit]
     products: list[GrocyProduct]
 
+class OpenFoodFactsProductNutriments(TypedDict):
+    energy_kcal_100g: float | None
+    fat_100g: float | None
+    saturated_fat_100g: float | None
+    carbohydrates_100g: float | None
+    sugars_100g: float | None
+    protein_100g: float | None
+    salt_100g: float | None
+
 class OpenFoodFactsProduct(TypedDict):
     brand_owner: str | None
     brands: str | None
@@ -121,5 +130,5 @@ class OpenFoodFactsProduct(TypedDict):
     product_quantity_unit: str | None
     product_name: str | None
     product_type: str | None
-    energy_kcal_value: int | None
+    nutriments: OpenFoodFactsProductNutriments | None
     categories: list[str]

@@ -149,8 +149,16 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
                 product_quantity=p.get("product_quantity"),
                 product_quantity_unit=p.get("product_quantity_unit"),
                 quantity=p.get("quantity"),
-                energy_kcal_value=nutriments.get(
-                    "energy-kcal_value", nutriments.get("energy-kcal_100g")
-                ),
                 categories=p.get("categories_hierarchy"),
+                nutriments={
+                    "energy_kcal_100g": nutriments.get(
+                        "energy-kcal_100g", nutriments.get("energy-kcal_value")
+                    ),
+                    "fat_100g": nutriments.get("fat_100g"),
+                    "saturated_fat_100g": nutriments.get("saturated-fat_100g"),
+                    "carbohydrates_100g": nutriments.get("carbohydrates_100g"),
+                    "sugars_100g": nutriments.get("sugars_100g"),
+                    "protein_100g": nutriments.get("protein_100g"),
+                    "salt_100g": nutriments.get("salt_100g"),
+                },
             )

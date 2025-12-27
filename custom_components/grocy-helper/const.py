@@ -65,9 +65,12 @@ class OpenFoodFacts:
         "quantity",
         "product_quantity",
         "product_quantity_unit",
+        "serving_quantity",
+        "serving_quantity_unit",
         "product_name",
         "product_type",
         "expiration_date",
         "categories_hierarchy",
         "nutriments",
+        "nutriments_estimated",
     ]
