@@ -5,12 +5,7 @@ from enum import StrEnum
 import datetime as dt
 import logging
 import json
-import aiohttp
 from typing import Any
-
-import aiohttp.client_exceptions
-import aiohttp.http_exceptions
-import aiohttp.web_exceptions
 import voluptuous as vol
 
 from homeassistant import config_entries
@@ -22,10 +17,7 @@ from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import selector
 import homeassistant.helpers.config_validation as cv
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import VolDictType
-
-from .http_requests import async_get
 
 from .coordinator import GrocyHelperCoordinator
 from .grocyapi import GrocyAPI
@@ -386,16 +378,6 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                         return await self.async_step_scan_match_to_product(
                             user_input=None
                         )
-
-                        if len(self.matching_products) > 0:
-                            # Has possible matches...
-                            return await self.async_step_scan_match_to_product(
-                                user_input=None
-                            )
-                        else:
-                            return await self.async_step_scan_add_product(
-                                user_input=None
-                            )
                 except BaseException as be:
                     _LOGGER.error("Get product excep: %s", be)
                     errors["Exception"] = be
@@ -420,20 +402,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         _LOGGER.info("match-product: %s", user_input)
         _LOGGER.info("matches: %s", self.matching_products)
 
-        # code = current_barcode.strip().strip(",").strip()
-        # code = user_input["code"]
         code = self.current_barcode
-
-        new_product: GrocyProduct = {}
-
-        # # # New barcode (Not provisioned in Grocy)
-        # # # todo: Lookup in other providers...
-        # # self.current_product_openfoodfacts = (
-        # #     await self._coordinator.get_product_from_open_food_facts(code)
-        # # )
-        # # _LOGGER.info("OpenFoodFacts product: %s", self.current_product_openfoodfacts)
-        # # self.current_product_ica: dict = {}
-        # # # _LOGGER.info("OpenFoodFacts product: %s", self.current_product_ica)
 
         if (
             self.current_product_openfoodfacts is None
@@ -451,66 +420,15 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         # Handle input, for required fields
         if user_input is None:
-            user_input = user_input or {}
-
-            # if self.current_product_openfoodfacts is not None:
-            #     # Fill in from OpenFoodFacts
-            #     user_input["name"] = (
-            #         user_input.get("name")
-            #         or self.current_product_openfoodfacts["product_name"]
-            #     )
-            #     unit = self.current_product_openfoodfacts.get("product_quantity_unit")
-            #     if unit:
-            #         for qq in filter(
-            #             lambda qu: qu.get("name") == unit,
-            #             self._coordinator.data["quantity_units"],
-            #         ):
-            #             user_input["qu_id"] = str(qq["id"])
-            #             _LOGGER.warning("Unit: %s, QQ: %s", unit, qq)
-            #     # todo: fill in guess of QuantityUnit...
-
-            schema: VolDictType = None
-            # schema = GENERATE_CREATE_PRODUCT_SCHEMA(self._coordinator.data, user_input)
-            # self.add_suggested_values_to_schema(schema, user_input)
-
-            # for matching_product_by_name in filter(
-            #     lambda p: p.get("name") == user_input["name"],
-            #     self._coordinator.data["products"],
-            # ):
-            #     # _LOGGER.warning("Matching product: %s", matching_product_by_name)
-            #     # first_schema = GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
-            #     #     self._coordinator.data,
-            #     #     {"product_id": matching_product_by_name["id"]},
-            #     # )
-            #     # first_schema = vol.Schema(first_schema)
-            #     # _LOGGER.info("first-schema: %s", first_schema)
-            #     # schema = first_schema.extend(schema)
-            #     # _LOGGER.info("result-schema: %s", schema)
-            #     self.matching_product = matching_product_by_name
-            #     break
-
-            # if self.matching_product:
             # Has matching product, display as a suggestion
             _LOGGER.warning("Matching products: %s", self.matching_products)
-            first_schema = GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
+            schema = GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
                 self._coordinator.data,
                 self.matching_products,
-                # {"product_id": self.matching_product["id"]},
             )
-            # first_schema = vol.Schema(first_schema)
-            _LOGGER.info("first-schema: %s", first_schema)
-            # schema = first_schema.extend(schema)
-            schema = first_schema
-            _LOGGER.info("result-schema: %s", schema)
-            # else:
-            #     # Create a new product...
-            #     schema = GENERATE_CREATE_PRODUCT_SCHEMA(self._coordinator.data, user_input)
-
             _LOGGER.info("schema: %s", schema)
-            _LOGGER.info("form 'match_product' user_input: %s", user_input)
 
             schema = vol.Schema(schema)
-            # self.add_suggested_values_to_schema(schema, user_input)
 
             # ask for input...
             return self.async_show_form(
@@ -530,33 +448,6 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             # Create a new product
             _LOGGER.info("no-product-id: %s", user_input)
             return await self.async_step_scan_add_product(user_input=None)
-
-            # more friendly name (barcode has specific name/"note")
-            new_product["name"] = user_input["name"]
-            new_product["location_id"] = user_input["location_id"]
-            new_product["qu_id_purchase"] = user_input.get(
-                "qu_id_purchase", user_input.get("qu_id")
-            )
-            new_product["qu_id_stock"] = user_input.get(
-                "qu_id_stock", user_input.get("qu_id")
-            )
-            new_product["qu_id_price"] = user_input.get(
-                "qu_id_price", user_input.get("qu_id")
-            )
-            new_product["qu_id_consume"] = user_input.get(
-                "qu_id_consume", user_input.get("qu_id")
-            )
-            new_product["row_created_timestamp"] = dt.datetime.now().strftime(
-                "%Y-%m-%d %H:%M:%S"
-            )
-
-            # todo: create product
-            _LOGGER.info("user_input: %s", user_input)
-            _LOGGER.info("new_product: %s", new_product)
-            product = await self._api_grocy.add_product(new_product)
-            _LOGGER.info("created prod: %s", product)
-            # todo: check for success!
-            self.current_product = product
 
         return await self.async_step_scan_add_product_barcode(user_input=None)
 
@@ -584,14 +475,14 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             self.current_product_openfoodfacts is None
             and self.current_product_ica is None
         ):
-            # todo: Not found in other providers, then show input's for manual registration?
-            _LOGGER.error("No product info found!: %s", code)
-            errors["NoProduct"] = "No product found!"
-            return self.async_show_form(
-                step_id=Step.SCAN_ADD_PRODUCT,
-                data_schema=self.current_barcode_schema,
-                errors=errors,
-            )
+            # Not found in other providers, then will show empty input for manual registration
+            _LOGGER.warning("No product info found from providers, code: %s", code)
+            # errors["NoProduct"] = "No product found!"
+            # return self.async_show_form(
+            #     step_id=Step.SCAN_ADD_PRODUCT,
+            #     data_schema=self.current_barcode_schema,
+            #     errors=errors,
+            # )
 
         # Handle input, for required fields
         if user_input is None:
@@ -613,41 +504,12 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                         user_input["qu_id"] = str(qq["id"])
                         _LOGGER.warning("Unit: %s, QQ: %s", unit, qq)
                 # todo: fill in guess of QuantityUnit...
+            
+            if self.current_product_ica is not None:
+                # todo: fill in info from ICA...
+                pass
 
             schema: VolDictType = None
-            # schema = GENERATE_CREATE_PRODUCT_SCHEMA(self._coordinator.data, user_input)
-            # self.add_suggested_values_to_schema(schema, user_input)
-
-            # for matching_product_by_name in filter(
-            #     lambda p: p.get("name") == user_input["name"],
-            #     self._coordinator.data["products"],
-            # ):
-            #     # _LOGGER.warning("Matching product: %s", matching_product_by_name)
-            #     # first_schema = GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
-            #     #     self._coordinator.data,
-            #     #     {"product_id": matching_product_by_name["id"]},
-            #     # )
-            #     # first_schema = vol.Schema(first_schema)
-            #     # _LOGGER.info("first-schema: %s", first_schema)
-            #     # schema = first_schema.extend(schema)
-            #     # _LOGGER.info("result-schema: %s", schema)
-            #     self.matching_product = matching_product_by_name
-            #     break
-
-            # if self.matching_product:
-            #     # Has matching product, display as a suggestion
-            #     _LOGGER.warning("Matching product: %s", self.matching_product)
-            #     first_schema = GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
-            #         self._coordinator.data,
-            #         {"product_id": self.matching_product["id"]},
-            #     )
-            #     # first_schema = vol.Schema(first_schema)
-            #     _LOGGER.info("first-schema: %s", first_schema)
-            #     # schema = first_schema.extend(schema)
-            #     schema = first_schema
-            #     _LOGGER.info("result-schema: %s", schema)
-            # else:
-            # Create a new product...
             schema = GENERATE_CREATE_PRODUCT_SCHEMA(self._coordinator.data, user_input)
 
             _LOGGER.info("schema: %s", schema)
@@ -693,7 +555,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 "%Y-%m-%d %H:%M:%S"
             )
 
-            # todo: create product
+            # create product
             _LOGGER.info("user_input: %s", user_input)
             _LOGGER.info("new_product: %s", new_product)
             product = await self._api_grocy.add_product(new_product)
@@ -759,9 +621,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         errors: dict[str, str] = {}
         schemas: VolDictType = {}
 
-        # code = current_barcode.strip().strip(",").strip()
         code = self.current_barcode
-        product: ExtendedGrocyProductStockInfo = self.current_product
 
         # Handle input, for Price/BestBeforeInDays
         price = user_input.get("price") if user_input else None
@@ -857,26 +717,6 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 errors=errors,
             )
 
-    # def _build_shopping_list_selector_schema(self, lists):
-    #     return {
-    #         vol.Optional(
-    #             CONF_SHOPPING_LISTS,
-    #             description="The shopping lists to track",
-    #             default=self.config_entry.data.get(CONF_SHOPPING_LISTS, []),
-    #         ): selector.SelectSelector(
-    #             selector.SelectSelectorConfig(
-    #                 options=[
-    #                     selector.SelectOptionDict(
-    #                         label=list["title"], value=list["offlineId"]
-    #                     )
-    #                     for list in lists
-    #                 ],
-    #                 mode=selector.SelectSelectorMode.DROPDOWN,
-    #                 multiple=True,
-    #             )
-    #         ),
-    #     }
-
     @staticmethod
     def fill_schema_defaults(
         data_schema: vol.Schema,
@@ -950,7 +790,6 @@ def GENERATE_STEP_SCAN_START_SCHEMA(scan_mode: SCAN_MODE) -> vol.Schema:
                     multiple=False,
                 )
             ),
-            # vol.Optional("barcodes", description={"suggested_value": current_data.get(CONF_STATS_TEMPLATE, "")}): TextSelector({"type": "text", "multiline": True}),
             vol.Required(
                 "barcodes",
                 description={"suggested_value": "4011800420413"},  # During DEV...

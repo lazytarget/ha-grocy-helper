@@ -158,7 +158,7 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
                     "saturated_fat_100g": nutriments.get("saturated-fat_100g"),
                     "carbohydrates_100g": nutriments.get("carbohydrates_100g"),
                     "sugars_100g": nutriments.get("sugars_100g"),
-                    "protein_100g": nutriments.get("protein_100g"),
+                    "proteins_100g": nutriments.get("proteins_100g"),
                     "salt_100g": nutriments.get("salt_100g"),
                 },
             )

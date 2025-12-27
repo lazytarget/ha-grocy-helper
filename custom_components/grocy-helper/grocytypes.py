@@ -119,7 +119,7 @@ class OpenFoodFactsProductNutriments(TypedDict):
     saturated_fat_100g: float | None
     carbohydrates_100g: float | None
     sugars_100g: float | None
-    protein_100g: float | None
+    proteins_100g: float | None
     salt_100g: float | None
 
 class OpenFoodFactsProduct(TypedDict):
