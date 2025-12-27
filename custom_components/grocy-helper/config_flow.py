@@ -363,15 +363,17 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                             lambda p: (
                                 (
                                     self.current_product_openfoodfacts is not None
-                                    and p["name"]
+                                    and p["name"].casefold()
                                     == self.current_product_openfoodfacts.get(
-                                        "product_name"
-                                    )
+                                        "product_name", ""
+                                    ).casefold()
                                 )
                                 or (
                                     self.current_product_ica is not None
-                                    and p["name"]
-                                    == self.current_product_ica.get("name")
+                                    and p["name"].casefold()
+                                    == self.current_product_ica.get(
+                                        "name", ""
+                                    ).casefold()
                                 )
                             ),
                             self._coordinator.data["products"],
