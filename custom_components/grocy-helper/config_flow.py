@@ -681,7 +681,11 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 errors=errors,
             )
 
-        stock_entry_id = user_input.get("stock_entry_id") if user_input else self.current_stock_entries[0]
+        stock_entry_id = (
+            user_input.get("stock_entry_id")
+            if user_input
+            else self.current_stock_entries[0]
+        )
 
         for stock_entry in filter(
             lambda p: p["id"] == stock_entry_id,
@@ -699,64 +703,59 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         _LOGGER.info("transfer-input: %s", user_input)
         _LOGGER.info("stock_entries: %s", self.current_stock_entries)
 
-        code = self.current_barcode
-
-        if (
-            self.current_product_openfoodfacts is None
-            and self.current_product_ica is None
-        ):
-            # todo: Not found in other providers, then show input's for manual registration?
-            _LOGGER.error("No product info found!: %s", code)
-            # errors["NoProduct"] = "No product found!"
-            # return self.async_show_form(
-            #     step_id=Step.SCAN_ADD_PRODUCT,
-            #     data_schema=self.current_barcode_schema,
-            #     errors=errors,
-            # )
-            return self.async_step_scan_add_product(user_input=None)
+        if not self.current_product:
+            return self.async_abort(reason="No product info found during transfer!")
+        if len(self.current_stock_entries) != 1:
+            return self.async_abort(reason="Should only have one chosen stock entry to transfer")
 
         # Handle input, for required fields
         if user_input is None:
             # Has matching product, display as a suggestion
-            _LOGGER.warning("Matching products: %s", self.matching_products)
-            schema = GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
+            schema = GENERATE_TRANSFER_STOCK_ENTRY(
                 self._coordinator.data,
-                self.matching_products,
+                self.current_product,
+                self.current_stock_entries[0],
             )
             _LOGGER.info("schema: %s", schema)
-
             schema = vol.Schema(schema)
-
             # ask for input...
             return self.async_show_form(
-                step_id=Step.SCAN_MATCH_PRODUCT,
+                step_id=Step.SCAN_TRANSFER_INPUT,
                 data_schema=schema,
                 errors=errors,
             )
 
-        # Input has been passed!
-        if user_input.get("product_id") and user_input["product_id"] != "-1":
-            # # A specific product was chosen, use that instead of creation...
-            # _LOGGER.info("exist_products: %s", self.matching_products)
-            # self.current_product = await self._api_grocy.get_product_by_id(
-            #     int(user_input["product_id"])
-            # )
+        product = self.current_product
+        stock_entry = self.current_stock_entries[0]
+        amount = user_input["amount"]
+        location_to_id = user_input["location_to_id"]
+        
+        # todo: update stock entry self._api_grocy.
+        
 
-            # Transfer has been complete...
-            # remove it from queue, and then restart the queue...
-            self.barcode_queue.pop(0)
+        # # Input has been passed!
+        # if user_input.get("product_id") and user_input["product_id"] != "-1":
+        #     # # A specific product was chosen, use that instead of creation...
+        #     # _LOGGER.info("exist_products: %s", self.matching_products)
+        #     # self.current_product = await self._api_grocy.get_product_by_id(
+        #     #     int(user_input["product_id"])
+        #     # )
 
-            p = (product or {}).get("product") or self.current_product
-            self.barcode_results.append(f"{code} maps to {p['name']}")
-            return await self.async_step_scan_queue(user_input=None)
-        else:
-            # # Create a new product
-            # _LOGGER.info("no-product-id: %s", user_input)
-            # return await self.async_step_scan_add_product(user_input=None)
-            pass
+        #     # Transfer has been complete...
+        #     # remove it from queue, and then restart the queue...
+        #     self.barcode_queue.pop(0)
 
-        pass
-        # return await self.async_step_scan_add_product_barcode(user_input=None)
+        #     p = (product or {}).get("product") or self.current_product
+        #     self.barcode_results.append(f"{code} maps to {p['name']}")
+        #     return await self.async_step_scan_queue(user_input=None)
+        # else:
+        #     # # Create a new product
+        #     # _LOGGER.info("no-product-id: %s", user_input)
+        #     # return await self.async_step_scan_add_product(user_input=None)
+        #     pass
+
+        # pass
+        # # return await self.async_step_scan_add_product_barcode(user_input=None)
 
     async def async_step_scan_process(self, user_input: dict[str, Any] = None):
         """Handle the scanned barcode (product exists)."""
@@ -1019,6 +1018,7 @@ def GENERATE_CHOOSE_EXISTING_STOCK_ENTRY(
         selector.SelectOptionDict(
             value=str(e["id"]),
             label=f"{product['name']} {e['amount']} {qu['name_plural'] if e['amount'] > 1 else qu['name']}, due: {e['best_before_date']}",
+            # todo: append current location name
         )
         for e in suggested_stockentries
     ]
@@ -1033,7 +1033,7 @@ def GENERATE_CHOOSE_EXISTING_STOCK_ENTRY(
     schemas: VolDictType = {}
     schemas.update(
         {
-            vol.Optional(
+            vol.Required(
                 "stock_entry_id",
                 description={
                     "suggested_value": selected_stock_entry_id,
@@ -1042,6 +1042,69 @@ def GENERATE_CHOOSE_EXISTING_STOCK_ENTRY(
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=options,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                    multiple=False,
+                )
+            ),
+        }
+    )
+    return schemas
+
+def GENERATE_TRANSFER_STOCK_ENTRY(
+    masterdata: GrocyMasterData,
+    product: GrocyProduct,
+    suggested_stockentry: GrocyStockEntry,
+    suggested_values: dict[str, str] = {},
+) -> VolDictType:
+    locations = [
+        loc
+        for loc in masterdata["locations"]
+        if loc["id"] != suggested_stockentry["location_id"]
+        # can't transfer to same target
+    ]
+    # todo: sort alphabetically, or use Id's?
+    sorted(locations, key=lambda l: l["name"])
+
+    selected_location_id_to: str = None
+    if len(locations) > 0:
+        selected_location_id_to = suggested_values.get("stock_entry_id", locations[0])
+    selected_location_id_to = str(selected_location_id_to)
+
+    schemas: VolDictType = {}
+    schemas.update(
+        {
+            vol.Required(
+                "amount",
+                description={
+                    "suggested_value": suggested_values.get("amount"),
+                },
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    mode=selector.NumberSelectorMode.BOX,
+                    step=1,
+                    max=suggested_stockentry["amount"]
+                    - product["quick_consume_amount"],
+                )
+            ),
+        }
+    )
+    schemas.update(
+        {
+            vol.Required(
+                "location_id_to",
+                description={
+                    "suggested_value": selected_location_id_to,
+                },
+                default=selected_location_id_to,
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        selector.SelectOptionDict(
+                            value=str(loc["id"]),
+                            label=loc["name"],
+                        )
+                        for loc in locations
+                    ],
                     mode=selector.SelectSelectorMode.DROPDOWN,
                     multiple=False,
                 )
