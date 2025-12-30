@@ -88,6 +88,20 @@ class ExtendedGrocyProductStockInfo(TypedDict):
     product: GrocyProduct
     product_barcodes: list[GrocyProduct]
 
+class GrocyStockEntry(TypedDict):
+    id: int
+    product_id: int
+    location_id: int
+    shopping_location_id: int | None
+    amount: float
+    purchased_date: str | None
+    best_before_date: str | None
+    stock_id: str
+    price: float | None
+    open: int
+    opened_date: str | None
+    note: str | None
+    row_created_timestamp: str
 
 class BarcodeBuddyScanRequest(TypedDict):
     barcode: str

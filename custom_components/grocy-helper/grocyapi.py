@@ -10,6 +10,7 @@ from .grocytypes import (
     GrocyProductBarcode,
     GrocyQuantityUnit,
     GrocyShoppingLocation,
+    GrocyStockEntry,
 )
 from .http_requests import async_get, async_post
 
@@ -64,6 +65,14 @@ class GrocyAPI:
         url = self.get_rest_url(API.URLs.GET_PRODUCT_BARCODE_BY_ID) % product_barcode_id
         return await async_get(
             self._session, url, self._api_key, return_none_when_404=True
+        )
+
+    async def get_stock_entries_by_product_id(
+        self, product_id: int
+    ) -> list[GrocyStockEntry]:
+        url = self.get_rest_url(API.URLs.GET_STOCK_ENTRIES_BY_PRODUCT_ID) % product_id
+        return await async_get(
+            self._session, url, self._api_key
         )
 
     async def get_product_by_id(
