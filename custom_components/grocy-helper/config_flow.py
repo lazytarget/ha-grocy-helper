@@ -733,13 +733,13 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         product = self.current_product
         stock_entry = self.current_stock_entries[0]
-        amount = user_input["amount"]
+        amount = user_input.get("amount", stock_entry["amount"])
         location_to_id = user_input["location_to_id"]
 
         data = {
             "amount": amount,
-            "location_from_id": stock_entry["location_id"],
-            "location_to_id": location_to_id,
+            "location_id_from": int(stock_entry["location_id"]),
+            "location_id_to": int(location_to_id),
             "stock_entry_id": stock_entry["id"],
         }
         _LOGGER.warning("Posting transfer: %s", data)
@@ -911,7 +911,7 @@ def GENERATE_STEP_SCAN_START_SCHEMA(scan_mode: SCAN_MODE) -> vol.Schema:
                         ),
                         selector.SelectOptionDict(
                             value=SCAN_MODE.TRANSFER, label="Transfer"
-                        ),
+                        ),  # todo: only add option if has more than 1 locations setup
                         selector.SelectOptionDict(value=SCAN_MODE.OPEN, label="Open"),
                         selector.SelectOptionDict(
                             value=SCAN_MODE.INVENTORY, label="Inventory"
@@ -1055,7 +1055,7 @@ def GENERATE_TRANSFER_STOCK_ENTRY(
     masterdata: GrocyMasterData,
     product: GrocyProduct,
     suggested_stockentry: GrocyStockEntry,
-    suggested_values: dict[str, str] = {},
+    suggested_values: dict[str, str] = None,
 ) -> VolDictType:
     locations = [
         loc
@@ -1068,32 +1068,36 @@ def GENERATE_TRANSFER_STOCK_ENTRY(
 
     suggested_values = suggested_values or {
         "amount": suggested_stockentry["amount"],  # default to move all
-        "location_id_to": str(locations[0]["id"]),
+        "location_to_id": str(locations[0]["id"]) if len(locations) > 0 else None,
     }
 
     schemas: VolDictType = {}
+    if suggested_stockentry["amount"] > 1:
+        # Only if has a choice, whether to split the stock entry
+        schemas.update(
+            {
+                vol.Required(
+                    "amount",
+                    description={
+                        "suggested_value": suggested_values.get("amount"),
+                    },
+                    default=suggested_values.get("amount"),
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        mode=selector.NumberSelectorMode.SLIDER,
+                        step=product.get("quick_consume_amount", 1)
+                        or 1,  # follow consume amount for how many quantities can be transfered
+                        min=product.get("quick_consume_amount", 1)
+                        or 1,  # transfer at least 1
+                        max=suggested_stockentry["amount"],  # maxium allowed to move all
+                    )
+                ),
+            }
+        )
     schemas.update(
         {
             vol.Required(
-                "amount",
-                description={
-                    "suggested_value": suggested_values.get("amount"),
-                },
-                default=suggested_values.get("amount"),
-            ): selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    mode=selector.NumberSelectorMode.BOX,
-                    step=product.get("quick_consume_amount", 1) or 1,   # follow consume amount for how many quantities can be transfered
-                    min=product.get("quick_consume_amount", 1) or 1,    # transfer at least 1
-                    max=suggested_stockentry["amount"],                 # maxium allowed to move all
-                )
-            ),
-        }
-    )
-    schemas.update(
-        {
-            vol.Required(
-                "location_id_to",
+                "location_to_id",
                 description={
                     "suggested_value": suggested_values.get("location_to_id"),
                 },
