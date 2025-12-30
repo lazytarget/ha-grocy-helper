@@ -24,6 +24,7 @@ class SCAN_MODE(StrEnum):
     QUANTITY = "BBUDDY-Q-"
     # Custom
     SCAN_BBUDDY = "SCAN-BBUDDY"
+    TRANSFER = "TRANSFER"
     PROVISION = "PROVISION-BARCODE"
 
 class ApiException(Exception):

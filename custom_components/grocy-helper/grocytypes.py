@@ -90,13 +90,13 @@ class ExtendedGrocyProductStockInfo(TypedDict):
 
 class GrocyStockEntry(TypedDict):
     id: int
+    stock_id: str
     product_id: int
     location_id: int
     shopping_location_id: int | None
     amount: float
     purchased_date: str | None
     best_before_date: str | None
-    stock_id: str
     price: float | None
     open: int
     opened_date: str | None
@@ -128,6 +128,7 @@ class GrocyMasterData(TypedDict):
     products: list[GrocyProduct]
 
 class OpenFoodFactsProductNutriments(TypedDict):
+    energy_kcal: float | None
     energy_kcal_100g: float | None
     fat_100g: float | None
     saturated_fat_100g: float | None

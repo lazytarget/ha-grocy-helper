@@ -151,6 +151,7 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
                 quantity=p.get("quantity"),
                 categories=p.get("categories_hierarchy"),
                 nutriments={
+                    "energy_kcal": nutriments.get("energy"),
                     "energy_kcal_100g": nutriments.get(
                         "energy-kcal_100g", nutriments.get("energy-kcal_value")
                     ),
