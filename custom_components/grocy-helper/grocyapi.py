@@ -71,9 +71,13 @@ class GrocyAPI:
         self, product_id: int
     ) -> list[GrocyStockEntry]:
         url = self.get_rest_url(API.URLs.GET_STOCK_ENTRIES_BY_PRODUCT_ID) % product_id
-        return await async_get(
-            self._session, url, self._api_key
-        )
+        return await async_get(self._session, url, self._api_key)
+
+    async def transfer_stock_entry(
+        self, product_id: int, data: dict
+    ) -> list[GrocyStockEntry]:
+        url = self.get_rest_url(API.URLs.TRANSFER_STOCK_ENTRY) % product_id
+        return await async_post(self._session, url, self._api_key, json_data=data)
 
     async def get_product_by_id(
         self, product_id: int
@@ -106,7 +110,9 @@ class GrocyAPI:
             return product
         return response
 
-    async def add_product_barcode(self, data: GrocyProductBarcode) -> GrocyProductBarcode:
+    async def add_product_barcode(
+        self, data: GrocyProductBarcode
+    ) -> GrocyProductBarcode:
         url = self.get_rest_url(API.URLs.ADD_PRODUCT_BARCODE)
         response = await async_post(self._session, url, self._api_key, json_data=data)
         obj_id = int(response["created_object_id"])

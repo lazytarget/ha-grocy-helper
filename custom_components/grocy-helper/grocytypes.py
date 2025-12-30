@@ -43,10 +43,10 @@ class GrocyProduct(TypedDict):
     # Required
     name: str
     location_id: int
-    qu_id_purchase: int
     qu_id_stock: int
-    qu_id_price: int
+    qu_id_purchase: int
     qu_id_consume: int
+    qu_id_price: int
     row_created_timestamp: str
     # Optional
     description: None
