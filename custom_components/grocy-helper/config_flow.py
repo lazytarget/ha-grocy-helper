@@ -740,7 +740,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             "amount": amount,
             "location_id_from": int(stock_entry["location_id"]),
             "location_id_to": int(location_to_id),
-            "stock_entry_id": stock_entry["id"],
+            "stock_entry_id": stock_entry["stock_id"],
         }
         _LOGGER.warning("Posting transfer: %s", data)
         result = await self._api_grocy.transfer_stock_entry(product["id"], data=data)
