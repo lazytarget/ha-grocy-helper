@@ -103,6 +103,18 @@ class GrocyStockEntry(TypedDict):
     note: str | None
     row_created_timestamp: str
 
+class GrocyQuantityUnitConversionsResolved(TypedDict):
+    id: int
+    product_id: int
+    from_qu_id: int
+    from_qu_name: str
+    from_qu_name_plural: str | None
+    to_qu_id: int
+    to_qu_name: str
+    to_qu_name_plural: str | None
+    factor: float
+    path: str
+
 class BarcodeBuddyScanRequest(TypedDict):
     barcode: str
     price: float | None

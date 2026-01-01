@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Any, Dict
-from aiohttp import ClientSession as Session, web_exceptions, FormData
+from aiohttp import ClientSession as Session, web_exceptions, FormData, typedefs
 import json
 import logging
 from .const import ApiException
@@ -42,7 +42,7 @@ async def async_get(
     session: Session,
     url: str,
     auth_key: str | None = None,
-    params: Dict[str, Any] | None = None,
+    params: Dict[str, Any] | typedefs.Query | None = None,
     return_none_when_404: bool = False,
 ):
     _LOGGER.info(
@@ -90,6 +90,7 @@ async def async_post(
     data: Dict[str, Any] | None = None,
     json_data: Any | None = None,
     content_type: str | None = None,
+    params: typedefs.Query | None = None,
 ):
     request_id = (
         data.pop("request_id", None) if data and isinstance(data, Dict) else None
@@ -113,6 +114,7 @@ async def async_post(
             # data=json.dumps(data) if data else None,
             data=data,
             json=json_data,
+            params=params,
         )
     else:
         response = await session.post(
@@ -120,6 +122,7 @@ async def async_post(
             headers=headers,
             # data=json.dumps(data) if data else None,
             data=data,
+            params=params
         )
 
     if response.status == 200:
