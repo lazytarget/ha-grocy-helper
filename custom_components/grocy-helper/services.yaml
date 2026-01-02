@@ -2,11 +2,11 @@
 resolve_quantity_unit_conversion_for_product:
   fields:
     integration:
-      name: "Grocy-Helper"
+      name: "grocy-helper instance"
       required: false
       selector:
         config_entry:
-          integration: grocy-helper
+          integration: grocy_helper
     product_id:
       name: "Product Id"
       description: "ID of a Product in Grocy"

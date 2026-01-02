@@ -12,7 +12,11 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .grocyapi import GrocyAPI
 from .barcodebuddyapi import BarcodeBuddyAPI
-from .grocytypes import GrocyMasterData, OpenFoodFactsProduct
+from .grocytypes import (
+    GrocyMasterData,
+    GrocyQuantityUnitConversionsResolved,
+    OpenFoodFactsProduct,
+)
 from .const import OpenFoodFacts
 
 _LOGGER = logging.getLogger(__name__)
@@ -90,25 +94,37 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
                 product_id
             )
         )
-        conv = (
-            c
-            for c in conversions
-            if c["from_qu_id"] == from_qu_id
-            and c["to_qu_id"] == to_qu_id
-            and c["product_id"] == product_id
-        )
-        if len(conv) != 1:
-            # Could not resolve a (single) conversion between specified Quantity Units
+        if len(conversions) < 1:
+            _LOGGER.error(
+                "No conversions could be resolved for the specified product_id: %s",
+                product_id,
+            )
             return None
-        c = conv[0]
+
+        c: GrocyQuantityUnitConversionsResolved = None
+        for conv in filter(
+            lambda c: (
+                c["from_qu_id"] == from_qu_id
+                and c["to_qu_id"] == to_qu_id
+                and c["product_id"] == product_id
+            ),
+            conversions,
+        ):
+            c = conv
+            break
+        if not c:
+            _LOGGER.error(
+                "Could not resolve a (single) conversion between specified Quantity Units"
+            )
+            return None
         resolved_amount = amount * float(c["factor"])
         return {
+            "product_id": c["product_id"],
             "from_qu_id": c["from_qu_id"],
             "from_qu_name": c["from_qu_name"],
+            "from_amount": amount,
             "to_qu_id": c["to_qu_id"],
             "to_qu_name": c["to_qu_name"],
-            "product_id": c["product_id"],
-            "from_amount": amount,
             "to_amount": resolved_amount,
         }
 

@@ -28,13 +28,16 @@ def setup_global_services(hass: HomeAssistant) -> None:
     if not hass.services.has_service(
         DOMAIN, ServiceCalls.RESOLVE_QUANTITY_UNIT_CONVERSION_FOR_PRODUCT
     ):
+
         async def execute(
             call: ServiceCall,
         ) -> dict:
             """Call will query ICA api after the user's favorite items"""
             config_entry: ConfigEntry | None
-            if entry_id := call.data["integration"]:
-                config_entry: ConfigEntry = hass.config_entries.async_get_entry(entry_id)
+            if entry_id := call.data.get("integration"):
+                config_entry: ConfigEntry = hass.config_entries.async_get_entry(
+                    entry_id
+                )
             else:
                 config_entry: ConfigEntry = hass.config_entries.async_entries(DOMAIN)[0]
 
@@ -51,7 +54,7 @@ def setup_global_services(hass: HomeAssistant) -> None:
                     translation_placeholders={"target": config_entry.title},
                 )
             coordinator: GrocyHelperCoordinator = (
-                config_entry.coordinator or hass.data[DOMAIN][entry_id]
+                config_entry.coordinator or hass.data[DOMAIN][config_entry.entry_id]
             )
 
             product_id = int(call.data["product_id"])
@@ -77,4 +80,3 @@ def setup_global_services(hass: HomeAssistant) -> None:
             schema=RESOLVE_QUANTITY_UNIT_CONVERSION_FOR_PRODUCT_SCHEMA,
             supports_response=SupportsResponse.OPTIONAL,
         )
-

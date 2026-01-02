@@ -3,7 +3,7 @@
 from enum import StrEnum
 from typing import Final
 
-DOMAIN: Final = "grocy-helper"
+DOMAIN: Final = "grocy_helper"
 DEFAULT_SCAN_INTERVAL: Final = 5    # minutes
 
 CONF_GROCY_API_URL: Final = "GROCY_API_URL"
