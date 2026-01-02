@@ -1,0 +1,34 @@
+---
+name: "Lint"
+
+on:
+  # push:
+  pull_request:
+  # schedule:
+  #   - cron: "0 0 * * *"
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: "Checkout the repository"
+        uses: actions/checkout@v4
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: "Install requirements-dev"
+        run: python3 -m pip install -r requirements-dev.txt
+
+      - name: "ruff check ."
+        run: python3 -m ruff check .
+
+      - name: yaml-lint
+        uses: ibiqlik/action-yamllint@v3
+        with:
+          # file_or_dir: myfolder/*values*.yaml
+          config_file: .yamllint.yaml
