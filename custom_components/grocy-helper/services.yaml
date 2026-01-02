@@ -1,0 +1,48 @@
+---
+resolve_quantity_unit_conversion_for_product:
+  fields:
+    integration:
+      name: "Grocy-Helper"
+      required: false
+      selector:
+        config_entry:
+          integration: grocy-helper
+    product_id:
+      name: "Product Id"
+      description: "ID of a Product in Grocy"
+      example: "2"
+      default: ''
+      required: true
+      selector:
+        number:
+          mode: box
+          step: 1
+    from_qu_id:
+      name: "Quantity Unit to convert FROM"
+      description: "ID of a Quantity Unit in Grocy"
+      example: "1"
+      default: ''
+      required: true
+      selector:
+        number:
+          mode: box
+          step: 1
+    to_qu_id:
+      name: "Quantity Unit to convert TO"
+      description: "ID of a Quantity Unit in Grocy"
+      example: "2"
+      default: ''
+      required: true
+      selector:
+        number:
+          step: 1
+          mode: box
+    amount:
+      name: "Amount"
+      description: "The quantity amount to convert from"
+      example: "2.0"
+      default: ''
+      required: true
+      selector:
+        number:
+          step: 0.1
