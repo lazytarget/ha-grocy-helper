@@ -87,7 +87,7 @@ def setup_global_services(hass: HomeAssistant) -> None:
             product_id = int(call.data["product_id"])
             from_qu_id = int(call.data["from_qu_id"])
             to_qu_id = int(call.data["to_qu_id"])
-            amount = call.data["amount"]
+            amount = float(call.data["amount"])
             _LOGGER.info("Prod: %s", product_id)
             _LOGGER.info("QU_id: %s -> %s", from_qu_id, to_qu_id)
             _LOGGER.info("Amount: %s", amount)
