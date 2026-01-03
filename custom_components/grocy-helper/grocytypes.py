@@ -1,6 +1,14 @@
 from __future__ import annotations
 
-from typing import List, TypedDict, Union
+from typing import TypedDict, Union, Generic, TypeVar, Any
+
+_DataT = TypeVar("_DataT", default=dict[str, Any])
+
+
+class ServiceCallResponse(Generic[_DataT], TypedDict):
+    success: bool
+    message: str | None = None
+    data: _DataT | None = None
 
 
 class GrocyLocation(TypedDict):
@@ -122,7 +130,7 @@ class GrocyQuantityUnitConversionResolved(TypedDict):
     path: str
 
 
-class GrocyQuantityUnitConversionResponse(GrocyQuantityUnitConversionResolved):
+class GrocyQuantityUnitConversionResult(GrocyQuantityUnitConversionResolved):
     from_amount: float
     to_amount: float
 

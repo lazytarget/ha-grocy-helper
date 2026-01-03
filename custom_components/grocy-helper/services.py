@@ -8,7 +8,7 @@ import homeassistant.helpers.config_validation as cv
 
 from .coordinator import GrocyHelperCoordinator
 from .const import DOMAIN, ServiceCalls
-from .grocytypes import GrocyQuantityUnitConversionResponse
+from .grocytypes import ServiceCallResponse, GrocyQuantityUnitConversionResult
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ def setup_global_services(hass: HomeAssistant) -> None:
 
         async def execute(
             call: ServiceCall,
-        ) -> GrocyQuantityUnitConversionResponse | None:
+        ) -> ServiceCallResponse[GrocyQuantityUnitConversionResult] | None:
             """Call will query ICA api after the user's favorite items"""
             config_entry: ConfigEntry | None
             if entry_id := call.data.get("integration"):
@@ -93,12 +93,20 @@ def setup_global_services(hass: HomeAssistant) -> None:
             _LOGGER.info("Amount: %s", amount)
 
             coordinator: GrocyHelperCoordinator = _get_coordinator(hass, config_entry)
-            response = await coordinator.convert_quantity_for_product(
+            result = await coordinator.convert_quantity_for_product(
                 product_id=product_id,
                 from_qu_id=from_qu_id,
                 to_qu_id=to_qu_id,
                 amount=amount,
             )
+            response = ServiceCallResponse[GrocyQuantityUnitConversionResult](
+                success=bool(result),
+                data=result,
+            )
+            if not response["success"]:
+                response["message"] = (
+                    "Could not convert quantity for specified product and units"
+                )
             _LOGGER.info("Convert response: %s", response)
             return response
 

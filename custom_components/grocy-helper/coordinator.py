@@ -15,7 +15,7 @@ from .barcodebuddyapi import BarcodeBuddyAPI
 from .grocytypes import (
     GrocyMasterData,
     GrocyQuantityUnitConversionResolved,
-    GrocyQuantityUnitConversionResponse,
+    GrocyQuantityUnitConversionResult,
     OpenFoodFactsProduct,
 )
 from .const import OpenFoodFacts
@@ -89,7 +89,7 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
         from_qu_id,
         to_qu_id,
         amount: float,
-    ) -> GrocyQuantityUnitConversionResponse | None:
+    ) -> GrocyQuantityUnitConversionResult | None:
         conversions = (
             await self._api_grocy.resolve_quantity_unit_conversions_for_product_id(
                 product_id
@@ -118,7 +118,7 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
             )
             return None
         resolved_amount = amount * float(c["factor"])
-        response: GrocyQuantityUnitConversionResponse = c.copy()
+        response: GrocyQuantityUnitConversionResult = c.copy()
         response["from_amount"] = amount
         response["to_amount"] = resolved_amount
         return response
