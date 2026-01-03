@@ -11,7 +11,6 @@ resolve_quantity_unit_conversion_for_product:
       name: "Product Id"
       description: "ID of a Product in Grocy"
       example: "2"
-      default: ''
       required: true
       selector:
         number:
@@ -21,7 +20,6 @@ resolve_quantity_unit_conversion_for_product:
       name: "Quantity Unit to convert FROM"
       description: "ID of a Quantity Unit in Grocy"
       example: "1"
-      default: ''
       required: true
       selector:
         number:
@@ -31,7 +29,6 @@ resolve_quantity_unit_conversion_for_product:
       name: "Quantity Unit to convert TO"
       description: "ID of a Quantity Unit in Grocy"
       example: "2"
-      default: ''
       required: true
       selector:
         number:
@@ -41,7 +38,6 @@ resolve_quantity_unit_conversion_for_product:
       name: "Amount"
       description: "The quantity amount to convert from"
       example: "2.0"
-      default: ''
       required: true
       selector:
         number:

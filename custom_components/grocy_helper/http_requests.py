@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Any, Dict
-from aiohttp import ClientSession as Session, web_exceptions, FormData, typedefs
+from aiohttp import ClientSession as Session, typedefs
 import json
 import logging
 from .const import ApiException
@@ -139,26 +139,24 @@ async def async_post(
         try:
             j = await response.json()
             _LOGGER.debug("HTTP [POST] 400 :> Resp: %s", j)
-        except:
+        except Exception as be:
             j = await response.text()
             _LOGGER.debug("HTTP [POST] 400 :> Resp[TEXT]: %s", j)
             he = ApiException(response.status, j)
-            raise he
+            raise he from be
 
         _LOGGER.debug("HTTP [POST] Resp Error: %s", json.dumps(j))
-        msg = j.get("error_message", j.get("result", {}).get("result"))
-        if not msg:
-            msg = json.dumps(j)
+        msg = j.get("error_message", j.get("result", {}).get("result")) or json.dumps(j)
         he = ApiException(response.status, msg)
         raise he
 
     try:
         response.raise_for_status()
-    except BaseException as ex:
+    except Exception as be:
         _LOGGER.error(
             "HTTP [POST] Resp: %s -> %s", response.status, await response.text()
         )
-        raise ex
+        raise be
 
     return response.ok
 
