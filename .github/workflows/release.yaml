@@ -17,4 +17,4 @@ jobs:
         uses: "rogerselwyn/actions/release-asset@main"
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          component: "grocy-helper"
+          component: "grocy_helper"
