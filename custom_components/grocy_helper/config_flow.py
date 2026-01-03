@@ -952,7 +952,7 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
         for prod in masterdata["products"]
         if prod["id"] not in suggested_product_ids
     ]
-    sorted(non_suggested_prods, key=lambda p: p["name"])
+    non_suggested_prods.sort(key=lambda product: product["name"])
 
     product_options: list[GrocyProduct] = []
     product_options = product_options + suggested_products
@@ -1064,7 +1064,7 @@ def GENERATE_TRANSFER_STOCK_ENTRY(
         # can't transfer to same target
     ]
     # todo: sort alphabetically, or use Id's?
-    sorted(locations, key=lambda loc: loc["name"])
+    locations.sort(key=lambda loc: loc["name"])
 
     suggested_values = suggested_values or {
         "amount": suggested_stockentry["amount"],  # default to move all
@@ -1089,7 +1089,9 @@ def GENERATE_TRANSFER_STOCK_ENTRY(
                         or 1,  # follow consume amount for how many quantities can be transfered
                         min=product.get("quick_consume_amount", 1)
                         or 1,  # transfer at least 1
-                        max=suggested_stockentry["amount"],  # maxium allowed to move all
+                        max=suggested_stockentry[
+                            "amount"
+                        ],  # maxium allowed to move all
                     )
                 ),
             }

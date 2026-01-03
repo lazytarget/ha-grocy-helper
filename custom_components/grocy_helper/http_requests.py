@@ -139,7 +139,7 @@ async def async_post(
         try:
             j = await response.json()
             _LOGGER.debug("HTTP [POST] 400 :> Resp: %s", j)
-        except BaseException as be:
+        except Exception as be:
             j = await response.text()
             _LOGGER.debug("HTTP [POST] 400 :> Resp[TEXT]: %s", j)
             he = ApiException(response.status, j)
@@ -152,7 +152,7 @@ async def async_post(
 
     try:
         response.raise_for_status()
-    except BaseException as be:
+    except Exception as be:
         _LOGGER.error(
             "HTTP [POST] Resp: %s -> %s", response.status, await response.text()
         )
