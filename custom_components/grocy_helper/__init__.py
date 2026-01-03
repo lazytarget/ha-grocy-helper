@@ -3,7 +3,7 @@
 import datetime
 import logging
 
-from homeassistant.config_entries import ConfigEntry, ConfigType
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -26,14 +26,11 @@ _LOGGER = logging.getLogger(__name__)
 
 # PLATFORMS: list[Platform] = [Platform.TODO]
 
-async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    setup_global_services(hass)
-    return True
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Grocy-helper from a config entry."""
     _LOGGER.info(
-        "Loaded grocy-helper config entry v%s.%s - Data: %s",
+        "Setting up grocy-helper config entry v%s.%s - Data: %s",
         entry.version,
         entry.minor_version,
         entry.data,
@@ -41,6 +38,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     update_interval = datetime.timedelta(
         minutes=entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
     )
+    # Setup global services, if not already setup
+    # todo: verify timings when multiple config_entries
+    setup_global_services(hass)
 
     # websession = async_get_clientsession(hass)
     def websession():
