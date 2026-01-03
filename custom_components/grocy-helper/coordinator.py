@@ -101,17 +101,16 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
             )
             return None
 
-        c: GrocyQuantityUnitConversionsResolved = None
-        for conv in filter(
-            lambda c: (
-                c["from_qu_id"] == from_qu_id
-                and c["to_qu_id"] == to_qu_id
-                and c["product_id"] == product_id
+        c: Optional[GrocyQuantityUnitConversionsResolved] = next(
+            (
+                conv
+                for conv in conversions
+                if conv["from_qu_id"] == from_qu_id
+                and conv["to_qu_id"] == to_qu_id
+                and conv["product_id"] == product_id
             ),
-            conversions,
-        ):
-            c = conv
-            break
+            None,
+        )
         if not c:
             _LOGGER.error(
                 "Could not resolve a (single) conversion between specified Quantity Units"
