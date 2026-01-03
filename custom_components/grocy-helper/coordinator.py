@@ -14,7 +14,8 @@ from .grocyapi import GrocyAPI
 from .barcodebuddyapi import BarcodeBuddyAPI
 from .grocytypes import (
     GrocyMasterData,
-    GrocyQuantityUnitConversionsResolved,
+    GrocyQuantityUnitConversionResolved,
+    GrocyQuantityUnitConversionResponse,
     OpenFoodFactsProduct,
 )
 from .const import OpenFoodFacts
@@ -88,7 +89,7 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
         from_qu_id,
         to_qu_id,
         amount: float,
-    ) -> dict:
+    ) -> GrocyQuantityUnitConversionResponse | None:
         conversions = (
             await self._api_grocy.resolve_quantity_unit_conversions_for_product_id(
                 product_id
@@ -101,7 +102,7 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
             )
             return None
 
-        c: Optional[GrocyQuantityUnitConversionsResolved] = next(
+        c: Optional[GrocyQuantityUnitConversionResolved] = next(
             (
                 conv
                 for conv in conversions
@@ -117,15 +118,19 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
             )
             return None
         resolved_amount = amount * float(c["factor"])
-        return {
-            "product_id": c["product_id"],
-            "from_qu_id": c["from_qu_id"],
-            "from_qu_name": c["from_qu_name"],
-            "from_amount": amount,
-            "to_qu_id": c["to_qu_id"],
-            "to_qu_name": c["to_qu_name"],
-            "to_amount": resolved_amount,
-        }
+        response: GrocyQuantityUnitConversionResponse = c.copy()
+        response["from_amount"] = amount
+        response["to_amount"] = resolved_amount
+        return response
+        # return {
+        #     "product_id": c["product_id"],
+        #     "from_qu_id": c["from_qu_id"],
+        #     "from_qu_name": c["from_qu_name"],
+        #     "from_amount": amount,
+        #     "to_qu_id": c["to_qu_id"],
+        #     "to_qu_name": c["to_qu_name"],
+        #     "to_amount": resolved_amount,
+        # }
 
     async def get_product_from_open_food_facts(
         self,

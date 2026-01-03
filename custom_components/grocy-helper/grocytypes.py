@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import List, TypedDict, Union
 
+
 class GrocyLocation(TypedDict):
     id: int
     name: str
@@ -10,12 +11,14 @@ class GrocyLocation(TypedDict):
     is_freezer: int
     active: int
 
+
 class GrocyShoppingLocation(TypedDict):
     id: int
     name: str
     description: str | None
     row_created_timestamp: str
     active: int
+
 
 class GrocyQuantityUnit(TypedDict):
     id: int
@@ -25,6 +28,7 @@ class GrocyQuantityUnit(TypedDict):
     name_plural: str
     plural_forms: str | None
     active: int
+
 
 class GrocyProductBarcode(TypedDict):
     id: int
@@ -88,6 +92,7 @@ class ExtendedGrocyProductStockInfo(TypedDict):
     product: GrocyProduct
     product_barcodes: list[GrocyProduct]
 
+
 class GrocyStockEntry(TypedDict):
     id: int
     stock_id: str
@@ -103,7 +108,8 @@ class GrocyStockEntry(TypedDict):
     note: str | None
     row_created_timestamp: str
 
-class GrocyQuantityUnitConversionsResolved(TypedDict):
+
+class GrocyQuantityUnitConversionResolved(TypedDict):
     id: int
     product_id: int
     from_qu_id: int
@@ -115,10 +121,17 @@ class GrocyQuantityUnitConversionsResolved(TypedDict):
     factor: float
     path: str
 
+
+class GrocyQuantityUnitConversionResponse(GrocyQuantityUnitConversionResolved):
+    from_amount: float
+    to_amount: float
+
+
 class BarcodeBuddyScanRequest(TypedDict):
     barcode: str
     price: float | None
     bestBeforeInDays: int | None
+
 
 class BarcodeBuddyScanResultResponse(TypedDict):
     result: str
@@ -133,11 +146,13 @@ class BarcodeBuddyScanResponse(TypedDict):
     data: BarcodeBuddyScanDataResponse
     result: BarcodeBuddyScanResultResponse
 
+
 class GrocyMasterData(TypedDict):
     locations: list[GrocyLocation]
     shopping_locations: list[GrocyShoppingLocation]
     quantity_units: list[GrocyQuantityUnit]
     products: list[GrocyProduct]
+
 
 class OpenFoodFactsProductNutriments(TypedDict):
     energy_kcal: float | None
@@ -148,6 +163,7 @@ class OpenFoodFactsProductNutriments(TypedDict):
     sugars_100g: float | None
     proteins_100g: float | None
     salt_100g: float | None
+
 
 class OpenFoodFactsProduct(TypedDict):
     brand_owner: str | None
