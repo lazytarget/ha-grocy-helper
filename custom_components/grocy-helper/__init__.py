@@ -3,11 +3,12 @@
 import datetime
 import logging
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigType
 from homeassistant.core import HomeAssistant
 from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
+from .services import setup_global_services
 from .coordinator import GrocyHelperCoordinator
 from .grocyapi import GrocyAPI
 from .barcodebuddyapi import BarcodeBuddyAPI
@@ -25,6 +26,9 @@ _LOGGER = logging.getLogger(__name__)
 
 # PLATFORMS: list[Platform] = [Platform.TODO]
 
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    setup_global_services(hass)
+    return True
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Grocy-helper from a config entry."""

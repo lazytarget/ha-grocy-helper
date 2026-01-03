@@ -3,7 +3,7 @@
 from enum import StrEnum
 from typing import Final
 
-DOMAIN: Final = "grocy-helper"
+DOMAIN: Final = "grocy_helper"
 DEFAULT_SCAN_INTERVAL: Final = 5    # minutes
 
 CONF_GROCY_API_URL: Final = "GROCY_API_URL"
@@ -38,6 +38,9 @@ class ApiException(Exception):
     status_code: int
     error_message: str
 
+class ServiceCalls(StrEnum):
+    """Services for the Grocy-helper integration"""
+    RESOLVE_QUANTITY_UNIT_CONVERSION_FOR_PRODUCT = "resolve_quantity_unit_conversion_for_product"
 
 class API:
     class URLs:

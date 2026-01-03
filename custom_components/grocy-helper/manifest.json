@@ -1,16 +1,16 @@
 {
-  "domain": "grocy-helper",
+  "domain": "grocy_helper",
   "name": "Grocy Helper",
   "codeowners": [
     "@lazytarget"
   ],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://github.com/lazytarget/ha-ica-todo",
+  "documentation": "https://github.com/lazytarget/ha-grocy-helper",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/LazyTarget/ha-ica-todo/issues",
+  "issue_tracker": "https://github.com/LazyTarget/ha-grocy-helper/issues",
   "loggers": [
-    "grocy-helper"
+    "grocy_helper"
   ],
   "requirements": [],
   "version": "v0.1.0"
