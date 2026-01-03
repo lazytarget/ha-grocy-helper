@@ -1,13 +1,13 @@
 """API integration with BarcodeBuddy."""
 
-from aiohttp import ClientSession, MultipartWriter, FormData
+from aiohttp import ClientSession, FormData
 
-from .const import API, SCAN_MODE, ApiException
+from .const import API, SCAN_MODE
 from .grocytypes import (
     BarcodeBuddyScanRequest,
     BarcodeBuddyScanResponse,
 )
-from .http_requests import async_get, async_post, create_headers
+from .http_requests import async_get, async_post
 
 
 class BarcodeBuddyAPI:

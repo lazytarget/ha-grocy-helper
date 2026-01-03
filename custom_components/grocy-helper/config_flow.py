@@ -1064,7 +1064,7 @@ def GENERATE_TRANSFER_STOCK_ENTRY(
         # can't transfer to same target
     ]
     # todo: sort alphabetically, or use Id's?
-    sorted(locations, key=lambda l: l["name"])
+    sorted(locations, key=lambda loc: loc["name"])
 
     suggested_values = suggested_values or {
         "amount": suggested_stockentry["amount"],  # default to move all
