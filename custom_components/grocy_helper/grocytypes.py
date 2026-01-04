@@ -50,6 +50,13 @@ class GrocyProductBarcode(TypedDict):
     row_created_timestamp: str
 
 
+class GrocyAddStockProduct(TypedDict):
+    amount: float
+    best_before_date: str
+    transaction_type: str
+    price: float | None
+    shopping_location_id: Union[None, int]
+
 class GrocyProduct(TypedDict):
     id: int
     # Required

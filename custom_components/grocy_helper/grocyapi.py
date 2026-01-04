@@ -4,6 +4,7 @@ from aiohttp import ClientSession
 
 from .const import API, ApiException
 from .grocytypes import (
+    GrocyAddStockProduct,
     GrocyLocation,
     GrocyProduct,
     ExtendedGrocyProductStockInfo,
@@ -101,6 +102,11 @@ class GrocyAPI:
                 return None
             else:
                 raise ae
+
+    async def add_stock_product(self, data: GrocyAddStockProduct) -> list[dict]:
+        url = self.get_rest_url(API.URLs.ADD_STOCK_PRODUCT)
+        response = await async_post(self._session, url, self._api_key, json_data=data)
+        return response
 
     async def add_product(self, data: GrocyProduct) -> GrocyProduct:
         url = self.get_rest_url(API.URLs.ADD_PRODUCT)
