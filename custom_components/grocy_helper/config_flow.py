@@ -292,13 +292,11 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         self.barcode_results = []
 
         # Parse barcodes from input (split by new-line and spaces)
-        rows = barcodes_input.split("\n")
-        for row in rows:
-            parts = row.split(" ")
-            for part in parts:
-                barcode = part.strip()
-                if barcode and len(barcode) > 0:
-                    self.barcode_queue.append(barcode)
+        self.barcode_queue = [
+            part
+            for part in barcodes_input.split()
+            if part
+        ]
 
         return await self.async_step_scan_queue()
 
