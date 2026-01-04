@@ -283,14 +283,23 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 errors=errors,
             )
 
-        barcodes_str = user_input["barcodes"]
+        barcodes_input = user_input["barcodes"]
         self.barcode_scan_mode = user_input.get("mode")
-        _LOGGER.info("SCAN: %s", barcodes_str)
+        _LOGGER.info("SCAN: %s", barcodes_input)
         _LOGGER.info("SCAN-mode: %s", self.barcode_scan_mode)
 
-        barcodes = barcodes_str.split("\n")
-        self.barcode_queue = barcodes
+        self.barcode_queue = []
         self.barcode_results = []
+
+        # Parse barcodes from input (split by new-line and spaces)
+        rows = barcodes_input.split("\n")
+        for row in rows:
+            parts = row.split(" ")
+            for part in parts:
+                barcode = part.strip()
+                if barcode and len(barcode) > 0:
+                    self.barcode_queue.append(barcode)
+
         return await self.async_step_scan_queue()
 
     async def async_step_scan_queue(self, user_input: dict[str, Any] = None):
@@ -309,7 +318,11 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         if not current_barcode:
             # Nothing in queue, show summary
             # todo: Add result info to message...
-            msg = "\r\n".join(self.barcode_results)
+            msg = (
+                "\r\n".join(self.barcode_results)
+                if self.barcode_results
+                else "No barcodes were processed"
+            )
             _LOGGER.info(
                 "Options flow - process_scan Nothing more in scan queue!: %s",
                 len(self.barcode_results),
@@ -935,7 +948,6 @@ def GENERATE_STEP_SCAN_START_SCHEMA(scan_mode: SCAN_MODE) -> vol.Schema:
             vol.Required(
                 "barcodes",
                 description={"suggested_value": "4011800420413"},  # During DEV...
-                default="7311070347326",
             ): selector.TextSelector({"type": "text", "multiline": True}),
         }
     )
