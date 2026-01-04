@@ -188,6 +188,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
     scan_options: dict[str, str] = {
         "input_price": True,
         "input_bestBeforeInDays": True,
+        "input_shoppingLocationId": True,
     }
     current_bb_mode: int = -1
     barcode_scan_mode: str = None
@@ -292,11 +293,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         self.barcode_results = []
 
         # Parse barcodes from input (split by new-line and spaces)
-        self.barcode_queue = [
-            part
-            for part in barcodes_input.split()
-            if part
-        ]
+        self.barcode_queue = [part for part in barcodes_input.split() if part]
 
         return await self.async_step_scan_queue()
 
@@ -778,6 +775,9 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         # Handle input, for Price/BestBeforeInDays
         price = user_input.get("price") if user_input else None
         bestBeforeInDays = user_input.get("bestBeforeInDays") if user_input else None
+        shopping_location_id = (
+            user_input.get("shopping_location_id") if user_input else None
+        )
 
         in_purchase_mode = self.barcode_scan_mode in [SCAN_MODE.PURCHASE] or (
             self.barcode_scan_mode == SCAN_MODE.SCAN_BBUDDY
@@ -815,6 +815,48 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                         ): selector.TextSelector({"type": "text"})
                     }
                 )
+            # Input for shopping_location_id
+            if shopping_location_id is None and self.scan_options.get(
+                "input_shoppingLocationId"
+            ):
+                _LOGGER.info(
+                    "shoppingLocationId input enabled: append schema field, value: %s",
+                    shopping_location_id,
+                )
+                masterdata: GrocyMasterData = self._coordinator.data
+                shopping_locations = masterdata.get("shopping_locations")
+                shopping_locations.sort(key=lambda loc: loc["name"])
+
+                # if self.current_product_barcode:
+                #     # Check default store on Product barcode
+                #     # todo:
+                #     pass
+                if self.current_product:
+                    # Check default store on Product
+                    shopping_location_id = self.current_product.get(
+                        "shopping_location_id"
+                    )
+
+                schemas.update(
+                    {
+                        vol.Optional(
+                            "shopping_location_id",
+                            description={"suggested_value": str(shopping_location_id)},
+                        ): selector.SelectSelector(
+                            selector.SelectSelectorConfig(
+                                options=[
+                                    selector.SelectOptionDict(
+                                        value=str(loc["id"]),
+                                        label=loc["name"],
+                                    )
+                                    for loc in shopping_locations
+                                    # todo: append a blank value too?
+                                ],
+                                mode=selector.SelectSelectorMode.DROPDOWN,
+                            )
+                        ),
+                    }
+                )
 
         if len(schemas) > 0:
             self.current_barcode_schema = vol.Schema(schemas)
@@ -834,6 +876,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 request["price"] = float(price)
             if bestBeforeInDays is not None and len(str(bestBeforeInDays)) > 0:
                 request["bestBeforeInDays"] = int(bestBeforeInDays)
+            if shopping_location_id is not None and int(shopping_location_id) > 0:
+                request["shopping_location_id"] = int(shopping_location_id)
 
         bb_mode = self._api_bbuddy.convert_scan_mode_to_bbuddy_mode(
             self.barcode_scan_mode
@@ -847,8 +891,21 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         try:
             _LOGGER.info("SCAN-REQ: %s", json.dumps(request))
-            response = await self._api_bbuddy.post_scan(request)
-            # todo: handle responses with HTML-tags (warning/error messages)
+            if in_purchase_mode and request.get("shopping_location_id"):
+                # Workaround for being able to persist with Store, call Grocy directly
+                if request.get("bestBeforeInDays"):
+                    # todo: request["best_before_date"] = request["bestBeforeInDays"] # todo: convert to date relative from now
+                    del request["bestBeforeInDays"]
+                request["transaction_type"] = "purchase"
+                request["amount"] = (
+                    1  # todo: check barcode buddy current quantity context
+                )
+                response = await self._api_grocy.add_stock_product(request)
+                # response = ""   # todo: set based on response from Grocy
+            else:
+                # Call Barcode Buddy scan
+                response = await self._api_bbuddy.post_scan(request)
+                # todo: handle responses with HTML-tags (warning/error messages)
             _LOGGER.info("SCAN-RESP: %s", response)
 
             # if success, then remove from queue, and re-run this method again
