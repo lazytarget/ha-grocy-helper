@@ -893,8 +893,9 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             _LOGGER.info("SCAN-REQ: %s", json.dumps(request))
             if in_purchase_mode and request.get("shopping_location_id"):
                 # Workaround for being able to persist with Store, call Grocy directly
-                if request.get("bestBeforeInDays"):
-                    # todo: request["best_before_date"] = request["bestBeforeInDays"] # todo: convert to date relative from now
+                if days := request.get("bestBeforeInDays"):
+                    d = dt.datetime.now() + dt.timedelta(days=days)
+                    request["best_before_date"] = d.strftime("%Y-%m-%d")
                     del request["bestBeforeInDays"]
                 request["transaction_type"] = "purchase"
                 request["amount"] = (
