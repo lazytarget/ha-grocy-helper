@@ -52,9 +52,9 @@ class GrocyProductBarcode(TypedDict):
 
 class GrocyAddStockProduct(TypedDict):
     amount: float
-    best_before_date: str
     transaction_type: str
     price: float | None
+    best_before_date: str | None
     shopping_location_id: Union[None, int]
 
 class GrocyProduct(TypedDict):

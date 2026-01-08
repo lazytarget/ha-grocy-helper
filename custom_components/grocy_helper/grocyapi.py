@@ -103,8 +103,8 @@ class GrocyAPI:
             else:
                 raise ae
 
-    async def add_stock_product(self, data: GrocyAddStockProduct) -> list[dict]:
-        url = self.get_rest_url(API.URLs.ADD_STOCK_PRODUCT)
+    async def add_stock_product(self, product_id: int, data: GrocyAddStockProduct) -> list[dict]:
+        url = self.get_rest_url(API.URLs.ADD_STOCK_PRODUCT) % product_id
         response = await async_post(self._session, url, self._api_key, json_data=data)
         return response
 

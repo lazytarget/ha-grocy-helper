@@ -900,7 +900,9 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 request["amount"] = (
                     1  # todo: check barcode buddy current quantity context
                 )
-                response = await self._api_grocy.add_stock_product(request)
+                del request["barcode"]  # product_id is specified in
+                product_id = self.current_product["id"]
+                response = await self._api_grocy.add_stock_product(product_id, request)
                 # response = ""   # todo: set based on response from Grocy
             else:
                 # Call Barcode Buddy scan
