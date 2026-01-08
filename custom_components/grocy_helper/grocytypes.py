@@ -105,7 +105,7 @@ class ExtendedGrocyProductStockInfo(TypedDict):
     last_purchased: str
     last_used: str
     product: GrocyProduct
-    product_barcodes: list[GrocyProduct]
+    product_barcodes: list[GrocyProductBarcode]
 
 
 class GrocyStockEntry(TypedDict):
