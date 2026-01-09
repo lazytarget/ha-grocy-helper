@@ -104,7 +104,7 @@ async def async_post(
     # if content_type:
     #     headers["Content-Type"] = content_type
 
-    _LOGGER.info("HTTP [POST] Req: %s  \t%s", url, session)
+    _LOGGER.info("HTTP [POST] Req: %s  \t%s", url, json_data or data)
     if not isinstance(session, Session):
         session = session()
     if json_data:
@@ -130,10 +130,11 @@ async def async_post(
             j = await response.json()
             _LOGGER.debug("HTTP [POST] 200 :> Resp: %s", j)
             return j
-        except:
+        except Exception as be:
             j = await response.text()
             _LOGGER.debug("HTTP [POST] 200 :> Resp[TEXT]: %s", j)
-            raise
+            he = ApiException(response.status, j)
+            raise he from be
     elif response.status == 400:
         j: Dict = {}
         try:

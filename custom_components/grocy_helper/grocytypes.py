@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TypedDict, Union, Generic, TypeVar, Any
+from typing import TypedDict, Generic, TypeVar, Any
 
 _DataT = TypeVar("_DataT", default=dict[str, Any])
 
@@ -50,6 +50,14 @@ class GrocyProductBarcode(TypedDict):
     row_created_timestamp: str
 
 
+class GrocyAddStockProduct(TypedDict):
+    amount: float
+    transaction_type: str
+    price: float | None
+    best_before_date: str | None
+    shopping_location_id: int | None
+
+
 class GrocyProduct(TypedDict):
     id: int
     # Required
@@ -62,9 +70,9 @@ class GrocyProduct(TypedDict):
     row_created_timestamp: str
     # Optional
     description: None
-    product_group_id: Union[None, int]
+    product_group_id: int | None
     active: int
-    shopping_location_id: Union[None, int]
+    shopping_location_id: int | None
     min_stock_amount: int
     default_best_before_days: int
     default_best_before_days_after_open: int
@@ -74,7 +82,7 @@ class GrocyProduct(TypedDict):
     enable_tare_weight_handling: int
     tare_weight: int
     not_check_stock_fulfillment_for_recipes: int
-    parent_product_id: Union[None, int]
+    parent_product_id: int | None
     calories: int
     cumulate_min_stock_amount_of_sub_products: int
     due_type: int
@@ -84,7 +92,7 @@ class GrocyProduct(TypedDict):
     should_not_be_frozen: int
     treat_opened_as_out_of_stock: int
     no_own_stock: int
-    default_consume_location_id: Union[None, int]
+    default_consume_location_id: int | None
     move_on_open: int
     auto_reprint_stock_label: int
     quick_open_amount: int
@@ -98,7 +106,8 @@ class ExtendedGrocyProductStockInfo(TypedDict):
     last_purchased: str
     last_used: str
     product: GrocyProduct
-    product_barcodes: list[GrocyProduct]
+    product_barcodes: list[GrocyProductBarcode]
+    default_shopping_location_id: int | None
 
 
 class GrocyStockEntry(TypedDict):
