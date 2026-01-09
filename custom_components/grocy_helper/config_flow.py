@@ -357,7 +357,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     )
 
                     if (
-                        product.get("id")
+                        product
+                        and product.get("id")
                         and self.barcode_scan_mode == SCAN_MODE.TRANSFER
                     ):
                         stock_entries = (
@@ -385,6 +386,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                         self.current_product_ica: dict = {}
                         # _LOGGER.info("ICA product: %s", self.current_product_ica)
 
+                        masterdata: GrocyMasterData = self._coordinator.data
                         for matching_product in filter(
                             lambda p: (
                                 (
@@ -402,7 +404,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                                     ).casefold()
                                 )
                             ),
-                            self._coordinator.data["products"],
+                            masterdata["products"],
                         ):
                             # todo: also loop through ProductBarcode notes
                             _LOGGER.info("Match: %s", matching_product)
