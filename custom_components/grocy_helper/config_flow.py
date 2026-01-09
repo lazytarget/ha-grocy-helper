@@ -832,7 +832,9 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 )
                 masterdata: GrocyMasterData = self._coordinator.data
                 shopping_locations = masterdata.get("shopping_locations")
-                shopping_locations.sort(key=lambda loc: loc["name"])
+                shopping_locations = sorted(
+                    shopping_locations, key=lambda loc: loc["name"]
+                )
 
                 if self.current_product_stock_info.get("product_barcodes"):
                     # Check default store on Product barcode
@@ -859,7 +861,11 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     {
                         vol.Optional(
                             "shopping_location_id",
-                            description={"suggested_value": str(shopping_location_id)},
+                            description={
+                                "suggested_value": str(shopping_location_id)
+                                if shopping_location_id
+                                else None
+                            },
                         ): selector.SelectSelector(
                             selector.SelectSelectorConfig(
                                 options=[
@@ -919,8 +925,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 request["amount"] = (
                     1  # todo: check barcode buddy current quantity context
                 )
-                del request["barcode"]  # product_id is specified in
                 product_id = self.current_product_stock_info["product"]["id"]
+                request.pop("barcode", None)  # Instead go by ´product_id´
                 response = await self._api_grocy.add_stock_product(product_id, request)
                 # response = ""   # todo: set based on response from Grocy
             else:
