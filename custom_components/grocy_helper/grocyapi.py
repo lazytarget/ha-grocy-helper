@@ -4,6 +4,7 @@ from aiohttp import ClientSession
 
 from .const import API, ApiException
 from .grocytypes import (
+    GrocyAddProductQuantityUnitConversion,
     GrocyAddStockProduct,
     GrocyLocation,
     GrocyProduct,
@@ -126,8 +127,15 @@ class GrocyAPI:
         response = await async_post(self._session, url, self._api_key, json_data=data)
         obj_id = int(response["created_object_id"])
         if obj_id > 0:
-            product = await self.get_product_barcode_by_id(obj_id)
-            return product
+            obj = await self.get_product_barcode_by_id(obj_id)
+            return obj
+        return response
+
+    async def add_product_quantity_unit_conversion(
+        self, data: GrocyAddProductQuantityUnitConversion
+    ) -> dict:
+        url = self.get_rest_url(API.URLs.ADD_PRODUCT_QUANTITY_UNIT_CONVERSION)
+        response = await async_post(self._session, url, self._api_key, json_data=data)
         return response
 
     async def resolve_quantity_unit_conversions_for_product_id(

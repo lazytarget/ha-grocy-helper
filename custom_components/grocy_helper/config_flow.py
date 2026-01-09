@@ -24,6 +24,7 @@ from .grocyapi import GrocyAPI
 from .barcodebuddyapi import BarcodeBuddyAPI
 from .grocytypes import (
     ExtendedGrocyProductStockInfo,
+    GrocyAddProductQuantityUnitConversion,
     GrocyProduct,
     GrocyProductBarcode,
     GrocyMasterData,
@@ -543,11 +544,10 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                         _LOGGER.warning("Unit: %s, QQ: %s", unit, qq)
                 # todo: fill in guess of QuantityUnit...
 
-                user_input["calories"] = (
-                    user_input.get("calories")
-                    or self.current_product_openfoodfacts.get("nutriments", {}).get(
-                        "energy_kcal_100g"
-                    ),
+                user_input["calories"] = user_input.get(
+                    "calories"
+                ) or self.current_product_openfoodfacts.get("nutriments", {}).get(
+                    "energy_kcal_100g"
                 )
 
             if self.current_product_ica is not None:
@@ -607,7 +607,25 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             product = await self._api_grocy.add_product(new_product)
             _LOGGER.info("created prod: %s", product)
             # todo: check for success!
-            self.current_product_stock_info = product
+            # self.current_product_stock_info = product
+
+            # todo: fix GrocyProduct vs ExtendedGrocyProductStockInfo
+            self.current_product_stock_info = (
+                await self._api_grocy.get_product_by_barcode(self.current_barcode)
+            )
+
+            # todo: create explicit product quantity unit conversion
+            # Example Pack -> g
+            conv: GrocyAddProductQuantityUnitConversion = {
+                "from_qu_id": 3,  # Pack
+                "to_qu_id": user_input.get("qu_id_price", user_input.get("qu_id")),
+                "product_id": product["id"],
+                "row_created_timestamp": dt.datetime.now().strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                ),
+                "factor": self.current_product_openfoodfacts.get("product_quantity"),
+            }
+            await self._api_grocy.add_product_quantity_unit_conversion(conv)
 
         return await self.async_step_scan_add_product_barcode(user_input=None)
 
