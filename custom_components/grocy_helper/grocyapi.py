@@ -103,12 +103,14 @@ class GrocyAPI:
             else:
                 raise ae
 
-    async def add_stock_product(self, product_id: int, data: GrocyAddStockProduct) -> list[dict]:
+    async def add_stock_product(
+        self, product_id: int, data: GrocyAddStockProduct
+    ) -> list[dict]:
         url = self.get_rest_url(API.URLs.ADD_STOCK_PRODUCT) % product_id
         response = await async_post(self._session, url, self._api_key, json_data=data)
         return response
 
-    async def add_product(self, data: GrocyProduct) -> GrocyProduct:
+    async def add_product(self, data: GrocyProduct) -> ExtendedGrocyProductStockInfo:
         url = self.get_rest_url(API.URLs.ADD_PRODUCT)
         response = await async_post(self._session, url, self._api_key, json_data=data)
         obj_id = int(response["created_object_id"])

@@ -106,6 +106,7 @@ class ExtendedGrocyProductStockInfo(TypedDict):
     last_used: str
     product: GrocyProduct
     product_barcodes: list[GrocyProductBarcode]
+    default_shopping_location_id: int | None
 
 
 class GrocyStockEntry(TypedDict):

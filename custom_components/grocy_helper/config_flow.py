@@ -348,7 +348,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     product_stock_info = await self._api_grocy.get_product_by_barcode(
                         code
                     )
-                    product: GrocyProduct = (product or {}).get("product")
+                    product: GrocyProduct = (product_stock_info or {}).get("product")
                     self.current_product_stock_info = product_stock_info
                     self.matching_products: list[GrocyProduct] = []
                     _LOGGER.info(
@@ -844,11 +844,11 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                             if shopping_location_id:
                                 break
 
-                if self.current_product_stock_info:
+                if self.current_product_stock_info and not shopping_location_id:
                     # Check default store on Product
                     shopping_location_id = self.current_product_stock_info.get(
-                        "shopping_location_id",
-                        self.current_product_stock_info.get(
+                        "default_shopping_location_id",
+                        self.current_product_stock_info["product"].get(
                             "default_shopping_location_id"
                         ),
                     )
