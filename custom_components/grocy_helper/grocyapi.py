@@ -84,16 +84,30 @@ class GrocyAPI:
 
     async def get_product_by_id(
         self, product_id: int
-    ) -> ExtendedGrocyProductStockInfo | None:
+    ) -> GrocyProduct | None:
         url = self.get_rest_url(API.URLs.GET_PRODUCT_BY_ID) % product_id
         return await async_get(
             self._session, url, self._api_key, return_none_when_404=True
         )
 
-    async def get_product_by_barcode(
+    async def get_stock_product_by_id(
+        self, product_id: int
+    ) -> ExtendedGrocyProductStockInfo | None:
+        url = self.get_rest_url(API.URLs.GET_STOCK_PRODUCT_BY_ID) % product_id
+        try:
+            return await async_get(self._session, url, self._api_key)
+        except ApiException as ae:
+            if ae.status_code == 400 and ae.error_message.startswith(
+                "No product with barcode "
+            ):
+                return None
+            else:
+                raise ae
+
+    async def get_stock_product_by_barcode(
         self, barcode: str
     ) -> ExtendedGrocyProductStockInfo | None:
-        url = self.get_rest_url(API.URLs.GET_PRODUCT_BY_BARCODE) % barcode
+        url = self.get_rest_url(API.URLs.GET_STOCK_PRODUCT_BY_BARCODE) % barcode
         try:
             return await async_get(self._session, url, self._api_key)
         except ApiException as ae:

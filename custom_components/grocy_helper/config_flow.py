@@ -480,7 +480,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         if user_input.get("product_id") and user_input["product_id"] != "-1":
             # A specific product was chosen, use that instead of creation...
             _LOGGER.info("exist_products: %s", self.matching_products)
-            self.current_product_stock_info = await self._api_grocy.get_product_by_id(
+            self.current_product_stock_info = await self._api_grocy.get_stock_product_by_id(
                 int(user_input["product_id"])
             )
         else:
@@ -575,7 +575,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             # A specific product was chosen, use that instead of creation...
             _LOGGER.info("exist_products: %s", self.matching_products)
             _LOGGER.info("usr_inp: %s", user_input)
-            self.current_product_stock_info = await self._api_grocy.get_product_by_id(
+            self.current_product_stock_info = await self._api_grocy.get_stock_product_by_id(
                 int(user_input["product_id"])
             )
         else:
@@ -611,7 +611,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
             # todo: fix GrocyProduct vs ExtendedGrocyProductStockInfo
             self.current_product_stock_info = (
-                await self._api_grocy.get_product_by_barcode(self.current_barcode)
+                await self._api_grocy.get_stock_product_by_barcode(self.current_barcode)
             )
 
             # todo: create explicit product quantity unit conversion
