@@ -64,7 +64,7 @@ class GrocyAPI:
 
     async def get_product_barcode_by_id(
         self, product_barcode_id: int
-    ) -> ExtendedGrocyProductStockInfo | None:
+    ) -> GrocyProductBarcode | None:
         url = self.get_rest_url(API.URLs.GET_PRODUCT_BARCODE_BY_ID) % product_barcode_id
         return await async_get(
             self._session, url, self._api_key, return_none_when_404=True
@@ -125,7 +125,7 @@ class GrocyAPI:
         response = await async_post(self._session, url, self._api_key, json_data=data)
         return response
 
-    async def add_product(self, data: GrocyProduct) -> ExtendedGrocyProductStockInfo:
+    async def add_product(self, data: GrocyProduct) -> GrocyProduct:
         url = self.get_rest_url(API.URLs.ADD_PRODUCT)
         response = await async_post(self._session, url, self._api_key, json_data=data)
         obj_id = int(response["created_object_id"])
