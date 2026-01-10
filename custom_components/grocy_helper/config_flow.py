@@ -346,8 +346,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 # Not a BarcodeBuddy code...
                 # Lookup product in Grocy
                 try:
-                    product_stock_info = await self._api_grocy.get_product_by_barcode(
-                        code
+                    product_stock_info = (
+                        await self._api_grocy.get_stock_product_by_barcode(code)
                     )
                     product: GrocyProduct = (product_stock_info or {}).get("product")
                     self.current_product_stock_info = product_stock_info
@@ -621,45 +621,45 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
             # todo: fix GrocyProduct vs ExtendedGrocyProductStockInfo
             self.current_product_stock_info = (
-                await self._api_grocy.get_stock_product_by_barcode(self.current_barcode)
+                await self._api_grocy.get_stock_product_by_id(product["id"])
             )
 
-            skip_add_qu_conversions = False
-            qu_id_product_quantity_unit = user_input.get("qu_id")
-            if not user_input.get(
-                "qu_id"
-            ) or not self.current_product_openfoodfacts.get("product_quantity"):
-                skip_add_qu_conversions = True
-            if qu_id_product_quantity_unit:
-                # The looked up product quantity unit (of the Pack/Piece)
-                if qu_id_product_quantity_unit in [
-                    product.get("qu_id_stock"),
-                    product.get("qu_id_consume"),
-                    product.get("qu_id_purchase"),
-                    product.get("qu_id_price"),
-                ]:
-                    # The product already references the ´product_quantity_unit´
-                    skip_add_qu_conversions = True
-                else:
-                    conversions = await self._api_grocy.resolve_quantity_unit_conversions_for_product_id(
-                        product["id"]
-                    )
+            # skip_add_qu_conversions = False
+            # qu_id_product_quantity_unit = user_input.get("qu_id")
+            # if not user_input.get(
+            #     "qu_id"
+            # ) or not self.current_product_openfoodfacts.get("product_quantity"):
+            #     skip_add_qu_conversions = True
+            # if qu_id_product_quantity_unit:
+            #     # The looked up product quantity unit (of the Pack/Piece)
+            #     if qu_id_product_quantity_unit in [
+            #         product.get("qu_id_stock"),
+            #         product.get("qu_id_consume"),
+            #         product.get("qu_id_purchase"),
+            #         product.get("qu_id_price"),
+            #     ]:
+            #         # The product already references the ´product_quantity_unit´
+            #         skip_add_qu_conversions = True
+            #     else:
+            #         conversions = await self._api_grocy.resolve_quantity_unit_conversions_for_product_id(
+            #             product["id"]
+            #         )
 
-            if not skip_add_qu_conversions:
-                # todo: create explicit product quantity unit conversion
-                # Example Pack -> g
-                conv: GrocyAddProductQuantityUnitConversion = {
-                    "from_qu_id": product["qu_id_stock"],  # Pack/Piece
-                    "to_qu_id": qu_id_product_quantity_unit,
-                    "product_id": product["id"],
-                    "row_created_timestamp": dt.datetime.now().strftime(
-                        "%Y-%m-%d %H:%M:%S"
-                    ),
-                    "factor": self.current_product_openfoodfacts.get(
-                        "product_quantity"
-                    ),
-                }
-                await self._api_grocy.add_product_quantity_unit_conversion(conv)
+            # if not skip_add_qu_conversions:
+            #     # todo: create explicit product quantity unit conversion
+            #     # Example Pack -> g
+            #     conv: GrocyAddProductQuantityUnitConversion = {
+            #         "from_qu_id": product["qu_id_stock"],  # Pack/Piece
+            #         "to_qu_id": qu_id_product_quantity_unit,
+            #         "product_id": product["id"],
+            #         "row_created_timestamp": dt.datetime.now().strftime(
+            #             "%Y-%m-%d %H:%M:%S"
+            #         ),
+            #         "factor": self.current_product_openfoodfacts.get(
+            #             "product_quantity"
+            #         ),
+            #     }
+            #     await self._api_grocy.add_product_quantity_unit_conversion(conv)
 
         return await self.async_step_scan_add_product_barcode(user_input=None)
 
@@ -711,7 +711,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             "barcode": code,
             "note": user_input["note"],
             "product_id": new_product["id"],
-            "qu_id": user_input["qu_id"],
+            "qu_id": user_input.get("qu_id"),
             "shopping_location_id": user_input.get("shopping_location_id"),
             "amount": user_input.get("amount"),
             "row_created_timestamp": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
