@@ -74,6 +74,7 @@ class Step(StrEnum):
     SCAN_MATCH_PRODUCT = "scan_match_to_product"
     SCAN_ADD_PRODUCT = "scan_add_product"
     SCAN_ADD_PRODUCT_BARCODE = "scan_add_product_barcode"
+    SCAN_UPDATE_PRODUCT_DETAILS = "scan_update_product_details"
     SCAN_TRANSFER_START = "scan_transfer_start"
     SCAN_TRANSFER_INPUT = "scan_transfer_input"
     SCAN_PROCESS = "scan_process"
@@ -190,6 +191,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         "input_price": True,
         "input_bestBeforeInDays": True,
         "input_shoppingLocationId": True,
+        "input_product_details_during_provision": True,
     }
     current_bb_mode: int = -1
     barcode_scan_mode: str = None
@@ -617,49 +619,9 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             product = await self._api_grocy.add_product(new_product)
             _LOGGER.info("created prod: %s", product)
             # todo: check for success!
-            # self.current_product_stock_info = product
-
-            # todo: fix GrocyProduct vs ExtendedGrocyProductStockInfo
             self.current_product_stock_info = (
                 await self._api_grocy.get_stock_product_by_id(product["id"])
             )
-
-            # skip_add_qu_conversions = False
-            # qu_id_product_quantity_unit = user_input.get("qu_id")
-            # if not user_input.get(
-            #     "qu_id"
-            # ) or not self.current_product_openfoodfacts.get("product_quantity"):
-            #     skip_add_qu_conversions = True
-            # if qu_id_product_quantity_unit:
-            #     # The looked up product quantity unit (of the Pack/Piece)
-            #     if qu_id_product_quantity_unit in [
-            #         product.get("qu_id_stock"),
-            #         product.get("qu_id_consume"),
-            #         product.get("qu_id_purchase"),
-            #         product.get("qu_id_price"),
-            #     ]:
-            #         # The product already references the ´product_quantity_unit´
-            #         skip_add_qu_conversions = True
-            #     else:
-            #         conversions = await self._api_grocy.resolve_quantity_unit_conversions_for_product_id(
-            #             product["id"]
-            #         )
-
-            # if not skip_add_qu_conversions:
-            #     # todo: create explicit product quantity unit conversion
-            #     # Example Pack -> g
-            #     conv: GrocyAddProductQuantityUnitConversion = {
-            #         "from_qu_id": product["qu_id_stock"],  # Pack/Piece
-            #         "to_qu_id": qu_id_product_quantity_unit,
-            #         "product_id": product["id"],
-            #         "row_created_timestamp": dt.datetime.now().strftime(
-            #             "%Y-%m-%d %H:%M:%S"
-            #         ),
-            #         "factor": self.current_product_openfoodfacts.get(
-            #             "product_quantity"
-            #         ),
-            #     }
-            #     await self._api_grocy.add_product_quantity_unit_conversion(conv)
 
         return await self.async_step_scan_add_product_barcode(user_input=None)
 
@@ -719,9 +681,110 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         pcode = await self._api_grocy.add_product_barcode(br)
         _LOGGER.info("created prod_barcode: %s", pcode)
         # todo: append barcode to product
+        
+        if self.scan_options.get("input_product_details_during_provision"):
+            # Add more product info...
+            return await self.async_step_scan_add_product_details(user_input=None)
 
         # created product, now re-run process for same barcode
         # todo: in-future this could be merged to same process-work (avoid extra form)
+        return await self.async_step_scan_queue(user_input=None)
+
+    async def async_step_scan_update_product_details(self, user_input: dict[str, Any] = None):
+        errors: dict[str, str] = {}
+        _LOGGER.info("update-product: %s", user_input)
+        masterdata: GrocyMasterData = self._coordinator.data
+        product_stock_info: ExtendedGrocyProductStockInfo = self.current_product_stock_info
+        product = product_stock_info["product"]
+
+        show_form = user_input is None
+        if user_input is None:
+            user_input = user_input or {}
+
+        product_quantity = None
+        product_quantity_unit: int | None = None
+        if self.current_product_openfoodfacts is not None:
+            product_quantity = user_input.get("product_quantity", self.current_product_openfoodfacts.get("product_quantity"))
+            # Fill in from OpenFoodFacts
+            unit = self.current_product_openfoodfacts.get("product_quantity_unit")
+            if unit:
+                for qq in filter(
+                    lambda qu: qu.get("name") == unit,
+                    masterdata["quantity_units"],
+                ):
+                    product_quantity_unit = qq["id"]
+                    _LOGGER.warning("Unit: %s, QQ: %s", unit, qq)
+                if not user_input.get("qu_id"):
+                    # todo: find closest similiar Unit (example: g -> kg)
+                    # product_quantity_unit = 
+                    pass
+
+        if self.current_product_ica is not None:
+            # todo: fill in info from ICA...
+            pass
+
+        # todo: fill in guess of QuantityUnit...
+
+
+
+        qu_id_product = user_input.get("qu_id_product", product_quantity_unit)
+        skip_add_qu_conversions = False
+        if user_input.get("qu_id_product"):
+            qu_id_product = int(user_input.get("qu_id_product"))
+        elif product_quantity_unit:
+            qu_id_product = product_quantity_unit
+        else:
+            # Don't lookup resolved conversions
+            skip_add_qu_conversions = True
+
+        if not skip_add_qu_conversions:
+            # The looked up product quantity unit (of the Pack/Piece)
+            if qu_id_product in [
+                product.get("qu_id_stock"),
+                product.get("qu_id_consume"),
+                product.get("qu_id_purchase"),
+                product.get("qu_id_price"),
+            ]:
+                # The product already references the ´product_quantity_unit´
+                skip_add_qu_conversions = True
+            else:
+                conversions = await self._api_grocy.resolve_quantity_unit_conversions_for_product_id(
+                    product["id"]
+                )
+                # todo: check if there already is a resolved conversion for those qu_id
+                # todo: if already exists then set ´skip_add_qu_conversions = True´
+
+
+        if show_form:
+            schema = GENERATE_UPDATE_PRODUCT_DETAILS_SCHEMA(self._coordinator.data, user_input)
+            _LOGGER.info("schema: %s", schema)
+            _LOGGER.info("form 'update_product' user_input: %s", user_input)
+
+            schema = vol.Schema(schema)
+            self.add_suggested_values_to_schema(schema, user_input)
+
+            return self.async_show_form(
+                step_id=Step.SCAN_UPDATE_PRODUCT_DETAILS,
+                data_schema=schema,
+                errors=errors,
+            )
+
+        _LOGGER.info("About to add conv: %s %s %s", product["qu_id_stock"], qu_id_product, product_quantity)
+        if not skip_add_qu_conversions and qu_id_product and product_quantity:
+            # todo: create explicit product quantity unit conversion
+            # Example Pack -> g
+            conv: GrocyAddProductQuantityUnitConversion = {
+                "from_qu_id": product["qu_id_stock"],  # Pack/Piece
+                "to_qu_id": int(qu_id_product),
+                "product_id": product["id"],
+                "row_created_timestamp": dt.datetime.now().strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                ),
+                "factor": float(product_quantity),
+            }
+            await self._api_grocy.add_product_quantity_unit_conversion(conv)
+
+        # Done with product, now continue with the Process work for the current barcode
         return await self.async_step_scan_queue(user_input=None)
 
     async def async_step_scan_transfer_start(self, user_input: dict[str, Any] = None):
@@ -1388,6 +1451,75 @@ def GENERATE_CREATE_PRODUCT_SCHEMA(
                 "calories",
                 description={
                     "suggested_value": suggested_values.get("calories"),
+                },
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    mode=selector.NumberSelectorMode.BOX, step=1
+                )
+            ),
+        }
+    )
+    return schemas
+
+
+def GENERATE_UPDATE_PRODUCT_DETAILS_SCHEMA(
+    masterdata: GrocyMasterData, suggested_values: dict[str, str]
+) -> VolDictType:
+    locs = [
+        selector.SelectOptionDict(
+            value=str(loc["id"]),
+            label=loc["name"],
+        )
+        for loc in masterdata["locations"]
+    ]
+    # todo: sort Locations
+    qu = [
+        selector.SelectOptionDict(
+            value=str(qu["id"]),
+            label=qu["name"],
+        )
+        for qu in masterdata["quantity_units"]
+    ]
+
+    schemas: VolDictType = {}
+    schemas.update(
+        {
+            vol.Optional(
+                "default_consume_location_id",
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=locs,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                    multiple=False,
+                )
+            ),
+        }
+    )
+    schemas.update(
+        {
+            vol.Required(
+                "qu_id_product",
+                description={
+                    "description": "What quantity unit does the product package have?",
+                    "suggested_value": suggested_values.get(
+                        "qu_id_product"
+                    ),
+                },
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=qu,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                    multiple=False,
+                )
+            ),
+        }
+    )
+    schemas.update(
+        {
+            vol.Optional(
+                "product_quantity",
+                description={
+                    "suggested_value": suggested_values.get("product_quantity"),
                 },
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(
