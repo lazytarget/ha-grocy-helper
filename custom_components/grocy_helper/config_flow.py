@@ -980,10 +980,15 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         schemas: VolDictType = {}
 
         code = self.current_barcode
+        product = self.current_product_stock_info.get("product", {})
 
         # Handle input, for Price/BestBeforeInDays
         price = user_input.get("price") if user_input else None
-        bestBeforeInDays = user_input.get("bestBeforeInDays") if user_input else None
+        bestBeforeInDays = (
+            user_input.get("bestBeforeInDays", product.get("default_best_before_days"))
+            if user_input
+            else product.get("default_best_before_days")
+        )
         shopping_location_id = (
             user_input.get("shopping_location_id") if user_input else None
         )
@@ -1009,7 +1014,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     }
                 )
             # Input for bestBeforeInDays
-            if bestBeforeInDays is None and self.scan_options.get(
+            if self.scan_options.get(
                 "input_bestBeforeInDays"
             ):
                 _LOGGER.info(
