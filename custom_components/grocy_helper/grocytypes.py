@@ -177,6 +177,7 @@ class GrocyMasterData(TypedDict):
     shopping_locations: list[GrocyShoppingLocation]
     quantity_units: list[GrocyQuantityUnit]
     products: list[GrocyProduct]
+    known_qu: dict[str, GrocyQuantityUnit]
 
 
 class OpenFoodFactsProductNutriments(TypedDict):
