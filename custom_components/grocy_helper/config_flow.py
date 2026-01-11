@@ -709,6 +709,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         product_quantity = None
         product_quantity_unit: int | None = None
+        product_quantity_unit_as_liquid = False
+        product_quantity_unit_as_weight = False
         if self.current_product_openfoodfacts is not None:
             product_quantity = user_input.get(
                 "product_quantity",
@@ -723,6 +725,14 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 ):
                     product_quantity_unit = qq["id"]
                     _LOGGER.warning("Unit: %s, QQ: %s", unit, qq)
+                    product_quantity_unit_as_liquid = qq["name"] in [
+                        "ml",
+                        "cl",
+                        "dl",
+                        "l",
+                        "L",
+                    ]
+                    product_quantity_unit_as_weight = qq["name"] in ["g", "hg", "kg"]
                 if not user_input.get("qu_id"):
                     # todo: find closest similiar Unit (example: g -> kg)
                     # product_quantity_unit =
@@ -734,11 +744,9 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         # todo: fill in guess of QuantityUnit...
 
-        kcal = user_input["calories-per-100g"] = user_input.get(
-            "calories-per-100g"
-        ) or (self.current_product_openfoodfacts or {}).get("nutriments", {}).get(
-            "energy_kcal_100g"
-        )
+        kcal = user_input["calories-per-100"] = user_input.get("calories-per-100") or (
+            self.current_product_openfoodfacts or {}
+        ).get("nutriments", {}).get("energy_kcal_100g")
         if kcal:
             kcal = float(kcal)
 
@@ -777,7 +785,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             user_input["product_quantity"] = user_input.get(
                 "product_quantity", product_quantity
             )
-            user_input["calories-per-100g"] = user_input.get("calories-per-100g", kcal)
+            user_input["calories-per-100"] = user_input.get("calories-per-100", kcal)
 
             schema = GENERATE_UPDATE_PRODUCT_DETAILS_SCHEMA(
                 self._coordinator.data, user_input
@@ -800,6 +808,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             qu_id_product,
             product_quantity,
         )
+        product_updates = {}
         if not skip_add_qu_conversions and qu_id_product and product_quantity:
             # todo: create explicit product quantity unit conversion
             # Example Pack -> g
@@ -814,10 +823,27 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             }
             await self._api_grocy.add_product_quantity_unit_conversion(conv)
 
+            # Set price reference unit to kg/L
+            if product_quantity_unit_as_liquid:
+                product_updates["qu_id_price"] = str(
+                    masterdata["known_qu"].get("L", {}).get("id")
+                )
+            elif product_quantity_unit_as_weight:
+                product_updates["qu_id_price"] = str(
+                    masterdata["known_qu"].get("kg", {}).get("id")
+                )
+            else:
+                _LOGGER.warning("Unknown quantity unit type: %s", product_quantity_unit)
+
+        if val := user_input.get("default_consume_location_id"):
+            product_updates["default_consume_location_id"] = val
+
         # Since qu_id_stock is the whole container. Recalculate into the standard per100g
-        # OpenFoodFacts stores the calories per 100g, calc into what the while container has
-        product_updates = {}
+        # OpenFoodFacts stores the calories per 100g/100ml, calc into what the while container has
         gram_unit = masterdata["known_qu"].get("g")
+        if product_quantity_unit_as_liquid:
+            gram_unit = masterdata["known_qu"].get("ml")
+
         if kcal and gram_unit:
             kcal_per_gram = float(kcal) / 100
             # Convert Pack -> grams (since the ´product_quantity´ might be of a different unit)
@@ -826,7 +852,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     product["id"],
                     amount=1,  # 1 Pack
                     from_qu_id=int(product["qu_id_stock"]),  # Pack
-                    to_qu_id=gram_unit["id"],  # grams
+                    to_qu_id=gram_unit["id"],  # grams or millilitres
                 )
             )
             _LOGGER.warning(
@@ -841,9 +867,9 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             product_updates["calories"] = kcal_per_pack  # kcal/´qu_id_stock´
 
         if product_updates:
-            # todo: Update Product details, via Grocy API
-            _LOGGER.info("Will update product: %s", product_updates)
-            pass
+            # Update product with changed values
+            _LOGGER.info("Will update product: #%s %s", product["id"], product_updates)
+            await self._api_grocy.update_product(product["id"], product_updates)
 
         # Done with product, now continue with the Process work for the current barcode
         return await self.async_step_scan_queue(user_input=None)
@@ -1576,9 +1602,9 @@ def GENERATE_UPDATE_PRODUCT_DETAILS_SCHEMA(
     schemas.update(
         {
             vol.Optional(
-                "calories-per-100g",
+                "calories-per-100",
                 description={
-                    "suggested_value": suggested_values.get("calories-per-100g"),
+                    "suggested_value": suggested_values.get("calories-per-100"),
                 },
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(

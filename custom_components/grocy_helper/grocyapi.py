@@ -15,7 +15,7 @@ from .grocytypes import (
     GrocyShoppingLocation,
     GrocyStockEntry,
 )
-from .http_requests import async_get, async_post
+from .http_requests import async_get, async_post, async_put
 
 
 class GrocyAPI:
@@ -130,6 +130,11 @@ class GrocyAPI:
         if obj_id > 0:
             product = await self.get_product_by_id(obj_id)
             return product
+        return response
+
+    async def update_product(self, product_id: int, data: GrocyProduct):
+        url = self.get_rest_url(API.URLs.UPDATE_PRODUCT) % product_id
+        response = await async_put(self._session, url, self._api_key, json_data=data)
         return response
 
     async def add_product_barcode(

@@ -78,8 +78,14 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
                 "products": products,
                 "known_qu": {
                     "g": next((qu for qu in quantity_units if qu["name"] == "g"), None),
-                    "ml": next((qu for qu in quantity_units if qu["name"] == "ml"), None),
-                }
+                    "kg": next(
+                        (qu for qu in quantity_units if qu["name"] == "kg"), None
+                    ),
+                    "ml": next(
+                        (qu for qu in quantity_units if qu["name"] == "ml"), None
+                    ),
+                    "L": next((qu for qu in quantity_units if qu["name"] == "L"), None),
+                },
             }
             return masterdata
         except Exception as err:

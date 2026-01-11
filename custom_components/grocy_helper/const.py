@@ -60,7 +60,7 @@ class API:
         ADD_STOCK_PRODUCT: Final = "api/stock/products/%s/add"
         ADD_PRODUCT: Final = "api/objects/products"
         ADD_PRODUCT_BARCODE: Final = "api/objects/product_barcodes"
-        UPDATE_PRODUCT: Final = "api/objects/products"
+        UPDATE_PRODUCT: Final = "api/objects/products/%s"
         ADD_PRODUCT_QUANTITY_UNIT_CONVERSION: Final = "api/objects/quantity_unit_conversions"
 
         BBUDDY_SCAN: Final = "api/action/scan"
