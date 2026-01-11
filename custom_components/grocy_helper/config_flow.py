@@ -685,7 +685,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         
         if self.scan_options.get("input_product_details_during_provision"):
             # Add more product info...
-            return await self.async_step_scan_add_product_details(user_input=None)
+            return await self.async_step_scan_update_product_details(user_input=None)
 
         # created product, now re-run process for same barcode
         # todo: in-future this could be merged to same process-work (avoid extra form)
@@ -752,11 +752,14 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 conversions = await self._api_grocy.resolve_quantity_unit_conversions_for_product_id(
                     product["id"]
                 )
+                _LOGGER.warning("Convers: %s", conversions)
                 # todo: check if there already is a resolved conversion for those qu_id
                 # todo: if already exists then set ´skip_add_qu_conversions = True´
 
-
         if show_form:
+            user_input["qu_id_product"] = str(user_input.get("qu_id_product", qu_id_product))
+            user_input["product_quantity"] = user_input.get("product_quantity", product_quantity)
+
             schema = GENERATE_UPDATE_PRODUCT_DETAILS_SCHEMA(self._coordinator.data, user_input)
             _LOGGER.info("schema: %s", schema)
             _LOGGER.info("form 'update_product' user_input: %s", user_input)
@@ -1498,7 +1501,21 @@ def GENERATE_UPDATE_PRODUCT_DETAILS_SCHEMA(
     )
     schemas.update(
         {
-            vol.Required(
+            vol.Optional(
+                "product_quantity",
+                description={
+                    "suggested_value": suggested_values.get("product_quantity"),
+                },
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    mode=selector.NumberSelectorMode.BOX, step=1
+                )
+            ),
+        }
+    )
+    schemas.update(
+        {
+            vol.Optional(
                 "qu_id_product",
                 description={
                     "description": "What quantity unit does the product package have?",
@@ -1511,20 +1528,6 @@ def GENERATE_UPDATE_PRODUCT_DETAILS_SCHEMA(
                     options=qu,
                     mode=selector.SelectSelectorMode.DROPDOWN,
                     multiple=False,
-                )
-            ),
-        }
-    )
-    schemas.update(
-        {
-            vol.Optional(
-                "product_quantity",
-                description={
-                    "suggested_value": suggested_values.get("product_quantity"),
-                },
-            ): selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    mode=selector.NumberSelectorMode.BOX, step=1
                 )
             ),
         }
