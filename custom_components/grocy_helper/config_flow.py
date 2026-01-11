@@ -825,11 +825,11 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
             # Set price reference unit to kg/L
             if product_quantity_unit_as_liquid:
-                product_updates["qu_id_price"] = str(
+                product_updates["qu_id_price"] = (
                     masterdata["known_qu"].get("L", {}).get("id")
                 )
             elif product_quantity_unit_as_weight:
-                product_updates["qu_id_price"] = str(
+                product_updates["qu_id_price"] = (
                     masterdata["known_qu"].get("kg", {}).get("id")
                 )
             else:
@@ -1014,9 +1014,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     }
                 )
             # Input for bestBeforeInDays
-            if self.scan_options.get(
-                "input_bestBeforeInDays"
-            ):
+            if self.scan_options.get("input_bestBeforeInDays"):
                 _LOGGER.info(
                     "BestBeforeInDays input enabled: append schema field, value: %s",
                     bestBeforeInDays,

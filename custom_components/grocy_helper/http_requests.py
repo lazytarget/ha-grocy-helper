@@ -234,7 +234,7 @@ async def async_put(
         response.raise_for_status()
     except Exception as be:
         _LOGGER.error(
-            "HTTP [POST] Resp: %s -> %s", response.status, await response.text()
+            "HTTP [PUT] Resp: %s -> %s", response.status, await response.text()
         )
         raise be
 
