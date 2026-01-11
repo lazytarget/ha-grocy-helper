@@ -162,6 +162,85 @@ async def async_post(
     return response.ok
 
 
+async def async_put(
+    session: Session,
+    url: str,
+    auth_key: str | None = None,
+    data: Dict[str, Any] | None = None,
+    json_data: Any | None = None,
+    content_type: str | None = None,
+    params: typedefs.Query | None = None,
+):
+    request_id = (
+        data.pop("request_id", None) if data and isinstance(data, Dict) else None
+    )
+
+    headers = create_headers(
+        auth_key=auth_key,
+        with_content=content_type if content_type else bool(data) if isinstance(data, Dict) else content_type,
+        request_id=request_id,
+    )
+    # if content_type:
+    #     headers["Content-Type"] = content_type
+
+    _LOGGER.info("HTTP [PUT] Req: %s  \t%s", url, json_data or data)
+    if not isinstance(session, Session):
+        session = session()
+    if json_data:
+        response = await session.put(
+            url,
+            headers=headers,
+            # data=json.dumps(data) if data else None,
+            data=data,
+            json=json_data,
+            params=params,
+        )
+    else:
+        response = await session.put(
+            url,
+            headers=headers,
+            # data=json.dumps(data) if data else None,
+            data=data,
+            params=params
+        )
+
+    if response.status == 200:
+        try:
+            j = await response.json()
+            _LOGGER.debug("HTTP [PUT] 200 :> Resp: %s", j)
+            return j
+        except Exception as be:
+            j = await response.text()
+            _LOGGER.debug("HTTP [PUT] 200 :> Resp[TEXT]: %s", j)
+            he = ApiException(response.status, j)
+            raise he from be
+    elif response.status == 400:
+        j: Dict = {}
+        try:
+            j = await response.json()
+            _LOGGER.debug("HTTP [PUT] 400 :> Resp: %s", j)
+        except Exception as be:
+            j = await response.text()
+            _LOGGER.debug("HTTP [PUT] 400 :> Resp[TEXT]: %s", j)
+            he = ApiException(response.status, j)
+            raise he from be
+
+        _LOGGER.debug("HTTP [PUT] Resp Error: %s", json.dumps(j))
+        msg = j.get("error_message", j.get("result", {}).get("result")) or json.dumps(j)
+        he = ApiException(response.status, msg)
+        raise he
+
+    try:
+        response.raise_for_status()
+    except Exception as be:
+        _LOGGER.error(
+            "HTTP [PUT] Resp: %s -> %s", response.status, await response.text()
+        )
+        raise be
+
+    return response.ok
+
+
 def delete(
     session: Session,
     url: str,

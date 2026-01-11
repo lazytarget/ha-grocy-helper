@@ -4,6 +4,7 @@ from aiohttp import ClientSession
 
 from .const import API, ApiException
 from .grocytypes import (
+    GrocyAddProductQuantityUnitConversion,
     GrocyAddStockProduct,
     GrocyLocation,
     GrocyProduct,
@@ -14,7 +15,7 @@ from .grocytypes import (
     GrocyShoppingLocation,
     GrocyStockEntry,
 )
-from .http_requests import async_get, async_post
+from .http_requests import async_get, async_post, async_put
 
 
 class GrocyAPI:
@@ -63,7 +64,7 @@ class GrocyAPI:
 
     async def get_product_barcode_by_id(
         self, product_barcode_id: int
-    ) -> ExtendedGrocyProductStockInfo | None:
+    ) -> GrocyProductBarcode | None:
         url = self.get_rest_url(API.URLs.GET_PRODUCT_BARCODE_BY_ID) % product_barcode_id
         return await async_get(
             self._session, url, self._api_key, return_none_when_404=True
@@ -81,18 +82,30 @@ class GrocyAPI:
         url = self.get_rest_url(API.URLs.TRANSFER_STOCK_ENTRY) % product_id
         return await async_post(self._session, url, self._api_key, json_data=data)
 
-    async def get_product_by_id(
-        self, product_id: int
-    ) -> ExtendedGrocyProductStockInfo | None:
+    async def get_product_by_id(self, product_id: int) -> GrocyProduct | None:
         url = self.get_rest_url(API.URLs.GET_PRODUCT_BY_ID) % product_id
         return await async_get(
             self._session, url, self._api_key, return_none_when_404=True
         )
 
-    async def get_product_by_barcode(
+    async def get_stock_product_by_id(
+        self, product_id: int
+    ) -> ExtendedGrocyProductStockInfo | None:
+        url = self.get_rest_url(API.URLs.GET_STOCK_PRODUCT_BY_ID) % product_id
+        try:
+            return await async_get(self._session, url, self._api_key)
+        except ApiException as ae:
+            if ae.status_code == 400 and ae.error_message.startswith(
+                "No product with barcode "
+            ):
+                return None
+            else:
+                raise ae
+
+    async def get_stock_product_by_barcode(
         self, barcode: str
     ) -> ExtendedGrocyProductStockInfo | None:
-        url = self.get_rest_url(API.URLs.GET_PRODUCT_BY_BARCODE) % barcode
+        url = self.get_rest_url(API.URLs.GET_STOCK_PRODUCT_BY_BARCODE) % barcode
         try:
             return await async_get(self._session, url, self._api_key)
         except ApiException as ae:
@@ -110,13 +123,18 @@ class GrocyAPI:
         response = await async_post(self._session, url, self._api_key, json_data=data)
         return response
 
-    async def add_product(self, data: GrocyProduct) -> ExtendedGrocyProductStockInfo:
+    async def add_product(self, data: GrocyProduct) -> GrocyProduct:
         url = self.get_rest_url(API.URLs.ADD_PRODUCT)
         response = await async_post(self._session, url, self._api_key, json_data=data)
         obj_id = int(response["created_object_id"])
         if obj_id > 0:
             product = await self.get_product_by_id(obj_id)
             return product
+        return response
+
+    async def update_product(self, product_id: int, data: GrocyProduct):
+        url = self.get_rest_url(API.URLs.UPDATE_PRODUCT) % product_id
+        response = await async_put(self._session, url, self._api_key, json_data=data)
         return response
 
     async def add_product_barcode(
@@ -126,8 +144,15 @@ class GrocyAPI:
         response = await async_post(self._session, url, self._api_key, json_data=data)
         obj_id = int(response["created_object_id"])
         if obj_id > 0:
-            product = await self.get_product_barcode_by_id(obj_id)
-            return product
+            obj = await self.get_product_barcode_by_id(obj_id)
+            return obj
+        return response
+
+    async def add_product_quantity_unit_conversion(
+        self, data: GrocyAddProductQuantityUnitConversion
+    ) -> dict:
+        url = self.get_rest_url(API.URLs.ADD_PRODUCT_QUANTITY_UNIT_CONVERSION)
+        response = await async_post(self._session, url, self._api_key, json_data=data)
         return response
 
     async def resolve_quantity_unit_conversions_for_product_id(

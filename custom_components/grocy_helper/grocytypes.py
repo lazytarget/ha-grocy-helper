@@ -58,6 +58,14 @@ class GrocyAddStockProduct(TypedDict):
     shopping_location_id: int | None
 
 
+class GrocyAddProductQuantityUnitConversion(TypedDict):
+    from_qu_id: int
+    to_qu_id: int
+    factor: float
+    product_id: int
+    row_created_timestamp: str
+
+
 class GrocyProduct(TypedDict):
     id: int
     # Required
@@ -169,6 +177,7 @@ class GrocyMasterData(TypedDict):
     shopping_locations: list[GrocyShoppingLocation]
     quantity_units: list[GrocyQuantityUnit]
     products: list[GrocyProduct]
+    known_qu: dict[str, GrocyQuantityUnit | None]
 
 
 class OpenFoodFactsProductNutriments(TypedDict):
