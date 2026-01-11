@@ -546,7 +546,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     lambda qu: qu.get("name") == unit,
                     self._coordinator.data["quantity_units"],
                 ):
-                    user_input["qu_id"] = str(qq["id"])
+                    # todo: replace this ´product_quantity_unit ´suggestion, with Pack/Piece suggestion
+                    # user_input["qu_id"] = str(qq["id"])
                     _LOGGER.warning("Unit: %s, QQ: %s", unit, qq)
                 if not user_input.get("qu_id"):
                     # todo: find closest similiar Unit (example: g -> kg)
@@ -643,17 +644,17 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         if user_input is None:
             user_input = user_input or {}
             user_input["note"] = user_input.get("note", new_product["name"])
-            user_input["qu_id"] = str(
-                user_input.get("qu_id", new_product["qu_id_purchase"])
-            )
+            # user_input["qu_id"] = str(
+            #     user_input.get("qu_id", new_product["qu_id_purchase"])
+            # )
 
-            if self.current_product_openfoodfacts is not None:
-                q = self.current_product_openfoodfacts.get("product_quantity")
-                qu = self.current_product_openfoodfacts.get("product_quantity_unit")
-                if q and qu:
-                    # todo: compare qu, against the defaulted "qu_id_purchase" or "qui_id_stock"
-                    # todo: make conversion, if necessary...
-                    user_input["amount"] = q
+            # if self.current_product_openfoodfacts is not None:
+            #     q = self.current_product_openfoodfacts.get("product_quantity")
+            #     qu = self.current_product_openfoodfacts.get("product_quantity_unit")
+            #     if q and qu:
+            #         # todo: compare qu, against the defaulted "qu_id_purchase" or "qui_id_stock"
+            #         # todo: make conversion, if necessary...
+            #         user_input["amount"] = q
 
             schema = GENERATE_CREATE_PRODUCT_BARCODESCHEMA(
                 self._coordinator.data, user_input
