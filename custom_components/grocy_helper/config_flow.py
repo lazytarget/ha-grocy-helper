@@ -377,6 +377,9 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
                     if not product:
                         # New barcode (Not provisioned in Grocy)
+                        _LOGGER.info(
+                            "New product, do a lookup against OpenFoodFacts: %s", code
+                        )
                         # todo: Lookup in other providers...
                         self.current_product_openfoodfacts: (
                             OpenFoodFactsProduct | None
@@ -598,6 +601,13 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             # more friendly name (barcode has specific name/"note")
             new_product["name"] = user_input["name"]
             new_product["location_id"] = user_input["location_id"]
+            new_product["should_not_be_frozen"] = (
+                1 if user_input.get("should_not_be_frozen", False) else 0
+            )
+            if val := user_input.get("default_best_before_days"):
+                new_product["default_best_before_days"] = int(val)
+            if val := user_input.get("default_best_before_days_after_open"):
+                new_product["default_best_before_days_after_open"] = int(val)
             new_product["qu_id_purchase"] = user_input.get(
                 "qu_id_purchase", user_input.get("qu_id")
             )
@@ -744,7 +754,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         # todo: fill in guess of QuantityUnit...
 
-        kcal = user_input["calories-per-100"] = user_input.get("calories-per-100") or (
+        kcal = user_input["calories_per_100"] = user_input.get("calories_per_100") or (
             self.current_product_openfoodfacts or {}
         ).get("nutriments", {}).get("energy_kcal_100g")
         if kcal:
@@ -785,10 +795,10 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             user_input["product_quantity"] = user_input.get(
                 "product_quantity", product_quantity
             )
-            user_input["calories-per-100"] = user_input.get("calories-per-100", kcal)
+            user_input["calories_per_100"] = user_input.get("calories_per_100", kcal)
 
             schema = GENERATE_UPDATE_PRODUCT_DETAILS_SCHEMA(
-                self._coordinator.data, user_input
+                self._coordinator.data, user_input, product
             )
             _LOGGER.info("schema: %s", schema)
             _LOGGER.info("form 'update_product' user_input: %s", user_input)
@@ -837,6 +847,10 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         if val := user_input.get("default_consume_location_id"):
             product_updates["default_consume_location_id"] = val
+        if val := user_input.get("default_best_before_days_after_freezing"):
+            product_updates["default_best_before_days_after_freezing"] = int(val)
+        if val := user_input.get("default_best_before_days_after_thawing"):
+            product_updates["default_best_before_days_after_thawing"] = int(val)
 
         # Since qu_id_stock is the whole container. Recalculate into the standard per100g
         # OpenFoodFacts stores the calories per 100g/100ml, calc into what the while container has
@@ -1023,7 +1037,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     {
                         vol.Optional(
                             "bestBeforeInDays",
-                            description={"suggested_value": bestBeforeInDays},
+                            description={"suggested_value": str(bestBeforeInDays)},
                         ): selector.TextSelector({"type": "text"})
                     }
                 )
@@ -1466,6 +1480,44 @@ def GENERATE_CREATE_PRODUCT_SCHEMA(
     schemas.update(
         {
             vol.Required(
+                "should_not_be_frozen",
+                default=suggested_values.get("should_not_be_frozen", False),
+            ): selector.BooleanSelector()
+        }
+    )
+    schemas.update(
+        {
+            vol.Optional(
+                "default_best_before_days",
+                description={
+                    "suggested_value": suggested_values.get("default_best_before_days"),
+                },
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    mode=selector.NumberSelectorMode.BOX, step=1
+                )
+            ),
+        }
+    )
+    schemas.update(
+        {
+            vol.Optional(
+                "default_best_before_days_after_open",
+                description={
+                    "suggested_value": suggested_values.get(
+                        "default_best_before_days_after_open"
+                    ),
+                },
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    mode=selector.NumberSelectorMode.BOX, step=1
+                )
+            ),
+        }
+    )
+    schemas.update(
+        {
+            vol.Required(
                 "qu_id_stock",
                 description={
                     "suggested_value": suggested_values.get(
@@ -1539,7 +1591,7 @@ def GENERATE_CREATE_PRODUCT_SCHEMA(
 
 
 def GENERATE_UPDATE_PRODUCT_DETAILS_SCHEMA(
-    masterdata: GrocyMasterData, suggested_values: dict[str, str]
+    masterdata: GrocyMasterData, suggested_values: dict[str, str], product: GrocyProduct
 ) -> VolDictType:
     locs = [
         selector.SelectOptionDict(
@@ -1605,9 +1657,9 @@ def GENERATE_UPDATE_PRODUCT_DETAILS_SCHEMA(
     schemas.update(
         {
             vol.Optional(
-                "calories-per-100",
+                "calories_per_100",
                 description={
-                    "suggested_value": suggested_values.get("calories-per-100"),
+                    "suggested_value": suggested_values.get("calories_per_100"),
                 },
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(
@@ -1616,6 +1668,39 @@ def GENERATE_UPDATE_PRODUCT_DETAILS_SCHEMA(
             ),
         }
     )
+    if not product.get("should_not_be_frozen", 0):
+        schemas.update(
+            {
+                vol.Optional(
+                    "default_best_before_days_after_freezing",
+                    description={
+                        "suggested_value": suggested_values.get(
+                            "default_best_before_days_after_freezing"
+                        ),
+                    },
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        mode=selector.NumberSelectorMode.BOX, step=1
+                    )
+                ),
+            }
+        )
+        schemas.update(
+            {
+                vol.Optional(
+                    "default_best_before_days_after_thawing",
+                    description={
+                        "suggested_value": suggested_values.get(
+                            "default_best_before_days_after_thawing"
+                        ),
+                    },
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        mode=selector.NumberSelectorMode.BOX, step=1
+                    )
+                ),
+            }
+        )
     return schemas
 
 
