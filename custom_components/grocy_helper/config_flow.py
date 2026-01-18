@@ -1373,10 +1373,11 @@ def GENERATE_TRANSFER_STOCK_ENTRY(
     locations = [
         loc
         for loc in masterdata["locations"]
-        if loc["id"] != suggested_stockentry["location_id"]
         # can't transfer to same target
+        if loc["id"] != suggested_stockentry["location_id"]
+        # ...adhere to `should_not_be_frozen`-attribute
+        and (product["should_not_be_frozen"] == 0 or loc["is_freezer"] == 0)
     ]
-    # todo: sort alphabetically, or use Id's?
     locations.sort(key=lambda loc: loc["name"])
 
     suggested_values = suggested_values or {
@@ -1593,14 +1594,21 @@ def GENERATE_CREATE_PRODUCT_SCHEMA(
 def GENERATE_UPDATE_PRODUCT_DETAILS_SCHEMA(
     masterdata: GrocyMasterData, suggested_values: dict[str, str], product: GrocyProduct
 ) -> VolDictType:
+    locations = [
+        loc
+        for loc in masterdata["locations"]
+        # adhere to `should_not_be_frozen`-attribute
+        if product["should_not_be_frozen"] == 0 or loc["is_freezer"] == 0
+    ]
+    locations.sort(key=lambda loc: loc["name"])
     locs = [
         selector.SelectOptionDict(
             value=str(loc["id"]),
             label=loc["name"],
         )
-        for loc in masterdata["locations"]
+        for loc in locations
     ]
-    # todo: sort Locations
+
     qu = [
         selector.SelectOptionDict(
             value=str(qu["id"]),
@@ -1712,7 +1720,9 @@ def GENERATE_CREATE_PRODUCT_BARCODESCHEMA(
             value=str(store["id"]),
             label=store["name"],
         )
-        for store in masterdata["shopping_locations"]
+        for store in sorted(
+            masterdata["shopping_locations"], key=lambda loc: loc["name"]
+        )
     ]
     qu = [
         selector.SelectOptionDict(
