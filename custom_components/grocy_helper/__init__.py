@@ -48,14 +48,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         return s
 
     grocy = GrocyAPI(
-        # entry.data[CONF_GROCY_API_URL],
-        "http://10.2.193.164:4010",
+        entry.data[CONF_GROCY_API_URL],
         ["GROCY-API-KEY", entry.data[CONF_GROCY_API_KEY]],
         websession,
     )
     bbuddy = BarcodeBuddyAPI(
-        # entry.data[CONF_BBUDDY_API_URL],
-        "http://10.2.193.164:4011",
+        entry.data[CONF_BBUDDY_API_URL],
         ["BBUDDY-API-KEY", entry.data[CONF_BBUDDY_API_KEY]],
         websession,
     )

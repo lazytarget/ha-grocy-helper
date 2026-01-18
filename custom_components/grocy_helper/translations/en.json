@@ -20,7 +20,9 @@
             "model_not_support": "Model not supported"
         },
         "error": {
-            "unknown": "Unknown error occured, please see the logs for additional information"
+            "unknown": "Unknown error occured, please see the logs for additional information",
+            "invalid_location": "Invalid location",
+            "location_is_freezer": "The selected location is a freezer"
         },
         "step": {
             "init": {},

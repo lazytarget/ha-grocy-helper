@@ -501,6 +501,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
     async def async_step_scan_add_product(self, user_input: dict[str, Any] = None):
         """Handle input for adding a new product."""
         errors: dict[str, str] = {}
+        masterdata: GrocyMasterData = self._coordinator.data
         _LOGGER.info("add-product: %s", user_input)
 
         # code = current_barcode.strip().strip(",").strip()
@@ -538,17 +539,38 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         user_input = user_input or {}
         # self.matching_product = None
 
+        def format_off_name(off_product: OpenFoodFactsProduct) -> str:
+            brand = off_product.get("brand_owner") or (
+                (off_product.get("brands") or "").split(",")[0].strip()
+            )
+            product_name = (off_product.get("product_name") or "").strip()
+            quantity = (off_product.get("quantity") or "").strip()
+
+            off_fullname_parts: list[str] = [
+                part for part in (brand, product_name, quantity) if part
+            ]
+            off_fullname = " - ".join(off_fullname_parts)
+            _LOGGER.debug("Parsed product name: %s from: %s", off_fullname, off_product)
+            return off_fullname
+
+        off_fullname = (
+            format_off_name(self.current_product_openfoodfacts)
+            if self.current_product_openfoodfacts is not None
+            else None
+        )
+
         if self.current_product_openfoodfacts is not None:
             # Fill in from OpenFoodFacts
             user_input["name"] = (
                 user_input.get("name")
+                or off_fullname
                 or self.current_product_openfoodfacts["product_name"]
             )
             unit = self.current_product_openfoodfacts.get("product_quantity_unit")
             if unit:
                 for qq in filter(
                     lambda qu: qu.get("name") == unit,
-                    self._coordinator.data["quantity_units"],
+                    masterdata["quantity_units"],
                 ):
                     # todo: replace this ´product_quantity_unit ´suggestion, with Pack/Piece suggestion
                     # user_input["qu_id"] = str(qq["id"])
@@ -558,19 +580,13 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     pass
             # todo: fill in guess of QuantityUnit...
 
-            # user_input["calories"] = user_input.get(
-            #     "calories"
-            # ) or self.current_product_openfoodfacts.get("nutriments", {}).get(
-            #     "energy_kcal_100g"
-            # )
-
             if self.current_product_ica is not None:
                 # todo: fill in info from ICA...
                 pass
 
         if show_form:
             schema: VolDictType = None
-            schema = GENERATE_CREATE_PRODUCT_SCHEMA(self._coordinator.data, user_input)
+            schema = GENERATE_CREATE_PRODUCT_SCHEMA(masterdata, user_input)
 
             _LOGGER.info("schema: %s", schema)
             _LOGGER.info("form 'add_product' user_input: %s", user_input)
@@ -600,10 +616,28 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
             # more friendly name (barcode has specific name/"note")
             new_product["name"] = user_input["name"]
+            new_product["description"] = user_input.get(
+                "description",
+                # fallback to a formatted name from OpenFoodFacts
+                off_fullname,
+            )
             new_product["location_id"] = user_input["location_id"]
             new_product["should_not_be_frozen"] = (
                 1 if user_input.get("should_not_be_frozen", False) else 0
             )
+            loc = next(
+                (
+                    loc
+                    for loc in masterdata["locations"]
+                    if str(loc["id"]) == str(new_product["location_id"])
+                ),
+                None,
+            )
+            if not loc:
+                errors["location_id"] = "invalid_location"
+            elif new_product["should_not_be_frozen"] == 1 and loc["is_freezer"] == 1:
+                errors["location_id"] = "location_is_freezer"
+
             if val := user_input.get("default_best_before_days"):
                 new_product["default_best_before_days"] = int(val)
             if val := user_input.get("default_best_before_days_after_open"):
@@ -620,7 +654,6 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             new_product["qu_id_consume"] = user_input.get(
                 "qu_id_consume", user_input.get("qu_id")
             )
-            # new_product["calories"] = user_input.get("calories")
             new_product["row_created_timestamp"] = dt.datetime.now().strftime(
                 "%Y-%m-%d %H:%M:%S"
             )
@@ -628,6 +661,18 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             # create product
             _LOGGER.info("user_input: %s", user_input)
             _LOGGER.info("new_product: %s", new_product)
+            if errors:
+                schema: VolDictType = None
+                schema = GENERATE_CREATE_PRODUCT_SCHEMA(masterdata, user_input)
+                schema = vol.Schema(schema)
+                self.add_suggested_values_to_schema(schema, user_input)
+                _LOGGER.warning("Input errors: %s", errors)
+                return self.async_show_form(
+                    step_id=Step.SCAN_ADD_PRODUCT,
+                    data_schema=schema,
+                    errors=errors,
+                )
+
             product = await self._api_grocy.add_product(new_product)
             _LOGGER.info("created prod: %s", product)
             # todo: check for success!
@@ -1373,10 +1418,11 @@ def GENERATE_TRANSFER_STOCK_ENTRY(
     locations = [
         loc
         for loc in masterdata["locations"]
-        if loc["id"] != suggested_stockentry["location_id"]
         # can't transfer to same target
+        if loc["id"] != suggested_stockentry["location_id"]
+        # ...adhere to `should_not_be_frozen`-attribute
+        and (product["should_not_be_frozen"] == 0 or loc["is_freezer"] == 0)
     ]
-    # todo: sort alphabetically, or use Id's?
     locations.sort(key=lambda loc: loc["name"])
 
     suggested_values = suggested_values or {
@@ -1468,6 +1514,9 @@ def GENERATE_CREATE_PRODUCT_SCHEMA(
         {
             vol.Required(
                 "location_id",
+                description={
+                    "suggested_value": suggested_values.get("location_id"),
+                },
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=locs,
@@ -1593,14 +1642,21 @@ def GENERATE_CREATE_PRODUCT_SCHEMA(
 def GENERATE_UPDATE_PRODUCT_DETAILS_SCHEMA(
     masterdata: GrocyMasterData, suggested_values: dict[str, str], product: GrocyProduct
 ) -> VolDictType:
+    locations = [
+        loc
+        for loc in masterdata["locations"]
+        # adhere to `should_not_be_frozen`-attribute
+        if product["should_not_be_frozen"] == 0 or loc["is_freezer"] == 0
+    ]
+    locations.sort(key=lambda loc: loc["name"])
     locs = [
         selector.SelectOptionDict(
             value=str(loc["id"]),
             label=loc["name"],
         )
-        for loc in masterdata["locations"]
+        for loc in locations
     ]
-    # todo: sort Locations
+
     qu = [
         selector.SelectOptionDict(
             value=str(qu["id"]),
@@ -1712,7 +1768,9 @@ def GENERATE_CREATE_PRODUCT_BARCODESCHEMA(
             value=str(store["id"]),
             label=store["name"],
         )
-        for store in masterdata["shopping_locations"]
+        for store in sorted(
+            masterdata["shopping_locations"], key=lambda loc: loc["name"]
+        )
     ]
     qu = [
         selector.SelectOptionDict(
