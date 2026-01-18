@@ -501,6 +501,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
     async def async_step_scan_add_product(self, user_input: dict[str, Any] = None):
         """Handle input for adding a new product."""
         errors: dict[str, str] = {}
+        masterdata: GrocyMasterData = self._coordinator.data
         _LOGGER.info("add-product: %s", user_input)
 
         # code = current_barcode.strip().strip(",").strip()
@@ -575,7 +576,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             if unit:
                 for qq in filter(
                     lambda qu: qu.get("name") == unit,
-                    self._coordinator.data["quantity_units"],
+                    masterdata["quantity_units"],
                 ):
                     # todo: replace this ´product_quantity_unit ´suggestion, with Pack/Piece suggestion
                     # user_input["qu_id"] = str(qq["id"])
@@ -591,7 +592,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         if show_form:
             schema: VolDictType = None
-            schema = GENERATE_CREATE_PRODUCT_SCHEMA(self._coordinator.data, user_input)
+            schema = GENERATE_CREATE_PRODUCT_SCHEMA(masterdata, user_input)
 
             _LOGGER.info("schema: %s", schema)
             _LOGGER.info("form 'add_product' user_input: %s", user_input)
@@ -630,6 +631,19 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             new_product["should_not_be_frozen"] = (
                 1 if user_input.get("should_not_be_frozen", False) else 0
             )
+            loc = next(
+                (
+                    loc
+                    for loc in masterdata["locations"]
+                    if str(loc["id"]) == str(new_product["location_id"])
+                ),
+                None,
+            )
+            if not loc:
+                errors["location_id"] = "invalid_location"
+            elif new_product["should_not_be_frozen"] == 1 and loc["is_freezer"] == 1:
+                errors["location_id"] = "location_is_freezer"
+
             if val := user_input.get("default_best_before_days"):
                 new_product["default_best_before_days"] = int(val)
             if val := user_input.get("default_best_before_days_after_open"):
@@ -653,6 +667,18 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             # create product
             _LOGGER.info("user_input: %s", user_input)
             _LOGGER.info("new_product: %s", new_product)
+            if errors:
+                schema: VolDictType = None
+                schema = GENERATE_CREATE_PRODUCT_SCHEMA(masterdata, user_input)
+                schema = vol.Schema(schema)
+                self.add_suggested_values_to_schema(schema, user_input)
+                _LOGGER.warning("Input errors: %s", errors)
+                return self.async_show_form(
+                    step_id=Step.SCAN_ADD_PRODUCT,
+                    data_schema=schema,
+                    errors=errors,
+                )
+
             product = await self._api_grocy.add_product(new_product)
             _LOGGER.info("created prod: %s", product)
             # todo: check for success!
@@ -1494,6 +1520,9 @@ def GENERATE_CREATE_PRODUCT_SCHEMA(
         {
             vol.Required(
                 "location_id",
+                description={
+                    "suggested_value": suggested_values.get("location_id"),
+                },
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=locs,
