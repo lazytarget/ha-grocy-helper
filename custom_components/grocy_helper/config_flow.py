@@ -539,28 +539,22 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         user_input = user_input or {}
         # self.matching_product = None
 
-        off_fullname = (
-            (
-                " - ".join(
-                    [
-                        self.current_product_openfoodfacts.get("brands", "")
-                        .split(",")[0]
-                        .strip(),
-                        self.current_product_openfoodfacts.get(
-                            "product_name", ""
-                        ).strip(),
-                        f"{
-                            self.current_product_openfoodfacts.get(
-                                'product_quantity', '?'
-                            )
-                        } {
-                            self.current_product_openfoodfacts.get(
-                                'product_quantity_unit', ''
-                            )
-                        }",
-                    ]
-                )
+        def format_off_name(off_product: OpenFoodFactsProduct) -> str:
+            brand = off_product.get("brand_owner") or (
+                (off_product.get("brands") or "").split(",")[0].strip()
             )
+            product_name = (off_product.get("product_name") or "").strip()
+            quantity = (off_product.get("quantity") or "").strip()
+
+            off_fullname_parts: list[str] = [
+                part for part in (brand, product_name, quantity) if part
+            ]
+            off_fullname = " - ".join(off_fullname_parts)
+            _LOGGER.debug("Parsed product name: %s from: %s", off_fullname, off_product)
+            return off_fullname
+
+        off_fullname = (
+            format_off_name(self.current_product_openfoodfacts)
             if self.current_product_openfoodfacts is not None
             else None
         )
