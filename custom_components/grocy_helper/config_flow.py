@@ -600,6 +600,26 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
             # more friendly name (barcode has specific name/"note")
             new_product["name"] = user_input["name"]
+            new_product["description"] = user_input.get(
+                "description",
+                # fallback to a formatted name from OpenFoodFacts
+                "".join(
+                    [
+                        self.current_product_openfoodfacts.get("brands", "").strip(),
+                        self.current_product_openfoodfacts.get(
+                            "product_name", ""
+                        ).strip(),
+                        self.current_product_openfoodfacts.get(
+                            "product_quantity", ""
+                        ).strip(),
+                        self.current_product_openfoodfacts.get(
+                            "product_quantity_unit", ""
+                        ).strip(),
+                    ]
+                )
+                if self.current_product_openfoodfacts
+                else "",
+            )
             new_product["location_id"] = user_input["location_id"]
             new_product["should_not_be_frozen"] = (
                 1 if user_input.get("should_not_be_frozen", False) else 0
