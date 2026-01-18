@@ -538,10 +538,37 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         user_input = user_input or {}
         # self.matching_product = None
 
+        off_fullname = (
+            (
+                " - ".join(
+                    [
+                        self.current_product_openfoodfacts.get("brands", "")
+                        .split(",")[0]
+                        .strip(),
+                        self.current_product_openfoodfacts.get(
+                            "product_name", ""
+                        ).strip(),
+                        f"{
+                            self.current_product_openfoodfacts.get(
+                                'product_quantity', '?'
+                            )
+                        } {
+                            self.current_product_openfoodfacts.get(
+                                'product_quantity_unit', ''
+                            )
+                        }",
+                    ]
+                )
+            )
+            if self.current_product_openfoodfacts is not None
+            else None
+        )
+
         if self.current_product_openfoodfacts is not None:
             # Fill in from OpenFoodFacts
             user_input["name"] = (
                 user_input.get("name")
+                or off_fullname
                 or self.current_product_openfoodfacts["product_name"]
             )
             unit = self.current_product_openfoodfacts.get("product_quantity_unit")
@@ -557,12 +584,6 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     # todo: find closest similiar Unit (example: g -> kg)
                     pass
             # todo: fill in guess of QuantityUnit...
-
-            # user_input["calories"] = user_input.get(
-            #     "calories"
-            # ) or self.current_product_openfoodfacts.get("nutriments", {}).get(
-            #     "energy_kcal_100g"
-            # )
 
             if self.current_product_ica is not None:
                 # todo: fill in info from ICA...
@@ -603,22 +624,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             new_product["description"] = user_input.get(
                 "description",
                 # fallback to a formatted name from OpenFoodFacts
-                "".join(
-                    [
-                        self.current_product_openfoodfacts.get("brands", "").strip(),
-                        self.current_product_openfoodfacts.get(
-                            "product_name", ""
-                        ).strip(),
-                        self.current_product_openfoodfacts.get(
-                            "product_quantity", ""
-                        ).strip(),
-                        self.current_product_openfoodfacts.get(
-                            "product_quantity_unit", ""
-                        ).strip(),
-                    ]
-                )
-                if self.current_product_openfoodfacts
-                else "",
+                off_fullname,
             )
             new_product["location_id"] = user_input["location_id"]
             new_product["should_not_be_frozen"] = (
@@ -640,7 +646,6 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             new_product["qu_id_consume"] = user_input.get(
                 "qu_id_consume", user_input.get("qu_id")
             )
-            # new_product["calories"] = user_input.get("calories")
             new_product["row_created_timestamp"] = dt.datetime.now().strftime(
                 "%Y-%m-%d %H:%M:%S"
             )
