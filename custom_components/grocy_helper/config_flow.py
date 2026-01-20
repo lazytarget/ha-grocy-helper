@@ -203,6 +203,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
     current_barcode_schema: vol.Schema = None
     current_product_stock_info: ExtendedGrocyProductStockInfo | None = None
     current_product_openfoodfacts: OpenFoodFactsProduct | None = None
+    current_product_ica: dict | None = None
     matching_products: list[GrocyProduct] = []
     current_stock_entries: list[GrocyStockEntry] = []
 
@@ -331,6 +332,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         code = current_barcode.strip().strip(",").strip()
         self.current_barcode = code
         self.current_product_stock_info = None
+        self.current_product_openfoodfacts = None
+        self.current_product_ica = None
 
         if self.barcode_scan_mode == SCAN_MODE.SCAN_BBUDDY:
             bb_mode = await self._api_bbuddy.get_mode()
@@ -378,9 +381,31 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     if not product:
                         # New barcode (Not provisioned in Grocy)
                         _LOGGER.info(
-                            "New product, do a lookup against OpenFoodFacts: %s", code
+                            "New product, doing lookup against barcode providers: %s",
+                            code,
                         )
-                        # todo: Lookup in other providers...
+
+                        # Lookup in ICA integration
+                        hass = self._coordinator._hass
+                        if hass.services.has_service("ica", "lookup_product"):
+                            _LOGGER.debug("Querying ICA for barcode: %s", code)
+                            r = await hass.services.async_call(
+                                domain="ica",
+                                service="lookup_product",
+                                service_data={"identifier": code},
+                                blocking=True,
+                                context=None,
+                                target=None,
+                                return_response=True,
+                            )
+                            _LOGGER.debug("Got ICA response: %s", r)
+                            if r and r.get("success"):
+                                self.current_product_ica = r.get("data")
+                            _LOGGER.debug("ICA product: %s", self.current_product_ica)
+                        # else:
+                        #     _LOGGER.warning("Has no ICA lookup service")
+
+                        # Lookup in OpenFoodFacts
                         self.current_product_openfoodfacts: (
                             OpenFoodFactsProduct | None
                         ) = await self._coordinator.get_product_from_open_food_facts(
@@ -390,8 +415,6 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                             "OpenFoodFacts product: %s",
                             self.current_product_openfoodfacts,
                         )
-                        self.current_product_ica: dict = {}
-                        # _LOGGER.info("ICA product: %s", self.current_product_ica)
 
                         masterdata: GrocyMasterData = self._coordinator.data
                         for matching_product in filter(
@@ -407,7 +430,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                                     self.current_product_ica is not None
                                     and p["name"].casefold()
                                     == self.current_product_ica.get(
-                                        "name", ""
+                                        "ean_name", ""
                                     ).casefold()
                                 )
                             ),
@@ -529,6 +552,13 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         ):
             # Not found in other providers, then will show empty input for manual registration
             _LOGGER.warning("No product info found from providers, code: %s", code)
+
+            # hass.services.supports_response -> SupportsResponse
+
+            # todo: Service.entity_service_call
+            # `ica.lookup_product`
+            # check if exists, then invoke...
+
             # errors["NoProduct"] = "No product found!"
             # return self.async_show_form(
             #     step_id=Step.SCAN_ADD_PRODUCT,
@@ -559,6 +589,12 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             else None
         )
 
+        if self.current_product_ica is not None:
+            # Fill in info from ICA
+            user_input["name"] = user_input.get("name") or self.current_product_ica.get(
+                "ean_name"
+            )
+
         if self.current_product_openfoodfacts is not None:
             # Fill in from OpenFoodFacts
             user_input["name"] = (
@@ -579,10 +615,6 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     # todo: find closest similiar Unit (example: g -> kg)
                     pass
             # todo: fill in guess of QuantityUnit...
-
-            if self.current_product_ica is not None:
-                # todo: fill in info from ICA...
-                pass
 
         if show_form:
             schema: VolDictType = None
@@ -1335,6 +1367,7 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
         )
     selected_product_id = str(selected_product_id)
 
+    # todo: rewrite this Schema to have radio button for Create / Create child? / Map existing
     schemas: VolDictType = {}
     schemas.update(
         {
@@ -1506,6 +1539,8 @@ def GENERATE_CREATE_PRODUCT_SCHEMA(
                 "name",
                 description={
                     "suggested_value": suggested_values.get("name"),
+                    # todo: render as listbox with suggested values, but allow for custom text?
+                    # Example: Mango / Mango Fryst 250g ICA / Fryst mango
                 },
             ): selector.TextSelector({"type": "text"})
         }
