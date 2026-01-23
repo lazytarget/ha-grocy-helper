@@ -71,10 +71,11 @@
                 "title": "Barcode {barcode}",
                 "description": "{lookup_output}\n\n## Name suggestions\n{product_aliases}",
                 "data": {
-                    "product_id": "Product"
+                    "product_id": "Product",
+                    "parent_product": "Parent product"
                 },
                 "data_description": {
-                    "product_id": "Barcode {barcode} will be mapped to this product. Enter a new name to create new.",
+                    "product_id": "Barcode {barcode} will be mapped to this product. \nName suggestions are grouped on top of dropdown.",
                     "product_mode": "Decide how to map",
                     "parent_product": "Specify existing or new parent. Leave empty to ignore."
                 }

@@ -581,6 +581,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                         # todo: look up more info by articleId?
                     if b := a.get("articleGroupId"):
                         ica_output.append(f"ArticleGroupId: {b}")
+                        # todo: map articleGroupId into Grocy Product Group
                 if a := p.get("offers"):
                     pass
 
@@ -794,6 +795,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 # fallback to a formatted name from OpenFoodFacts
                 off_fullname,
             )
+            # todo: perhaps set the `lookup_output` as the description?
             new_product["location_id"] = user_input["location_id"]
             new_product["should_not_be_frozen"] = (
                 1 if user_input.get("should_not_be_frozen", False) else 0
@@ -1508,7 +1510,7 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
     ]
     prods.insert(
         len(suggested_products),
-        selector.SelectOptionDict(value="-1", label="--CREATE NEW--"),
+        selector.SelectOptionDict(value="-1", label="[CHOOSE FROM SUGGESTIONS / ENTER NAME]"),
     )
 
     # If no suggestions, then pre-select "CREATE-NEW"
