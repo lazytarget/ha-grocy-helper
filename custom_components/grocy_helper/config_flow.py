@@ -33,6 +33,7 @@ from .grocytypes import (
     GrocyStockEntry,
     OpenFoodFactsProduct,
 )
+from .utils import try_parse_int
 
 from .const import (
     DOMAIN,
@@ -204,6 +205,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
     current_product_stock_info: ExtendedGrocyProductStockInfo | None = None
     current_product_openfoodfacts: OpenFoodFactsProduct | None = None
     current_product_ica: dict | None = None
+    current_parent_product_id: str | None = None
     matching_products: list[GrocyProduct] = []
     current_stock_entries: list[GrocyStockEntry] = []
 
@@ -647,6 +649,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 errors=errors,
             )
 
+        self.current_parent_product_id = user_input.get("parent_product")
+
         # Input has been passed!
         if user_input.get("product_id") and user_input["product_id"] != "-1":
             # A specific product was chosen, use that instead of creation...
@@ -656,6 +660,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     int(user_input["product_id"])
                 )
             )
+            # todo: update product with chosen parent info?
+            # but will need to fill in fields from Child onto Parent
         else:
             # Create a new product
             _LOGGER.info("no-product-id: %s", user_input)
@@ -787,7 +793,6 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             )
         else:
             # Create a new product
-
             # more friendly name (barcode has specific name/"note")
             new_product["name"] = user_input["name"]
             new_product["description"] = user_input.get(
@@ -848,6 +853,49 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     errors=errors,
                 )
 
+            # Create parent product (if specified)
+            if p := self.current_parent_product_id:
+                (r, i) = try_parse_int(p)
+            if r and i > 0:
+                # Assign chosen Parent to the new product
+                new_product["parent_product_id"] = i
+            else:
+                # Passed string instead of id, which means create
+                # Copy properties as they are set for child product
+                # ...then overwrite to be relevant for a Parent product
+                pp_input: GrocyProduct = new_product.copy()
+                pp_input["name"] = p
+                pp_input["description"] = ""
+
+                # Set properties only relevant for a Parent product
+                pp_input["no_own_stock"] = 1
+                pp_input["hide_on_stock_overview"] = 1
+                pp_input["disable_open"] = 1
+                pp_input["cumulate_min_stock_amount_of_sub_products"] = 1
+
+                # pp_input["location_id"] = new_product["location_id"]
+                # pp_input["should_not_be_frozen"] = new_product["should_not_be_frozen"]
+                # TODO: Set these to g/ml, after the conversion has been created?
+                # pp_input["qu_id_stock"] = user_input.get(
+                #     "qu_id_stock", user_input.get("qu_id")
+                # )
+                # pp_input["qu_id_purchase"] = user_input.get(
+                #     "qu_id_purchase", user_input.get("qu_id")
+                # )
+                # pp_input["qu_id_price"] = user_input.get(
+                #     "qu_id_price", user_input.get("qu_id")
+                # )
+                # pp_input["qu_id_consume"] = user_input.get(
+                #     "qu_id_consume", user_input.get("qu_id")
+                # )
+
+                # Create parent product
+                parent_product = await self._coordinator.create_product(pp_input)
+                _LOGGER.info("created parent: %s", parent_product)
+                new_product["parent_product_id"] = parent_product["id"]
+                # todo: check for success!
+
+            # Create product
             product = await self._api_grocy.add_product(new_product)
             _LOGGER.info("created prod: %s", product)
             # todo: check for success!
@@ -1089,6 +1137,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     to_qu_id=gram_unit["id"],  # grams or millilitres
                 )
             )
+            # TODO: handle `c is None`
             _LOGGER.warning(
                 "Converted: %s %s -> %s %s",
                 c["from_amount"],
@@ -1510,7 +1559,9 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
     ]
     prods.insert(
         len(suggested_products),
-        selector.SelectOptionDict(value="-1", label="[CHOOSE FROM SUGGESTIONS / ENTER NAME]"),
+        selector.SelectOptionDict(
+            value="-1", label="[CHOOSE FROM SUGGESTIONS / ENTER NAME]"
+        ),
     )
 
     # If no suggestions, then pre-select "CREATE-NEW"
@@ -1551,7 +1602,8 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
     )
     schemas.update(
         {
-            vol.Required(
+            # todo: is this really needed??
+            vol.Optional(
                 "product_mode",
                 description={
                     "suggested_value": suggested_values.get("product_mode")

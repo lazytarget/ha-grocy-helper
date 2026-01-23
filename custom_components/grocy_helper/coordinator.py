@@ -2,7 +2,7 @@
 
 import logging
 import traceback
-from datetime import timedelta
+import datetime as dt
 from typing import Optional
 
 from homeassistant.config_entries import ConfigEntry
@@ -14,6 +14,7 @@ from .grocyapi import GrocyAPI
 from .barcodebuddyapi import BarcodeBuddyAPI
 from .grocytypes import (
     GrocyMasterData,
+    GrocyProduct,
     GrocyQuantityUnitConversionResolved,
     GrocyQuantityUnitConversionResult,
     OpenFoodFactsProduct,
@@ -33,7 +34,7 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
         grocy_api: GrocyAPI,
         barcodebuddy_api: BarcodeBuddyAPI,
         logger: logging.Logger,
-        update_interval: timedelta,
+        update_interval: dt.timedelta,
     ) -> None:
         """Initialize the Grocy-helper coordinator."""
         super().__init__(
@@ -93,6 +94,81 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
             _LOGGER.error(traceback.format_exc())
             raise UpdateFailed(f"Error communicating with API: {err}") from err
 
+    async def create_product(self, user_input) -> GrocyProduct:
+        # argument 'user_input' should instead be 'new_product'?
+        # ..let validation and fallback values be a part of Config flow not coordinator?
+        new_product: GrocyProduct = {}
+        new_product["name"] = user_input["name"]
+        new_product["description"] = user_input.get("description")
+        new_product["location_id"] = user_input["location_id"]
+        new_product["should_not_be_frozen"] = (
+            1 if user_input.get("should_not_be_frozen", False) else 0
+        )
+        # todo: Remove obsolete validation, that is done in config_flow right now
+        # loc = next(
+        #     (
+        #         loc
+        #         for loc in masterdata["locations"]
+        #         if str(loc["id"]) == str(new_product["location_id"])
+        #     ),
+        #     None,
+        # )
+        # if not loc:
+        #     errors["location_id"] = "invalid_location"
+        # elif new_product["should_not_be_frozen"] == 1 and loc["is_freezer"] == 1:
+        #     errors["location_id"] = "location_is_freezer"
+
+        if val := user_input.get("default_best_before_days"):
+            new_product["default_best_before_days"] = int(val)
+        if val := user_input.get("default_best_before_days_after_open"):
+            new_product["default_best_before_days_after_open"] = int(val)
+        new_product["qu_id_purchase"] = user_input.get(
+            "qu_id_purchase", user_input.get("qu_id")
+        )
+        new_product["qu_id_stock"] = user_input.get(
+            "qu_id_stock", user_input.get("qu_id")
+        )
+        new_product["qu_id_price"] = user_input.get(
+            "qu_id_price", user_input.get("qu_id")
+        )
+        new_product["qu_id_consume"] = user_input.get(
+            "qu_id_consume", user_input.get("qu_id")
+        )
+        new_product["row_created_timestamp"] = dt.datetime.now().strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        if b := user_input.get("parent_product_id"):
+            new_product["parent_product_id"] = b
+        if b := user_input.get("no_own_stock"):
+            new_product["no_own_stock"] = b
+        if b := user_input.get("hide_on_stock_overview"):
+            new_product["hide_on_stock_overview"] = b
+        if b := user_input.get("disable_open"):
+            new_product["disable_open"] = b
+        if b := user_input.get("cumulate_min_stock_amount_of_sub_products"):
+            new_product["cumulate_min_stock_amount_of_sub_products"] = b
+
+        # create product
+        _LOGGER.info("user_input: %s", user_input)
+        _LOGGER.info("new_product: %s", new_product)
+        # if errors:
+        #     schema: VolDictType = None
+        #     schema = GENERATE_CREATE_PRODUCT_SCHEMA(masterdata, user_input)
+        #     schema = vol.Schema(schema)
+        #     self.add_suggested_values_to_schema(schema, user_input)
+        #     _LOGGER.warning("Input errors: %s", errors)
+        #     return self.async_show_form(
+        #         step_id=Step.SCAN_ADD_PRODUCT,
+        #         data_schema=schema,
+        #         errors=errors,
+        #     )
+
+        product = await self._api_grocy.add_product(new_product)
+        # todo: check for success!
+        _LOGGER.info("created prod: %s", product)
+        return product
+
+    
     async def convert_quantity_for_product(
         self,
         product_id,
