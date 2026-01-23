@@ -419,6 +419,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                         masterdata: GrocyMasterData = self._coordinator.data
                         for matching_product in filter(
                             lambda p: (
+                                # OFF.product_name
                                 (
                                     self.current_product_openfoodfacts is not None
                                     and p["name"].casefold()
@@ -426,6 +427,15 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                                         "product_name", ""
                                     ).casefold()
                                 )
+                                # OFF.genric_name
+                                (
+                                    self.current_product_openfoodfacts is not None
+                                    and p["name"].casefold()
+                                    == self.current_product_openfoodfacts.get(
+                                        "generic_name", ""
+                                    ).casefold()
+                                )
+                                # ICA.ean_name
                                 or (
                                     self.current_product_ica is not None
                                     and p["name"].casefold()
@@ -433,10 +443,18 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                                         "ean_name", ""
                                     ).casefold()
                                 )
+                                # ICA.article.name
+                                or (
+                                    self.current_product_ica is not None
+                                    and p["name"].casefold()
+                                    == self.current_product_ica.get("article", {}).get("name", "").casefold()
+                                )
+                                # todo: ICA offer name
                             ),
                             masterdata["products"],
                         ):
                             # todo: also loop through ProductBarcode notes
+                            # todo: skip Active==0 products
                             _LOGGER.info("Match: %s", matching_product)
                             self.matching_products.append(matching_product)
 
@@ -498,10 +516,46 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
             schema = vol.Schema(schema)
 
+
+
+            # todo: move to seperate function?
+            def format_off_name(off_product: OpenFoodFactsProduct) -> str:
+                brand = off_product.get("brand_owner") or (
+                    (off_product.get("brands") or "").split(",")[0].strip()
+                )
+                product_name = (off_product.get("product_name") or "").strip()
+                quantity = (off_product.get("quantity") or "").strip()
+
+                off_fullname_parts: list[str] = [
+                    part for part in (brand, product_name, quantity) if part
+                ]
+                off_fullname = " - ".join(off_fullname_parts)
+                _LOGGER.debug("Parsed product name: %s from: %s", off_fullname, off_product)
+                return off_fullname
+
+            off_fullname = (
+                format_off_name(self.current_product_openfoodfacts)
+                if self.current_product_openfoodfacts is not None
+                else None
+            )
+            ica_fullname = (
+                self.current_product_ica.get("ean_name")
+                if self.current_product_ica is not None else None
+            )
+            
+            plc = {
+                "barcode": code,
+                "lookup_name": ica_fullname or off_fullname,
+                "product_matches": "\n".join(
+                    f"{p['name']}"
+                    for p in self.matching_products
+                ),
+            }
             # ask for input...
             return self.async_show_form(
                 step_id=Step.SCAN_MATCH_PRODUCT,
                 data_schema=schema,
+                description_placeholders=plc,
                 errors=errors,
             )
 
@@ -1336,6 +1390,18 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
     suggested_products: list[GrocyProduct],
     suggested_values: dict[str, str] = {},
 ) -> VolDictType:
+    child_products = [
+        prod
+        for prod in masterdata['products']
+        if prod['parent_product_id']
+    ]
+    child_product_ids = [prod["id"] for prod in child_products]
+    parent_products = [
+        prod
+        for prod in masterdata['products']
+        if prod['id'] not in child_product_ids
+    ]
+    
     suggested_product_ids = [prod["id"] for prod in suggested_products]
     non_suggested_prods = [
         prod
@@ -1354,12 +1420,14 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
             label=prod["name"],
         )
         for prod in product_options
+        if prod["active"] == 1
     ]
     prods.insert(
         len(suggested_products),
         selector.SelectOptionDict(value="-1", label="--CREATE NEW--"),
     )
 
+    # If no suggestions, then pre-select "CREATE-NEW"
     selected_product_id = "-1"
     if len(suggested_products) > 0:
         selected_product_id = suggested_values.get(
@@ -1368,7 +1436,16 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
     selected_product_id = str(selected_product_id)
 
     # todo: rewrite this Schema to have radio button for Create / Create child? / Map existing
+
+    # -> barcode
+
+    # Form1:
+    # dropdown: choose matching product / or create new
+    # radio: "choose existing above" / "create new"  / "create new with parent"
+    # dropdown: "new parent" / or choose from existing "parent-node"
+
     schemas: VolDictType = {}
+    # todo: render a text that shows lookup results
     schemas.update(
         {
             vol.Optional(
@@ -1376,12 +1453,81 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
                 description={
                     "suggested_value": selected_product_id,
                 },
-                default=selected_product_id,
+                # default=selected_product_id,
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=prods,
                     mode=selector.SelectSelectorMode.DROPDOWN,
                     multiple=False,
+                    custom_value=True,
+                )
+            ),
+        }
+    )
+    schemas.update(
+        {
+            vol.Required(
+                "product_mode",
+                description={
+                    "suggested_value": None  # todo: Pre-select
+                },
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        selector.SelectOptionDict(
+                            value="choose_child",  # todo: possible in the future to want to scan parents??
+                            label="Map to existing product above",
+                        ),
+                        selector.SelectOptionDict(
+                            value="create_new_product",
+                            label="Create a new specific product",
+                        ),
+                        selector.SelectOptionDict(
+                            value="create_new_child_and_parent",
+                            label="Create new child and/or parent",
+                        ),
+                    ],
+                    mode=selector.SelectSelectorMode.LIST,
+                    multiple=False,
+                )
+            ),
+        }
+    )
+    schemas.update(
+        {
+            vol.Optional(
+                "parent_product",
+                description={
+                    "suggested_value": suggested_values.get("parent_product"),
+                },
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    # options=[
+                    #     selector.SelectOptionDict(
+                    #         value="1",
+                    #         label="Mango färsk",
+                    #     ),
+                    #     selector.SelectOptionDict(
+                    #         value="2",
+                    #         label="Mango färsk",
+                    #     ),
+                    #     selector.SelectOptionDict(
+                    #         value="mjölk",
+                    #         label="Mjölk",
+                    #     ),
+                    # ],
+                    # List existing Parent products
+                    options=[
+                        selector.SelectOptionDict(
+                            value=str(prod['id']),
+                            label=prod['name']
+                        )
+                        for prod in parent_products
+                        if prod["active"] == 1
+                    ],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                    multiple=False,
+                    custom_value=True,  # allows for creating a new parent
                 )
             ),
         }

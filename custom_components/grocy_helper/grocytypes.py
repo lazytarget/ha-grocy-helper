@@ -199,5 +199,6 @@ class OpenFoodFactsProduct(TypedDict):
     product_quantity_unit: str | None
     product_name: str | None
     product_type: str | None
+    generic_name: str | None
     nutriments: OpenFoodFactsProductNutriments | None
     categories: list[str]

@@ -78,6 +78,7 @@ class OpenFoodFacts:
         "serving_quantity",
         "serving_quantity_unit",
         "product_name",
+        "generic_name",
         "product_type",
         "expiration_date",
         "categories_hierarchy",
