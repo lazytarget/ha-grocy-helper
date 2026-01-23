@@ -202,3 +202,4 @@ class OpenFoodFactsProduct(TypedDict):
     generic_name: str | None
     nutriments: OpenFoodFactsProductNutriments | None
     categories: list[str]
+    categories_hierarchy: list[str]

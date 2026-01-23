@@ -329,7 +329,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             )
             return self.async_abort(reason=msg)
 
-        code = current_barcode.strip().strip(",").strip()
+        code = current_barcode.strip().strip(",").strip().lstrip("0")
         self.current_barcode = code
         self.current_product_stock_info = None
         self.current_product_openfoodfacts = None
@@ -562,7 +562,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             #     if self.current_product_ica is not None
             #     else None
             # )
-            
+
             product_aliases: list[str] = []
 
             ica_output: list[str] = []
@@ -576,25 +576,24 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     if b := a.get("name"):
                         ica_output.append(f"Article name: **{b}**")
                         product_aliases.append(b)
-                    if b := p.get("articleId"):
+                    if b := a.get("articleId"):
                         ica_output.append(f"Article id: {b}")
-                        # todo: look up by articleId?
-                    if b := p.get("articleGroupId"):
+                        # todo: look up more info by articleId?
+                    if b := a.get("articleGroupId"):
                         ica_output.append(f"ArticleGroupId: {b}")
                 if a := p.get("offers"):
                     pass
 
             off_output: list[str] = []
             if self.current_product_openfoodfacts is not None:
-                p = self.current_product_ica
+                p = self.current_product_openfoodfacts
                 off_output.append("## OpenFoodFacts")
+                if b := p.get("product_type"):
+                    off_output.append(f"Product type: {b}")
                 if b := p.get("brand_owner"):
                     off_output.append(f"Brand Owner: {b}")
                 if b := p.get("brands"):
                     off_output.append(f"Brands: {b}")
-
-                if b := p.get("product_type"):
-                    off_output.append(f"Product type: {b}")
                 if b := p.get("product_name"):
                     off_output.append(f"Product name: **{b}**")
                     product_aliases.append(b)
@@ -621,14 +620,18 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 if b := p.get("categories"):
                     off_output.append(f"Categories: {b}")
 
-
-            lookup_output = "\n\n".join(["\n".join(p) for p in (ica_output, off_output) if p])
+            lookup_output = "\n\n".join(
+                ["\n".join(p) for p in (ica_output, off_output) if len(p) > 1]
+            )
             lookup_output = f"# Barcode lookup\n\n{lookup_output}"
+
+            # Markdown list
+            product_aliases = [f"- {a.strip()}" for a in product_aliases if a]
 
             plc = {
                 "barcode": code,
                 # "lookup_name": ica_fullname or off_fullname,
-                "product_aliases": sorted(set(product_aliases)),
+                "product_aliases": "\n".join(sorted(set(product_aliases))),
                 "lookup_output": lookup_output,
                 "product_matches": "\n".join(
                     f"{p['name']}" for p in self.matching_products
