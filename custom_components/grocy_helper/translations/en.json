@@ -68,8 +68,8 @@
                 "title": "Create a group sensor"
             },
             "scan_match_to_product": {
-                "title": "Map {barcode} to Product",
-                "description": "{lookup_output}",
+                "title": "Barcode {barcode}",
+                "description": "{lookup_output}\n\n## Name suggestions\n{product_aliases}",
                 "data": {
                     "product_id": "Product"
                 },

@@ -535,33 +535,35 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
             schema = vol.Schema(schema)
 
-            # todo: move to seperate function?
-            def format_off_name(off_product: OpenFoodFactsProduct) -> str:
-                brand = off_product.get("brand_owner") or (
-                    (off_product.get("brands") or "").split(",")[0].strip()
-                )
-                product_name = (off_product.get("product_name") or "").strip()
-                quantity = (off_product.get("quantity") or "").strip()
+            # # todo: move to seperate function?
+            # def format_off_name(off_product: OpenFoodFactsProduct) -> str:
+            #     brand = off_product.get("brand_owner") or (
+            #         (off_product.get("brands") or "").split(",")[0].strip()
+            #     )
+            #     product_name = (off_product.get("product_name") or "").strip()
+            #     quantity = (off_product.get("quantity") or "").strip()
 
-                off_fullname_parts: list[str] = [
-                    part for part in (brand, product_name, quantity) if part
-                ]
-                off_fullname = " - ".join(off_fullname_parts)
-                _LOGGER.debug(
-                    "Parsed product name: %s from: %s", off_fullname, off_product
-                )
-                return off_fullname
+            #     off_fullname_parts: list[str] = [
+            #         part for part in (brand, product_name, quantity) if part
+            #     ]
+            #     off_fullname = " - ".join(off_fullname_parts)
+            #     _LOGGER.debug(
+            #         "Parsed product name: %s from: %s", off_fullname, off_product
+            #     )
+            #     return off_fullname
 
-            off_fullname = (
-                format_off_name(self.current_product_openfoodfacts)
-                if self.current_product_openfoodfacts is not None
-                else None
-            )
-            ica_fullname = (
-                self.current_product_ica.get("ean_name")
-                if self.current_product_ica is not None
-                else None
-            )
+            # off_fullname = (
+            #     format_off_name(self.current_product_openfoodfacts)
+            #     if self.current_product_openfoodfacts is not None
+            #     else None
+            # )
+            # ica_fullname = (
+            #     self.current_product_ica.get("ean_name")
+            #     if self.current_product_ica is not None
+            #     else None
+            # )
+            
+            product_aliases: list[str] = []
 
             ica_output: list[str] = []
             if self.current_product_ica is not None:
@@ -569,9 +571,11 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 ica_output.append("## ICA provider")
                 if b := p.get("ean_name"):
                     ica_output.append(f"ean_name: {b}")
+                    product_aliases.append(b)
                 if a := p.get("article"):
                     if b := a.get("name"):
-                        ica_output.append(f"Article name: {b}")
+                        ica_output.append(f"Article name: **{b}**")
+                        product_aliases.append(b)
                     if b := p.get("articleId"):
                         ica_output.append(f"Article id: {b}")
                         # todo: look up by articleId?
@@ -583,50 +587,54 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             off_output: list[str] = []
             if self.current_product_openfoodfacts is not None:
                 p = self.current_product_ica
-                ica_output.append("## OpenFoodFacts")
+                off_output.append("## OpenFoodFacts")
                 if b := p.get("brand_owner"):
-                    ica_output.append(f"Brand Owner: {b}")
+                    off_output.append(f"Brand Owner: {b}")
                 if b := p.get("brands"):
-                    ica_output.append(f"Brands: {b}")
-                ica_output.append(f"Brands: {p.get('brands')}")
+                    off_output.append(f"Brands: {b}")
 
                 if b := p.get("product_type"):
-                    ica_output.append(f"Product type: {b}")
+                    off_output.append(f"Product type: {b}")
                 if b := p.get("product_name"):
-                    ica_output.append(f"Product name: **{b}**")
+                    off_output.append(f"Product name: **{b}**")
+                    product_aliases.append(b)
                 if b := p.get("generic_name"):
-                    ica_output.append(f"Generic name: {b}")
+                    off_output.append(f"Generic name: {b}")
+                    product_aliases.append(b)
 
                 if b := p.get("product_quantity"):
                     u = p.get("product_quantity_unit")
-                    ica_output.append(f"Product Quantity: {b} {u}")
+                    off_output.append(f"Product Quantity: {b} {u}")
                 elif b := p.get("quantity"):
-                    ica_output.append(f"Quantity: {b}")
+                    off_output.append(f"Quantity: {b}")
 
                 if b := p.get("serving_quantity"):
                     u = p.get("serving_quantity_unit")
-                    ica_output.append(f"Serving Quantity: {b} {u}")
+                    off_output.append(f"Serving Quantity: {b} {u}")
 
                 if n := p.get("nutriments"):
                     if b := n.get("energy_kcal"):
-                        ica_output.append(f"Energy (per product): {b} kcal")
+                        off_output.append(f"Energy (per product): {b} kcal")
                     if b := n.get("energy_kcal_100g"):
-                        ica_output.append(f"Energy (per 100): {b} kcal")
+                        off_output.append(f"Energy (per 100): {b} kcal")
 
                 if b := p.get("categories"):
-                    ica_output.append(f"Categories: {b}")
+                    off_output.append(f"Categories: {b}")
 
-            lookup_output = "\n\n".join([p for p in (ica_output, off_output) if p])
+
+            lookup_output = "\n\n".join(["\n".join(p) for p in (ica_output, off_output) if p])
             lookup_output = f"# Barcode lookup\n\n{lookup_output}"
 
             plc = {
                 "barcode": code,
-                "lookup_name": ica_fullname or off_fullname,
+                # "lookup_name": ica_fullname or off_fullname,
+                "product_aliases": sorted(set(product_aliases)),
                 "lookup_output": lookup_output,
                 "product_matches": "\n".join(
                     f"{p['name']}" for p in self.matching_products
                 ),
             }
+            _LOGGER.warning("PLC: %s", plc)
             # ask for input...
             return self.async_show_form(
                 step_id=Step.SCAN_MATCH_PRODUCT,
@@ -1576,6 +1584,7 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
                 "parent_product",
                 description={
                     "suggested_value": suggested_values.get("parent_product"),
+                    # todo: ...or if product_alias matches another product WHICH has a parent, then suggest that parent
                 },
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
