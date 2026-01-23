@@ -399,6 +399,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                                 return_response=True,
                             )
                             _LOGGER.debug("Got ICA response: %s", r)
+                            # todo: handle lookup fails (example network issue, auth)
                             if r and r.get("success"):
                                 self.current_product_ica = r.get("data")
                             _LOGGER.debug("ICA product: %s", self.current_product_ica)
@@ -411,6 +412,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                         ) = await self._coordinator.get_product_from_open_food_facts(
                             code
                         )
+                        # todo: handle lookup fails (example network issue)
                         _LOGGER.info(
                             "OpenFoodFacts product: %s",
                             self.current_product_openfoodfacts,
@@ -422,32 +424,49 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                                 # OFF.product_name
                                 (
                                     self.current_product_openfoodfacts is not None
-                                    and p["name"].casefold()
-                                    == self.current_product_openfoodfacts.get(
-                                        "product_name", ""
-                                    ).casefold()
+                                    and (
+                                        p["name"].casefold()
+                                        == self.current_product_openfoodfacts.get(
+                                            "product_name", ""
+                                        ).casefold()
+                                    )
                                 )
                                 # OFF.genric_name
-                                (
+                                or (
                                     self.current_product_openfoodfacts is not None
-                                    and p["name"].casefold()
-                                    == self.current_product_openfoodfacts.get(
-                                        "generic_name", ""
-                                    ).casefold()
+                                    and (
+                                        p["name"].casefold()
+                                        == (
+                                            self.current_product_openfoodfacts.get(
+                                                "generic_name", ""
+                                            )
+                                            or ""
+                                        ).casefold()
+                                    )
                                 )
                                 # ICA.ean_name
                                 or (
                                     self.current_product_ica is not None
-                                    and p["name"].casefold()
-                                    == self.current_product_ica.get(
-                                        "ean_name", ""
-                                    ).casefold()
+                                    and (
+                                        p["name"].casefold()
+                                        == (
+                                            self.current_product_ica.get("ean_name", "")
+                                            or ""
+                                        ).casefold()
+                                    )
                                 )
                                 # ICA.article.name
                                 or (
                                     self.current_product_ica is not None
-                                    and p["name"].casefold()
-                                    == self.current_product_ica.get("article", {}).get("name", "").casefold()
+                                    and (
+                                        p["name"].casefold()
+                                        == (
+                                            self.current_product_ica.get(
+                                                "article", {}
+                                            ).get("name", "")
+                                            or ""
+                                        ).casefold()
+                                    )
                                 )
                                 # todo: ICA offer name
                             ),
@@ -516,8 +535,6 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
             schema = vol.Schema(schema)
 
-
-
             # todo: move to seperate function?
             def format_off_name(off_product: OpenFoodFactsProduct) -> str:
                 brand = off_product.get("brand_owner") or (
@@ -530,7 +547,9 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     part for part in (brand, product_name, quantity) if part
                 ]
                 off_fullname = " - ".join(off_fullname_parts)
-                _LOGGER.debug("Parsed product name: %s from: %s", off_fullname, off_product)
+                _LOGGER.debug(
+                    "Parsed product name: %s from: %s", off_fullname, off_product
+                )
                 return off_fullname
 
             off_fullname = (
@@ -540,15 +559,72 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             )
             ica_fullname = (
                 self.current_product_ica.get("ean_name")
-                if self.current_product_ica is not None else None
+                if self.current_product_ica is not None
+                else None
             )
-            
+
+            ica_output: list[str] = []
+            if self.current_product_ica is not None:
+                p = self.current_product_ica
+                ica_output.append("## ICA provider")
+                if b := p.get("ean_name"):
+                    ica_output.append(f"ean_name: {b}")
+                if a := p.get("article"):
+                    if b := a.get("name"):
+                        ica_output.append(f"Article name: {b}")
+                    if b := p.get("articleId"):
+                        ica_output.append(f"Article id: {b}")
+                        # todo: look up by articleId?
+                    if b := p.get("articleGroupId"):
+                        ica_output.append(f"ArticleGroupId: {b}")
+                if a := p.get("offers"):
+                    pass
+
+            off_output: list[str] = []
+            if self.current_product_openfoodfacts is not None:
+                p = self.current_product_ica
+                ica_output.append("## OpenFoodFacts")
+                if b := p.get("brand_owner"):
+                    ica_output.append(f"Brand Owner: {b}")
+                if b := p.get("brands"):
+                    ica_output.append(f"Brands: {b}")
+                ica_output.append(f"Brands: {p.get('brands')}")
+
+                if b := p.get("product_type"):
+                    ica_output.append(f"Product type: {b}")
+                if b := p.get("product_name"):
+                    ica_output.append(f"Product name: **{b}**")
+                if b := p.get("generic_name"):
+                    ica_output.append(f"Generic name: {b}")
+
+                if b := p.get("product_quantity"):
+                    u = p.get("product_quantity_unit")
+                    ica_output.append(f"Product Quantity: {b} {u}")
+                elif b := p.get("quantity"):
+                    ica_output.append(f"Quantity: {b}")
+
+                if b := p.get("serving_quantity"):
+                    u = p.get("serving_quantity_unit")
+                    ica_output.append(f"Serving Quantity: {b} {u}")
+
+                if n := p.get("nutriments"):
+                    if b := n.get("energy_kcal"):
+                        ica_output.append(f"Energy (per product): {b} kcal")
+                    if b := n.get("energy_kcal_100g"):
+                        ica_output.append(f"Energy (per 100): {b} kcal")
+
+                if b := p.get("categories"):
+                    ica_output.append(f"Categories: {b}")
+
+            lookup_output = "\n\n".join([p for p in (ica_output, off_output) if p])
+            lookup_output = f"# Barcode lookup\n\n{lookup_output}"
+
             plc = {
                 "barcode": code,
                 "lookup_name": ica_fullname or off_fullname,
+                "lookup_output": lookup_output,
                 "product_matches": "\n".join(
-                    f"{p['name']}"
-                    for p in self.matching_products
+                    f"{p['name']}" for p in self.matching_products
                 ),
             }
             # ask for input...
@@ -1391,17 +1467,14 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
     suggested_values: dict[str, str] = {},
 ) -> VolDictType:
     child_products = [
-        prod
-        for prod in masterdata['products']
-        if prod['parent_product_id']
+        prod for prod in masterdata["products"] if prod["parent_product_id"]
     ]
-    child_product_ids = [prod["id"] for prod in child_products]
+    # child_product_ids = [prod["id"] for prod in child_products]
+    parent_product_ids = [prod["parent_product_id"] for prod in child_products]
     parent_products = [
-        prod
-        for prod in masterdata['products']
-        if prod['id'] not in child_product_ids
+        prod for prod in masterdata["products"] if prod["id"] in parent_product_ids
     ]
-    
+
     suggested_product_ids = [prod["id"] for prod in suggested_products]
     non_suggested_prods = [
         prod
@@ -1445,10 +1518,9 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
     # dropdown: "new parent" / or choose from existing "parent-node"
 
     schemas: VolDictType = {}
-    # todo: render a text that shows lookup results
     schemas.update(
         {
-            vol.Optional(
+            vol.Required(
                 "product_id",
                 description={
                     "suggested_value": selected_product_id,
@@ -1469,7 +1541,12 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
             vol.Required(
                 "product_mode",
                 description={
-                    "suggested_value": None  # todo: Pre-select
+                    "suggested_value": suggested_values.get("product_mode")
+                    or (
+                        "create_new_child_and_parent"
+                        if suggested_values.get("parent_product")
+                        else None
+                    )
                 },
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
@@ -1519,8 +1596,7 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
                     # List existing Parent products
                     options=[
                         selector.SelectOptionDict(
-                            value=str(prod['id']),
-                            label=prod['name']
+                            value=str(prod["id"]), label=prod["name"]
                         )
                         for prod in parent_products
                         if prod["active"] == 1

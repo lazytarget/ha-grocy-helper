@@ -69,7 +69,7 @@
             },
             "scan_match_to_product": {
                 "title": "Map {barcode} to Product",
-                "description": "Map {barcode} to a Product or Parent Product.\n\nLookup name: {lookup_name}<br/><br/>{product_matches}",
+                "description": "{lookup_output}",
                 "data": {
                     "product_id": "Product"
                 },
