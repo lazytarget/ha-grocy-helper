@@ -23,6 +23,7 @@ from .coordinator import GrocyHelperCoordinator
 from .grocyapi import GrocyAPI
 from .barcodebuddyapi import BarcodeBuddyAPI
 from .grocytypes import (
+    BarcodeLookup,
     ExtendedGrocyProductStockInfo,
     GrocyAddProductQuantityUnitConversion,
     GrocyProduct,
@@ -205,6 +206,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
     current_product_stock_info: ExtendedGrocyProductStockInfo | None = None
     current_product_openfoodfacts: OpenFoodFactsProduct | None = None
     current_product_ica: dict | None = None
+    current_lookup: BarcodeLookup | None = None
+    
     current_parent_product_id: str | None = None
     matching_products: list[GrocyProduct] = []
     current_stock_entries: list[GrocyStockEntry] = []
@@ -332,10 +335,13 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             return self.async_abort(reason=msg)
 
         code = current_barcode.strip().strip(",").strip().lstrip("0")
+        if self.current_barcode != code:
+            # Different barcode since last time. Clear all info
+            self.current_product_stock_info = None
+            self.current_product_openfoodfacts = None
+            self.current_product_ica = None
+            self.current_lookup = None
         self.current_barcode = code
-        self.current_product_stock_info = None
-        self.current_product_openfoodfacts = None
-        self.current_product_ica = None
 
         if self.barcode_scan_mode == SCAN_MODE.SCAN_BBUDDY:
             bb_mode = await self._api_bbuddy.get_mode()
@@ -387,87 +393,103 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                             code,
                         )
 
-                        # Lookup in ICA integration
-                        hass = self._coordinator._hass
-                        if hass.services.has_service("ica", "lookup_product"):
-                            _LOGGER.debug("Querying ICA for barcode: %s", code)
-                            r = await hass.services.async_call(
-                                domain="ica",
-                                service="lookup_product",
-                                service_data={"identifier": code},
-                                blocking=True,
-                                context=None,
-                                target=None,
-                                return_response=True,
-                            )
-                            _LOGGER.debug("Got ICA response: %s", r)
-                            # TODO: handle lookup fails (example network issue, auth)
-                            if r and r.get("success"):
-                                self.current_product_ica = r.get("data")
-                            _LOGGER.debug("ICA product: %s", self.current_product_ica)
-                        # else:
-                        #     _LOGGER.warning("Has no ICA lookup service")
+                        if not self.current_lookup or self.current_lookup["barcode"] != code:
+                            # Refresh lookup info, if needed
+                            self.current_lookup = await self._coordinator.lookup_barcode(code)
+                            self.current_product_openfoodfacts = self.current_lookup.get("off")
+                            self.current_product_ica = self.current_lookup.get("ica")
 
-                        # Lookup in OpenFoodFacts
-                        self.current_product_openfoodfacts: (
-                            OpenFoodFactsProduct | None
-                        ) = await self._coordinator.get_product_from_open_food_facts(
-                            code
-                        )
-                        # TODO: handle lookup fails (example network issue)
-                        _LOGGER.info(
-                            "OpenFoodFacts product: %s",
-                            self.current_product_openfoodfacts,
-                        )
+                        # # Lookup in ICA integration
+                        # hass = self._coordinator._hass
+                        # if hass.services.has_service("ica", "lookup_product"):
+                        #     _LOGGER.debug("Querying ICA for barcode: %s", code)
+                        #     r = await hass.services.async_call(
+                        #         domain="ica",
+                        #         service="lookup_product",
+                        #         service_data={"identifier": code},
+                        #         blocking=True,
+                        #         context=None,
+                        #         target=None,
+                        #         return_response=True,
+                        #     )
+                        #     _LOGGER.debug("Got ICA response: %s", r)
+                        #     # TODO: handle lookup fails (example network issue, auth)
+                        #     if r and r.get("success"):
+                        #         self.current_product_ica = r.get("data")
+                        #     _LOGGER.debug("ICA product: %s", self.current_product_ica)
+                        # # else:
+                        # #     _LOGGER.warning("Has no ICA lookup service")
+
+                        # # Lookup in OpenFoodFacts
+                        # self.current_product_openfoodfacts: (
+                        #     OpenFoodFactsProduct | None
+                        # ) = await self._coordinator.get_product_from_open_food_facts(
+                        #     code
+                        # )
+                        # # TODO: handle lookup fails (example network issue)
+                        # _LOGGER.info(
+                        #     "OpenFoodFacts product: %s",
+                        #     self.current_product_openfoodfacts,
+                        # )
 
                         masterdata: GrocyMasterData = self._coordinator.data
                         for matching_product in filter(
                             lambda p: (
-                                # OFF.product_name
+                                # # OFF.product_name
+                                # (
+                                #     self.current_product_openfoodfacts is not None
+                                #     and (
+                                #         p["name"].casefold()
+                                #         == self.current_product_openfoodfacts.get(
+                                #             "product_name", ""
+                                #         ).casefold()
+                                #     )
+                                # )
+                                # # OFF.genric_name
+                                # or (
+                                #     self.current_product_openfoodfacts is not None
+                                #     and (
+                                #         p["name"].casefold()
+                                #         == (
+                                #             self.current_product_openfoodfacts.get(
+                                #                 "generic_name", ""
+                                #             )
+                                #             or ""
+                                #         ).casefold()
+                                #     )
+                                # )
+                                # # ICA.ean_name
+                                # or (
+                                #     self.current_product_ica is not None
+                                #     and (
+                                #         p["name"].casefold()
+                                #         == (
+                                #             self.current_product_ica.get("ean_name", "")
+                                #             or ""
+                                #         ).casefold()
+                                #     )
+                                # )
+                                # # ICA.article.name
+                                # or (
+                                #     self.current_product_ica is not None
+                                #     and (
+                                #         p["name"].casefold()
+                                #         == (
+                                #             self.current_product_ica.get(
+                                #                 "article", {}
+                                #             ).get("name", "")
+                                #             or ""
+                                #         ).casefold()
+                                #     )
+                                # )
+                                # or
+                                
+                                # Match against collected aliases
                                 (
-                                    self.current_product_openfoodfacts is not None
+                                    self.current_lookup.get("product_aliases")
                                     and (
                                         p["name"].casefold()
-                                        == self.current_product_openfoodfacts.get(
-                                            "product_name", ""
-                                        ).casefold()
-                                    )
-                                )
-                                # OFF.genric_name
-                                or (
-                                    self.current_product_openfoodfacts is not None
-                                    and (
-                                        p["name"].casefold()
-                                        == (
-                                            self.current_product_openfoodfacts.get(
-                                                "generic_name", ""
-                                            )
-                                            or ""
-                                        ).casefold()
-                                    )
-                                )
-                                # ICA.ean_name
-                                or (
-                                    self.current_product_ica is not None
-                                    and (
-                                        p["name"].casefold()
-                                        == (
-                                            self.current_product_ica.get("ean_name", "")
-                                            or ""
-                                        ).casefold()
-                                    )
-                                )
-                                # ICA.article.name
-                                or (
-                                    self.current_product_ica is not None
-                                    and (
-                                        p["name"].casefold()
-                                        == (
-                                            self.current_product_ica.get(
-                                                "article", {}
-                                            ).get("name", "")
-                                            or ""
-                                        ).casefold()
+                                        in map(str.casefold, self.current_lookup["product_aliases"])
                                     )
                                 )
                                 # TODO: ICA offer name
@@ -511,22 +533,27 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         code = self.current_barcode
 
-        if (
-            self.current_product_openfoodfacts is None
-            and self.current_product_ica is None
-        ):
-            # TODO: Not found in other providers, then show input's for manual registration?
-            _LOGGER.error("No product info found!: %s", code)
-            # errors["NoProduct"] = "No product found!"
-            # return self.async_show_form(
-            #     step_id=Step.SCAN_ADD_PRODUCT,
-            #     data_schema=self.current_barcode_schema,
-            #     errors=errors,
-            # )
-            return self.async_step_scan_add_product(user_input=None)
+        # TODO: Remove this shortcut, better to show the Map product form and let user select (eventhough no suggestions were parsed)
+        # if (
+        #     self.current_product_openfoodfacts is None
+        #     and self.current_product_ica is None
+        # ):
+        #     # TODO: Not found in other providers, then show input's for manual registration?
+        #     _LOGGER.error("No product info found!: %s", code)
+        #     # errors["NoProduct"] = "No product found!"
+        #     # return self.async_show_form(
+        #     #     step_id=Step.SCAN_ADD_PRODUCT,
+        #     #     data_schema=self.current_barcode_schema,
+        #     #     errors=errors,
+        #     # )
+        #     return self.async_step_scan_add_product(user_input=None)
 
         # Handle input, for required fields
         if user_input is None:
+            # lookup = await self._coordinator.lookup_barcode(code)
+            # self.current_product_openfoodfacts = lookup.get("off")
+            # self.current_product_ica = lookup.get("ica")
+            
             # Has matching product, display as a suggestion
             _LOGGER.warning("Matching products: %s", self.matching_products)
             schema = GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
@@ -537,105 +564,105 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
             schema = vol.Schema(schema)
 
-            # # TODO: move to seperate function?
-            # def format_off_name(off_product: OpenFoodFactsProduct) -> str:
-            #     brand = off_product.get("brand_owner") or (
-            #         (off_product.get("brands") or "").split(",")[0].strip()
-            #     )
-            #     product_name = (off_product.get("product_name") or "").strip()
-            #     quantity = (off_product.get("quantity") or "").strip()
+            # # # TODO: move to seperate function?
+            # # def format_off_name(off_product: OpenFoodFactsProduct) -> str:
+            # #     brand = off_product.get("brand_owner") or (
+            # #         (off_product.get("brands") or "").split(",")[0].strip()
+            # #     )
+            # #     product_name = (off_product.get("product_name") or "").strip()
+            # #     quantity = (off_product.get("quantity") or "").strip()
 
-            #     off_fullname_parts: list[str] = [
-            #         part for part in (brand, product_name, quantity) if part
-            #     ]
-            #     off_fullname = " - ".join(off_fullname_parts)
-            #     _LOGGER.debug(
-            #         "Parsed product name: %s from: %s", off_fullname, off_product
-            #     )
-            #     return off_fullname
+            # #     off_fullname_parts: list[str] = [
+            # #         part for part in (brand, product_name, quantity) if part
+            # #     ]
+            # #     off_fullname = " - ".join(off_fullname_parts)
+            # #     _LOGGER.debug(
+            # #         "Parsed product name: %s from: %s", off_fullname, off_product
+            # #     )
+            # #     return off_fullname
 
-            # off_fullname = (
-            #     format_off_name(self.current_product_openfoodfacts)
-            #     if self.current_product_openfoodfacts is not None
-            #     else None
+            # # off_fullname = (
+            # #     format_off_name(self.current_product_openfoodfacts)
+            # #     if self.current_product_openfoodfacts is not None
+            # #     else None
+            # # )
+            # # ica_fullname = (
+            # #     self.current_product_ica.get("ean_name")
+            # #     if self.current_product_ica is not None
+            # #     else None
+            # # )
+
+            # product_aliases: list[str] = []
+
+            # ica_output: list[str] = []
+            # if self.current_product_ica is not None:
+            #     p = self.current_product_ica
+            #     ica_output.append("## ICA provider")
+            #     if b := p.get("ean_name"):
+            #         ica_output.append(f"ean_name: {b}")
+            #         product_aliases.append(b)
+            #     if a := p.get("article"):
+            #         if b := a.get("name"):
+            #             ica_output.append(f"Article name: **{b}**")
+            #             product_aliases.append(b)
+            #         if b := a.get("articleId"):
+            #             ica_output.append(f"Article id: {b}")
+            #             # TODO: look up more info by articleId?
+            #         if b := a.get("articleGroupId"):
+            #             ica_output.append(f"ArticleGroupId: {b}")
+            #             # TODO: map articleGroupId into Grocy Product Group
+            #     if a := p.get("offers"):
+            #         pass
+
+            # off_output: list[str] = []
+            # if self.current_product_openfoodfacts is not None:
+            #     p = self.current_product_openfoodfacts
+            #     off_output.append("## OpenFoodFacts")
+            #     if b := p.get("product_type"):
+            #         off_output.append(f"Product type: {b}")
+            #     if b := p.get("brand_owner"):
+            #         off_output.append(f"Brand Owner: {b}")
+            #     if b := p.get("brands"):
+            #         off_output.append(f"Brands: {b}")
+            #     if b := p.get("product_name"):
+            #         off_output.append(f"Product name: **{b}**")
+            #         product_aliases.append(b)
+            #     if b := p.get("generic_name"):
+            #         off_output.append(f"Generic name: {b}")
+            #         product_aliases.append(b)
+
+            #     if b := p.get("product_quantity"):
+            #         u = p.get("product_quantity_unit")
+            #         off_output.append(f"Product Quantity: {b} {u}")
+            #     elif b := p.get("quantity"):
+            #         off_output.append(f"Quantity: {b}")
+
+            #     if b := p.get("serving_quantity"):
+            #         u = p.get("serving_quantity_unit")
+            #         off_output.append(f"Serving Quantity: {b} {u}")
+
+            #     if n := p.get("nutriments"):
+            #         if b := n.get("energy_kcal"):
+            #             off_output.append(f"Energy (per product): {b} kcal")
+            #         if b := n.get("energy_kcal_100g"):
+            #             off_output.append(f"Energy (per 100): {b} kcal")
+
+            #     if b := p.get("categories"):
+            #         off_output.append(f"Categories: {b}")
+
+            # lookup_output = "\n\n".join(
+            #     ["\n".join(p) for p in (ica_output, off_output) if len(p) > 1]
             # )
-            # ica_fullname = (
-            #     self.current_product_ica.get("ean_name")
-            #     if self.current_product_ica is not None
-            #     else None
-            # )
+            # lookup_output = f"# Barcode lookup\n\n{lookup_output}"
 
-            product_aliases: list[str] = []
-
-            ica_output: list[str] = []
-            if self.current_product_ica is not None:
-                p = self.current_product_ica
-                ica_output.append("## ICA provider")
-                if b := p.get("ean_name"):
-                    ica_output.append(f"ean_name: {b}")
-                    product_aliases.append(b)
-                if a := p.get("article"):
-                    if b := a.get("name"):
-                        ica_output.append(f"Article name: **{b}**")
-                        product_aliases.append(b)
-                    if b := a.get("articleId"):
-                        ica_output.append(f"Article id: {b}")
-                        # TODO: look up more info by articleId?
-                    if b := a.get("articleGroupId"):
-                        ica_output.append(f"ArticleGroupId: {b}")
-                        # TODO: map articleGroupId into Grocy Product Group
-                if a := p.get("offers"):
-                    pass
-
-            off_output: list[str] = []
-            if self.current_product_openfoodfacts is not None:
-                p = self.current_product_openfoodfacts
-                off_output.append("## OpenFoodFacts")
-                if b := p.get("product_type"):
-                    off_output.append(f"Product type: {b}")
-                if b := p.get("brand_owner"):
-                    off_output.append(f"Brand Owner: {b}")
-                if b := p.get("brands"):
-                    off_output.append(f"Brands: {b}")
-                if b := p.get("product_name"):
-                    off_output.append(f"Product name: **{b}**")
-                    product_aliases.append(b)
-                if b := p.get("generic_name"):
-                    off_output.append(f"Generic name: {b}")
-                    product_aliases.append(b)
-
-                if b := p.get("product_quantity"):
-                    u = p.get("product_quantity_unit")
-                    off_output.append(f"Product Quantity: {b} {u}")
-                elif b := p.get("quantity"):
-                    off_output.append(f"Quantity: {b}")
-
-                if b := p.get("serving_quantity"):
-                    u = p.get("serving_quantity_unit")
-                    off_output.append(f"Serving Quantity: {b} {u}")
-
-                if n := p.get("nutriments"):
-                    if b := n.get("energy_kcal"):
-                        off_output.append(f"Energy (per product): {b} kcal")
-                    if b := n.get("energy_kcal_100g"):
-                        off_output.append(f"Energy (per 100): {b} kcal")
-
-                if b := p.get("categories"):
-                    off_output.append(f"Categories: {b}")
-
-            lookup_output = "\n\n".join(
-                ["\n".join(p) for p in (ica_output, off_output) if len(p) > 1]
-            )
-            lookup_output = f"# Barcode lookup\n\n{lookup_output}"
-
-            # Markdown list
-            product_aliases = [f"- {a.strip()}" for a in product_aliases if a]
+            # # Markdown list
+            # product_aliases = [f"- {a.strip()}" for a in product_aliases if a]
 
             plc = {
                 "barcode": code,
                 # "lookup_name": ica_fullname or off_fullname,
-                "product_aliases": "\n".join(sorted(set(product_aliases))),
-                "lookup_output": lookup_output,
+                "product_aliases": "\n".join(self.current_lookup.get("product_aliases", [])),
+                "lookup_output": self.current_lookup.get("lookup_output"),
                 "product_matches": "\n".join(
                     f"{p['name']}" for p in self.matching_products
                 ),
@@ -1572,8 +1599,8 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
         )
     selected_product_id = str(selected_product_id)
 
-    # TODO: rewrite this Schema to have radio button for Create / Create child? / Map existing
 
+    # TODO: rewrite this Schema to have radio button for Create / Create child? / Map existing
     # -> barcode
 
     # Form1:
