@@ -319,7 +319,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         if not current_barcode:
             # Nothing in queue, show summary
-            # todo: Add result info to message...
+            # TODO: Add result info to message...
             msg = (
                 "\r\n".join(self.barcode_results)
                 if self.barcode_results
@@ -401,7 +401,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                                 return_response=True,
                             )
                             _LOGGER.debug("Got ICA response: %s", r)
-                            # todo: handle lookup fails (example network issue, auth)
+                            # TODO: handle lookup fails (example network issue, auth)
                             if r and r.get("success"):
                                 self.current_product_ica = r.get("data")
                             _LOGGER.debug("ICA product: %s", self.current_product_ica)
@@ -414,7 +414,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                         ) = await self._coordinator.get_product_from_open_food_facts(
                             code
                         )
-                        # todo: handle lookup fails (example network issue)
+                        # TODO: handle lookup fails (example network issue)
                         _LOGGER.info(
                             "OpenFoodFacts product: %s",
                             self.current_product_openfoodfacts,
@@ -470,12 +470,12 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                                         ).casefold()
                                     )
                                 )
-                                # todo: ICA offer name
+                                # TODO: ICA offer name
                             ),
                             masterdata["products"],
                         ):
-                            # todo: also loop through ProductBarcode notes
-                            # todo: skip Active==0 products
+                            # TODO: also loop through ProductBarcode notes
+                            # TODO: skip Active==0 products
                             _LOGGER.info("Match: %s", matching_product)
                             self.matching_products.append(matching_product)
 
@@ -515,7 +515,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             self.current_product_openfoodfacts is None
             and self.current_product_ica is None
         ):
-            # todo: Not found in other providers, then show input's for manual registration?
+            # TODO: Not found in other providers, then show input's for manual registration?
             _LOGGER.error("No product info found!: %s", code)
             # errors["NoProduct"] = "No product found!"
             # return self.async_show_form(
@@ -537,7 +537,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
             schema = vol.Schema(schema)
 
-            # # todo: move to seperate function?
+            # # TODO: move to seperate function?
             # def format_off_name(off_product: OpenFoodFactsProduct) -> str:
             #     brand = off_product.get("brand_owner") or (
             #         (off_product.get("brands") or "").split(",")[0].strip()
@@ -580,10 +580,10 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                         product_aliases.append(b)
                     if b := a.get("articleId"):
                         ica_output.append(f"Article id: {b}")
-                        # todo: look up more info by articleId?
+                        # TODO: look up more info by articleId?
                     if b := a.get("articleGroupId"):
                         ica_output.append(f"ArticleGroupId: {b}")
-                        # todo: map articleGroupId into Grocy Product Group
+                        # TODO: map articleGroupId into Grocy Product Group
                 if a := p.get("offers"):
                     pass
 
@@ -660,7 +660,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     int(user_input["product_id"])
                 )
             )
-            # todo: update product with chosen parent info?
+            # TODO: update product with chosen parent info?
             # but will need to fill in fields from Child onto Parent
         else:
             # Create a new product
@@ -686,7 +686,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             user_input = user_input or {}
 
         # # # New barcode (Not provisioned in Grocy)
-        # # # todo: Lookup in other providers...
+        # # # TODO: Lookup in other providers...
         # # self.current_product_openfoodfacts = (
         # #     await self._coordinator.get_product_from_open_food_facts(code)
         # # )
@@ -703,7 +703,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
             # hass.services.supports_response -> SupportsResponse
 
-            # todo: Service.entity_service_call
+            # TODO: Service.entity_service_call
             # `ica.lookup_product`
             # check if exists, then invoke...
 
@@ -756,13 +756,13 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     lambda qu: qu.get("name") == unit,
                     masterdata["quantity_units"],
                 ):
-                    # todo: replace this ´product_quantity_unit ´suggestion, with Pack/Piece suggestion
+                    # TODO: replace this ´product_quantity_unit ´suggestion, with Pack/Piece suggestion
                     # user_input["qu_id"] = str(qq["id"])
                     _LOGGER.warning("Unit: %s, QQ: %s", unit, qq)
                 if not user_input.get("qu_id"):
-                    # todo: find closest similiar Unit (example: g -> kg)
+                    # TODO: find closest similiar Unit (example: g -> kg)
                     pass
-            # todo: fill in guess of QuantityUnit...
+            # TODO: fill in guess of QuantityUnit...
 
         if show_form:
             schema: VolDictType = None
@@ -800,7 +800,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 # fallback to a formatted name from OpenFoodFacts
                 off_fullname,
             )
-            # todo: perhaps set the `lookup_output` as the description?
+            # TODO: perhaps set the `lookup_output` as the description?
             new_product["location_id"] = user_input["location_id"]
             new_product["should_not_be_frozen"] = (
                 1 if user_input.get("should_not_be_frozen", False) else 0
@@ -893,12 +893,12 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 parent_product = await self._coordinator.create_product(pp_input)
                 _LOGGER.info("created parent: %s", parent_product)
                 new_product["parent_product_id"] = parent_product["id"]
-                # todo: check for success!
+                # TODO: check for success!
 
             # Create product
             product = await self._api_grocy.add_product(new_product)
             _LOGGER.info("created prod: %s", product)
-            # todo: check for success!
+            # TODO: check for success!
             self.current_product_stock_info = (
                 await self._api_grocy.get_stock_product_by_id(product["id"])
             )
@@ -931,8 +931,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             #     q = self.current_product_openfoodfacts.get("product_quantity")
             #     qu = self.current_product_openfoodfacts.get("product_quantity_unit")
             #     if q and qu:
-            #         # todo: compare qu, against the defaulted "qu_id_purchase" or "qui_id_stock"
-            #         # todo: make conversion, if necessary...
+            #         # TODO: compare qu, against the defaulted "qu_id_purchase" or "qui_id_stock"
+            #         # TODO: make conversion, if necessary...
             #         user_input["amount"] = q
 
             schema = GENERATE_CREATE_PRODUCT_BARCODESCHEMA(
@@ -960,14 +960,14 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         }
         pcode = await self._api_grocy.add_product_barcode(br)
         _LOGGER.info("created prod_barcode: %s", pcode)
-        # todo: append barcode to product
+        # TODO: append barcode to product
 
         if self.scan_options.get("input_product_details_during_provision"):
             # Add more product info...
             return await self.async_step_scan_update_product_details(user_input=None)
 
         # created product, now re-run process for same barcode
-        # todo: in-future this could be merged to same process-work (avoid extra form)
+        # TODO: in-future this could be merged to same process-work (avoid extra form)
         return await self.async_step_scan_queue(user_input=None)
 
     async def async_step_scan_update_product_details(
@@ -1012,15 +1012,15 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     ]
                     product_quantity_unit_as_weight = qq["name"] in ["g", "hg", "kg"]
                 if not user_input.get("qu_id"):
-                    # todo: find closest similiar Unit (example: g -> kg)
+                    # TODO: find closest similiar Unit (example: g -> kg)
                     # product_quantity_unit =
                     pass
 
         if self.current_product_ica is not None:
-            # todo: fill in info from ICA...
+            # TODO: fill in info from ICA...
             pass
 
-        # todo: fill in guess of QuantityUnit...
+        # TODO: fill in guess of QuantityUnit...
 
         kcal = user_input["calories_per_100"] = user_input.get("calories_per_100") or (
             self.current_product_openfoodfacts or {}
@@ -1053,8 +1053,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     product["id"]
                 )
                 _LOGGER.warning("Convers: %s", conversions)
-                # todo: check if there already is a resolved conversion for those qu_id
-                # todo: if already exists then set ´skip_add_qu_conversions = True´
+                # TODO: check if there already is a resolved conversion for those qu_id
+                # TODO: if already exists then set ´skip_add_qu_conversions = True´
 
         if show_form:
             user_input["qu_id_product"] = str(
@@ -1088,7 +1088,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         )
         product_updates = {}
         if not skip_add_qu_conversions and qu_id_product and product_quantity:
-            # todo: create explicit product quantity unit conversion
+            # TODO: create explicit product quantity unit conversion
             # Example Pack -> g
             conv: GrocyAddProductQuantityUnitConversion = {
                 "from_qu_id": product["qu_id_stock"],  # Pack/Piece
@@ -1246,7 +1246,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         result = await self._api_grocy.transfer_stock_entry(product["id"], data=data)
         _LOGGER.info("Completed transfer: %s", result)
 
-        # todo: check for success!
+        # TODO: check for success!
 
         # Transfer has been complete...
         # remove it from queue, and then restart the queue...
@@ -1362,7 +1362,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                                         label=loc["name"],
                                     )
                                     for loc in shopping_locations
-                                    # todo: append a blank value too?
+                                    # TODO: append a blank value too?
                                 ],
                                 mode=selector.SelectSelectorMode.DROPDOWN,
                             )
@@ -1379,7 +1379,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             )
 
         # Once product has been ensured to exist in Grocy, we can continue with BBuddy call
-        # todo: ignore BBuddy call if scan-mode is "lookup-barcode" or "provision-barcode"
+        # TODO: ignore BBuddy call if scan-mode is "lookup-barcode" or "provision-barcode"
         request = {
             "barcode": str(code),
         }
@@ -1411,22 +1411,22 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     del request["bestBeforeInDays"]
                 request["transaction_type"] = "purchase"
                 request["amount"] = (
-                    1  # todo: check barcode buddy current quantity context
+                    1  # TODO: check barcode buddy current quantity context
                 )
                 product_id = self.current_product_stock_info["product"]["id"]
                 request.pop("barcode", None)  # Instead go by ´product_id´
                 response = await self._api_grocy.add_stock_product(product_id, request)
-                # response = ""   # todo: set based on response from Grocy
+                # response = ""   # TODO: set based on response from Grocy
             else:
                 # Call Barcode Buddy scan
                 response = await self._api_bbuddy.post_scan(request)
-                # todo: handle responses with HTML-tags (warning/error messages)
+                # TODO: handle responses with HTML-tags (warning/error messages)
             _LOGGER.info("SCAN-RESP: %s", response)
 
             # if success, then remove from queue, and re-run this method again
             self.barcode_queue.pop(0)
 
-            # todo: handle responses with HTML-tags (warning/error messages)
+            # TODO: handle responses with HTML-tags (warning/error messages)
             self.barcode_results.append(str(response))
 
             # Re-run process method until queue is empty...
@@ -1494,7 +1494,7 @@ def GENERATE_STEP_SCAN_START_SCHEMA(scan_mode: SCAN_MODE) -> vol.Schema:
                         ),
                         selector.SelectOptionDict(
                             value=SCAN_MODE.TRANSFER, label="Transfer"
-                        ),  # todo: only add option if has more than 1 locations setup
+                        ),  # TODO: only add option if has more than 1 locations setup
                         selector.SelectOptionDict(value=SCAN_MODE.OPEN, label="Open"),
                         selector.SelectOptionDict(
                             value=SCAN_MODE.INVENTORY, label="Inventory"
@@ -1572,7 +1572,7 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
         )
     selected_product_id = str(selected_product_id)
 
-    # todo: rewrite this Schema to have radio button for Create / Create child? / Map existing
+    # TODO: rewrite this Schema to have radio button for Create / Create child? / Map existing
 
     # -> barcode
 
@@ -1602,7 +1602,7 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
     )
     schemas.update(
         {
-            # todo: is this really needed??
+            # TODO: is this really needed??
             vol.Optional(
                 "product_mode",
                 description={
@@ -1617,7 +1617,7 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
                 selector.SelectSelectorConfig(
                     options=[
                         selector.SelectOptionDict(
-                            value="choose_child",  # todo: possible in the future to want to scan parents??
+                            value="choose_child",  # TODO: possible in the future to want to scan parents??
                             label="Map to existing product above",
                         ),
                         selector.SelectOptionDict(
@@ -1641,7 +1641,7 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
                 "parent_product",
                 description={
                     "suggested_value": suggested_values.get("parent_product"),
-                    # todo: ...or if product_alias matches another product WHICH has a parent, then suggest that parent
+                    # TODO: ...or if product_alias matches another product WHICH has a parent, then suggest that parent
                 },
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
@@ -1697,7 +1697,7 @@ def GENERATE_CHOOSE_EXISTING_STOCK_ENTRY(
         selector.SelectOptionDict(
             value=str(e["id"]),
             label=f"{product['name']} {e['amount']} {qu['name_plural'] if e['amount'] > 1 else qu['name']}, due: {e['best_before_date']}",
-            # todo: append current location name
+            # TODO: append current location name
         )
         for e in suggested_stockentries
     ]
@@ -1827,7 +1827,7 @@ def GENERATE_CREATE_PRODUCT_SCHEMA(
                 "name",
                 description={
                     "suggested_value": suggested_values.get("name"),
-                    # todo: render as listbox with suggested values, but allow for custom text?
+                    # TODO: render as listbox with suggested values, but allow for custom text?
                     # Example: Mango / Mango Fryst 250g ICA / Fryst mango
                 },
             ): selector.TextSelector({"type": "text"})

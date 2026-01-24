@@ -104,7 +104,7 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
         new_product["should_not_be_frozen"] = (
             1 if user_input.get("should_not_be_frozen", False) else 0
         )
-        # todo: Remove obsolete validation, that is done in config_flow right now
+        # TODO: Remove obsolete validation, that is done in config_flow right now
         # loc = next(
         #     (
         #         loc
@@ -164,7 +164,7 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
         #     )
 
         product = await self._api_grocy.add_product(new_product)
-        # todo: check for success!
+        # TODO: check for success!
         _LOGGER.info("created prod: %s", product)
         return product
 
@@ -176,6 +176,11 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
         to_qu_id,
         amount: float,
     ) -> GrocyQuantityUnitConversionResult | None:
+        if from_qu_id == to_qu_id:
+            _LOGGER.warning("Trying to resolve quantity conversion for the same unit: %s", from_qu_id)
+            # TODO: return GrocyQuantityUnitConversionResult, with strings etc.s
+            pass
+        
         conversions = (
             await self._api_grocy.resolve_quantity_unit_conversions_for_product_id(
                 product_id
