@@ -13,6 +13,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .grocyapi import GrocyAPI
 from .barcodebuddyapi import BarcodeBuddyAPI
 from .grocytypes import (
+    BarcodeLookup,
     GrocyMasterData,
     GrocyProduct,
     GrocyQuantityUnitConversionResolved,
@@ -93,6 +94,114 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
             _LOGGER.error("Exception when getting data. Err: %s", err)
             _LOGGER.error(traceback.format_exc())
             raise UpdateFailed(f"Error communicating with API: {err}") from err
+
+    async def lookup_barcode(self, code: str) -> BarcodeLookup:
+        product_aliases: list[str] = []
+        ica: dict | None = None
+        off: OpenFoodFactsProduct | None = None
+
+        # Lookup in ICA integration
+        if self._hass.services.has_service("ica", "lookup_product"):
+            _LOGGER.debug("Querying ICA for barcode: %s", code)
+            r = await self._hass.services.async_call(
+                domain="ica",
+                service="lookup_product",
+                service_data={"identifier": code},
+                blocking=True,
+                context=None,
+                target=None,
+                return_response=True,
+            )
+            _LOGGER.debug("Got ICA response: %s", r)
+            # TODO: handle lookup fails (example network issue, auth)
+            if r and r.get("success"):
+                ica = r.get("data")
+        # else:
+        #     _LOGGER.warning("Has no ICA lookup service")
+
+        # Lookup in OpenFoodFacts
+        off = await self._coordinator.get_product_from_open_food_facts(code)
+        # TODO: handle lookup fails (example network issue)
+        _LOGGER.info(
+            "OpenFoodFacts product: %s",
+            self.current_product_openfoodfacts,
+        )
+        
+        ica_output: list[str] = []
+        if self.current_product_ica is not None:
+            p = self.current_product_ica
+            ica_output.append("## ICA provider")
+            if b := p.get("ean_name"):
+                ica_output.append(f"ean_name: {b}")
+                product_aliases.append(b)
+            if a := p.get("article"):
+                if b := a.get("name"):
+                    ica_output.append(f"Article name: **{b}**")
+                    product_aliases.append(b)
+                if b := a.get("articleId"):
+                    ica_output.append(f"Article id: {b}")
+                    # TODO: look up more info by articleId?
+                if b := a.get("articleGroupId"):
+                    ica_output.append(f"ArticleGroupId: {b}")
+                    # TODO: map articleGroupId into Grocy Product Group
+            if a := p.get("offers"):
+                # TODO: add to name suggestion based on Offers
+                pass
+
+        off_output: list[str] = []
+        if self.current_product_openfoodfacts is not None:
+            p = self.current_product_openfoodfacts
+            off_output.append("## OpenFoodFacts")
+            if b := p.get("product_type"):
+                off_output.append(f"Product type: {b}")
+            if b := p.get("brand_owner"):
+                off_output.append(f"Brand Owner: {b}")
+            if b := p.get("brands"):
+                off_output.append(f"Brands: {b}")
+            if b := p.get("product_name"):
+                off_output.append(f"Product name: **{b}**")
+                product_aliases.append(b)
+            if b := p.get("generic_name"):
+                off_output.append(f"Generic name: {b}")
+                product_aliases.append(b)
+
+            if b := p.get("product_quantity"):
+                u = p.get("product_quantity_unit")
+                off_output.append(f"Product Quantity: {b} {u}")
+            elif b := p.get("quantity"):
+                off_output.append(f"Quantity: {b}")
+
+            if b := p.get("serving_quantity"):
+                u = p.get("serving_quantity_unit")
+                off_output.append(f"Serving Quantity: {b} {u}")
+
+            if n := p.get("nutriments"):
+                if b := n.get("energy_kcal"):
+                    off_output.append(f"Energy (per product): {b} kcal")
+                if b := n.get("energy_kcal_100g"):
+                    off_output.append(f"Energy (per 100): {b} kcal")
+
+            if b := p.get("categories"):
+                off_output.append(f"Categories: {b}")
+
+        lookup_output = "\n\n".join(
+            ["\n".join(p) for p in (ica_output, off_output) if len(p) > 1]
+        )
+        lookup_output = f"# Barcode lookup\n\n{lookup_output}"
+
+        # Markdown list
+        product_aliases = [f"- {a.strip()}" for a in product_aliases if a]
+
+        result: BarcodeLookup = {
+            "barcode": code,
+            # "lookup_name": ica_fullname or off_fullname,
+            "product_aliases": "\n".join(sorted(set(product_aliases))),
+            "lookup_output": lookup_output,
+            "product_matches": "\n".join(
+                f"{p['name']}" for p in self.matching_products
+            ),
+        }
+        return result
 
     async def create_product(self, user_input) -> GrocyProduct:
         # argument 'user_input' should instead be 'new_product'?
