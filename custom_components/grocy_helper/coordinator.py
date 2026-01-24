@@ -101,35 +101,37 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
         off: OpenFoodFactsProduct | None = None
 
         # Lookup in ICA integration
-        if self._hass.services.has_service("ica", "lookup_product"):
-            _LOGGER.debug("Querying ICA for barcode: %s", code)
-            r = await self._hass.services.async_call(
-                domain="ica",
-                service="lookup_product",
-                service_data={"identifier": code},
-                blocking=True,
-                context=None,
-                target=None,
-                return_response=True,
-            )
-            _LOGGER.debug("Got ICA response: %s", r)
-            # TODO: handle lookup fails (example network issue, auth)
-            if r and r.get("success"):
-                ica = r.get("data")
-        # else:
-        #     _LOGGER.warning("Has no ICA lookup service")
+        try:
+            if self._hass.services.has_service("ica", "lookup_product"):
+                _LOGGER.debug("Querying ICA for barcode: %s", code)
+                r = await self._hass.services.async_call(
+                    domain="ica",
+                    service="lookup_product",
+                    service_data={"identifier": code},
+                    blocking=True,
+                    context=None,
+                    target=None,
+                    return_response=True,
+                )
+                _LOGGER.debug("Got ICA response: %s", r)
+                # TODO: handle lookup fails (example network issue, auth)
+                if r and r.get("success"):
+                    ica = r.get("data")
+            # else:
+            #     _LOGGER.warning("Has no ICA lookup service")
+        except BaseException as be:
+            _LOGGER.warning("Error fetching data from ICA: %s", be)
 
         # Lookup in OpenFoodFacts
-        off = await self._coordinator.get_product_from_open_food_facts(code)
-        # TODO: handle lookup fails (example network issue)
-        _LOGGER.info(
-            "OpenFoodFacts product: %s",
-            self.current_product_openfoodfacts,
-        )
-        
+        try:
+            off = await self._coordinator.get_product_from_open_food_facts(code)
+            _LOGGER.info("OpenFoodFacts product: %s", off)
+        except BaseException as be:
+            _LOGGER.warning("Error fetching data from OpenFoodFacts: %s", be)
+
         ica_output: list[str] = []
-        if self.current_product_ica is not None:
-            p = self.current_product_ica
+        if ica is not None:
+            p = ica
             ica_output.append("## ICA provider")
             if b := p.get("ean_name"):
                 ica_output.append(f"ean_name: {b}")
@@ -149,8 +151,8 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
                 pass
 
         off_output: list[str] = []
-        if self.current_product_openfoodfacts is not None:
-            p = self.current_product_openfoodfacts
+        if off is not None:
+            p = off
             off_output.append("## OpenFoodFacts")
             if b := p.get("product_type"):
                 off_output.append(f"Product type: {b}")
@@ -184,22 +186,25 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
             if b := p.get("categories"):
                 off_output.append(f"Categories: {b}")
 
+        # Format results
         lookup_output = "\n\n".join(
             ["\n".join(p) for p in (ica_output, off_output) if len(p) > 1]
         )
         lookup_output = f"# Barcode lookup\n\n{lookup_output}"
 
-        # Markdown list
+        # Format aliases as a Markdown-list
         product_aliases = [f"- {a.strip()}" for a in product_aliases if a]
 
         result: BarcodeLookup = {
+            "ica": ica,
+            "off": off,
             "barcode": code,
             # "lookup_name": ica_fullname or off_fullname,
             "product_aliases": "\n".join(sorted(set(product_aliases))),
             "lookup_output": lookup_output,
-            "product_matches": "\n".join(
-                f"{p['name']}" for p in self.matching_products
-            ),
+            # "product_matches": "\n".join(
+            #     f"{p['name']}" for p in self.matching_products
+            # ),
         }
         return result
 
@@ -277,7 +282,6 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
         _LOGGER.info("created prod: %s", product)
         return product
 
-    
     async def convert_quantity_for_product(
         self,
         product_id,
@@ -286,10 +290,13 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
         amount: float,
     ) -> GrocyQuantityUnitConversionResult | None:
         if from_qu_id == to_qu_id:
-            _LOGGER.warning("Trying to resolve quantity conversion for the same unit: %s", from_qu_id)
+            _LOGGER.warning(
+                "Trying to resolve quantity conversion for the same unit: %s",
+                from_qu_id,
+            )
             # TODO: return GrocyQuantityUnitConversionResult, with strings etc.s
             pass
-        
+
         conversions = (
             await self._api_grocy.resolve_quantity_unit_conversions_for_product_id(
                 product_id
