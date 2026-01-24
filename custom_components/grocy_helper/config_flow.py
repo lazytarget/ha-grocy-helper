@@ -207,10 +207,16 @@ class GrocyOptionsFlowHandler(OptionsFlow):
     current_product_openfoodfacts: OpenFoodFactsProduct | None = None
     current_product_ica: dict | None = None
     current_lookup: BarcodeLookup | None = None
-    
+
     current_parent_product_id: str | None = None
     matching_products: list[GrocyProduct] = []
     current_stock_entries: list[GrocyStockEntry] = []
+
+    current_product: GrocyProduct | None = None
+    current_parent: GrocyProduct | None = None
+
+    # Cache of the form schema, to easily return errors (must be set to null in forms that support it)
+    current_form_args: VolDictType | None = None
 
     def __init__(self, config_entry: ConfigEntry) -> None:
         """Initialize Grocy-helper options flow"""
@@ -528,6 +534,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
     async def async_step_scan_match_to_product(self, user_input: dict[str, Any] = None):
         """Handle input for adding barcode to a product."""
         errors: dict[str, str] = {}
+        self.current_form_args = None
         _LOGGER.info("match-product: %s", user_input)
         _LOGGER.info("matches: %s", self.matching_products)
 
@@ -560,6 +567,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 self._coordinator.data,
                 self.matching_products,
             )
+            self.current_form_schema = schema
             _LOGGER.info("schema: %s", schema)
 
             schema = vol.Schema(schema)
@@ -669,14 +677,64 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             }
             _LOGGER.warning("PLC: %s", plc)
             # ask for input...
-            return self.async_show_form(
-                step_id=Step.SCAN_MATCH_PRODUCT,
-                data_schema=schema,
-                description_placeholders=plc,
-                errors=errors,
-            )
+            self.current_form_args = {
+                "step_id": Step.SCAN_MATCH_PRODUCT,
+                "data_schema": schema,
+                "description_placeholders": plc,
+                "errors": errors,
+            }
+            
+            return self.async_show_form(*self.current_form_args)
+            # return self.async_show_form(
+            #     step_id=Step.SCAN_MATCH_PRODUCT,
+            #     data_schema=schema,
+            #     description_placeholders=plc,
+            #     errors=errors,
+            # )
+
+        # Form has been submitted!
+        # TODO: Validate
+        
+        # self.new_product = user_input.get("parent_product")
 
         self.current_parent_product_id = user_input.get("parent_product")
+        
+        self.current_product = None
+        self.current_parent = None
+        
+        if p := user_input.get("product_id"):
+            (r, i) = try_parse_int(p)
+            if r and i > 0:
+                # Has chosen existing Product
+                self.current_product_stock_info = await self._api_grocy.get_stock_product_by_id(i)
+                self.current_product = (self.current_product_stock_info or {}).get("product")
+            if self.current_product is None:
+                # Has not chosen product (or was not found)
+                # Set to create a new product (by omitting the 'id' field)
+                # Currently the only thing we know is the name (this will be filled in on the next form page)
+                self.current_product = {
+                    "name": p
+                }
+        else:
+            # Invalid value in 'product_id' field which is required
+            errors["product_id"] = "Missing value"
+            self.current_form_args["errors"] = errors
+            _LOGGER.warning("Passing new form args: %s", self.current_form_args)
+            # Use a cached version of 'schema'...
+            # TODO: Verify
+            return self.async_show_form(*self.current_form_args)
+        
+        
+        # Create parent product (if specified)
+        if p := user_input.get("parent_product"):
+            (r, i) = try_parse_int(p)
+            if r and i > 0:
+                # Has chosen existing Parent product
+                self.current_parent = await self._api_grocy.get_product_by_id(i)
+            if self.current_parent is None:
+                self.current_parent = {"name": p}
+        else:
+            _LOGGER.debug("No parent was input")
 
         # Input has been passed!
         if user_input.get("product_id") and user_input["product_id"] != "-1":
