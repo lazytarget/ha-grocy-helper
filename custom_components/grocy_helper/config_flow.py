@@ -1206,6 +1206,23 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         else:
             # Don't lookup resolved conversions
             skip_add_qu_conversions = True
+        
+        # Lookup Unit charasteristics
+        if qu_id_product:
+            for qq in filter(
+                    lambda qu: qu.get("id") == qu_id_product,
+                    masterdata["quantity_units"],
+                ):
+                    _LOGGER.warning("Chosen unit: %s", qq)
+                    product_quantity_unit_as_liquid = qq["name"] in [
+                        "ml",
+                        "cl",
+                        "dl",
+                        "l",
+                        "L",
+                    ]
+                    product_quantity_unit_as_weight = qq["name"] in ["g", "hg", "kg"]
+                    break
 
         if not skip_add_qu_conversions:
             # The looked up product quantity unit (of the Pack/Piece)
