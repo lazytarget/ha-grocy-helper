@@ -80,6 +80,10 @@
                     "parent_product": "Specify existing or new parent. Leave empty to ignore."
                 }
             },
+            "scan_add_product": {
+                "title": "Add product {name}",
+                "description": "{lookup_output}\n\n## Name suggestions\n{product_aliases}"
+            },
             "add_product": {
                 "title": "Add product",
                 "data": {

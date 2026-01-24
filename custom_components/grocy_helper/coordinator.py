@@ -124,7 +124,7 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
 
         # Lookup in OpenFoodFacts
         try:
-            off = await self._coordinator.get_product_from_open_food_facts(code)
+            off = await self.get_product_from_open_food_facts(code)
             _LOGGER.info("OpenFoodFacts product: %s", off)
         except BaseException as be:
             _LOGGER.warning("Error fetching data from OpenFoodFacts: %s", be)
@@ -200,7 +200,7 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
             "off": off,
             "barcode": code,
             # "lookup_name": ica_fullname or off_fullname,
-            "product_aliases": "\n".join(sorted(set(product_aliases))),
+            "product_aliases": sorted(set(product_aliases)),
             "lookup_output": lookup_output,
             # "product_matches": "\n".join(
             #     f"{p['name']}" for p in self.matching_products
