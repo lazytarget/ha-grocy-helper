@@ -1048,8 +1048,20 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             # TODO: check for success!
             _LOGGER.info("created prod: %s", product)
             if creating_parent:
+                # Parent has been successfully created
                 self.current_parent = product
+                
+                if not self.current_product.get("parent_product_id"):
+                    # Update Product with the new Parent mapping
+                    product_updates = {
+                        "parent_product_id": self.current_parent["id"],
+                    }
+                    _LOGGER.info("Will update product: #%s %s", product["id"], product_updates)
+                    await self._api_grocy.update_product(product["id"], product_updates)
+                    # TODO: Check for success
+                    self.current_product.update(product_updates)    # update local cache with assumed changes
             else:
+                # Product has been successfully created
                 self.current_product_stock_info = (
                     await self._api_grocy.get_stock_product_by_id(product["id"])
                 )
