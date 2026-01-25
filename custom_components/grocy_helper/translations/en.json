@@ -76,7 +76,6 @@
                 },
                 "data_description": {
                     "product_id": "Barcode {barcode} will be mapped to this product. \nName suggestions are grouped on top of dropdown.",
-                    "product_mode": "Decide how to map",
                     "parent_product": "Specify existing or new parent. Leave empty to ignore."
                 }
             },
@@ -95,10 +94,10 @@
                 "title": "Add parent {name}",
                 "description": "{lookup_output}\n\n## Name suggestions\n{product_aliases}",
                 "data_description": {
-                    "qu_id_stock": "Avoid Piece/Pack. How do you want to measure the total amount? Often best with 'kg'/'L'",
+                    "qu_id_stock": "How do you want to measure the total amount? Often best with 'kg'/'L'\n**Avoid Piece/Pack!**",
                     "qu_id_purchase": "This could basically be hidden from UI, since parents are never bought. Automatically set same as ´qu_id_stock´ in BE",
                     "qu_id_consume": "This could basically be hidden from UI, since parents are never bought. Automatically set same as ´qu_id_stock´ in BE",
-                    "qu_id_price": "Avoid Piece/Pack. Often best with 'kg'/'L'"
+                    "qu_id_price": "How do you want to compare prices? Often best with 'kg' or 'L'\n**Avoid Piece/Pack!**"
                 }
             },
             "scan_update_product_details": {
@@ -112,7 +111,7 @@
                 }
             },
             "scan_add_product_barcode": {
-                "title": "Add barcode {barcode} to product {name}",
+                "title": "Add barcode to {name}",
                 "description": "{lookup_output}\n\n## Name suggestions\n{product_aliases}",
                 "data_description": {
                     "note": "A fully descriptive name of the specific product with barcode {barcode}",

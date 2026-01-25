@@ -190,7 +190,7 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
         lookup_output = "\n\n".join(
             ["\n".join(p) for p in (ica_output, off_output) if len(p) > 1]
         )
-        lookup_output = f"# Barcode lookup\n\n{lookup_output}"
+        lookup_output = f"# Barcode lookup\nBarcode: {code}\n\n{lookup_output}"
 
         # Format aliases as a Markdown-list
         product_aliases = [f"- {a.strip()}" for a in product_aliases if a]
