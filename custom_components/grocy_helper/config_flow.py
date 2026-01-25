@@ -889,7 +889,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         # Generate form schema
         schema: VolDictType = None
-        schema = GENERATE_CREATE_PRODUCT_SCHEMA(masterdata, user_input)
+        schema = GENERATE_CREATE_PRODUCT_SCHEMA(masterdata, user_input, creating_parent=creating_parent)
         schema = vol.Schema(schema)
 
         _LOGGER.info("Original input: %s", user_input)
@@ -986,17 +986,17 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 new_product["default_best_before_days"] = int(val)
             if val := user_input.get("default_best_before_days_after_open"):
                 new_product["default_best_before_days_after_open"] = int(val)
-            new_product["qu_id_purchase"] = user_input.get(
-                "qu_id_purchase", user_input.get("qu_id")
-            )
             new_product["qu_id_stock"] = user_input.get(
                 "qu_id_stock", user_input.get("qu_id")
             )
-            new_product["qu_id_price"] = user_input.get(
-                "qu_id_price", user_input.get("qu_id")
+            new_product["qu_id_purchase"] = user_input.get(
+                "qu_id_purchase", user_input.get("qu_id")
             )
             new_product["qu_id_consume"] = user_input.get(
                 "qu_id_consume", user_input.get("qu_id")
+            )
+            new_product["qu_id_price"] = user_input.get(
+                "qu_id_price", user_input.get("qu_id")
             )
             new_product["row_created_timestamp"] = dt.datetime.now().strftime(
                 "%Y-%m-%d %H:%M:%S"
@@ -1147,7 +1147,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         # Generate form schema
         schema: VolDictType = None
-        schema = GENERATE_CREATE_PRODUCT_SCHEMA(masterdata, user_input)
+        schema = GENERATE_CREATE_PRODUCT_SCHEMA(masterdata, user_input, creating_parent=creating_parent)
         schema = vol.Schema(schema)
 
         _LOGGER.info("Original input: %s", user_input)
@@ -1247,17 +1247,19 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 new_product["default_best_before_days"] = int(val)
             if val := user_input.get("default_best_before_days_after_open"):
                 new_product["default_best_before_days_after_open"] = int(val)
-            new_product["qu_id_purchase"] = user_input.get(
-                "qu_id_purchase", user_input.get("qu_id")
-            )
             new_product["qu_id_stock"] = user_input.get(
                 "qu_id_stock", user_input.get("qu_id")
             )
+            # ´qu_id_purchase´ is not really relevant for parents
+            new_product["qu_id_purchase"] = user_input.get(
+                "qu_id_purchase", new_product["qu_id_stock"] #, user_input.get("qu_id")
+            )
+            # ´qu_id_consume´ is not really relevant for parents
+            new_product["qu_id_consume"] = user_input.get(
+                "qu_id_consume", new_product["qu_id_stock"] #, user_input.get("qu_id")
+            )
             new_product["qu_id_price"] = user_input.get(
                 "qu_id_price", user_input.get("qu_id")
-            )
-            new_product["qu_id_consume"] = user_input.get(
-                "qu_id_consume", user_input.get("qu_id")
             )
             new_product["row_created_timestamp"] = dt.datetime.now().strftime(
                 "%Y-%m-%d %H:%M:%S"
@@ -2309,7 +2311,7 @@ def GENERATE_TRANSFER_STOCK_ENTRY(
 
 
 def GENERATE_CREATE_PRODUCT_SCHEMA(
-    masterdata: GrocyMasterData, suggested_values: dict[str, str]
+    masterdata: GrocyMasterData, suggested_values: dict[str, str], creating_parent: bool = False
 ) -> VolDictType:
     locs = [
         selector.SelectOptionDict(
@@ -2411,42 +2413,43 @@ def GENERATE_CREATE_PRODUCT_SCHEMA(
             ),
         }
     )
-    schemas.update(
-        {
-            vol.Required(
-                "qu_id_purchase",
-                description={
-                    "suggested_value": suggested_values.get(
-                        "qu_id_purchase", suggested_values.get("qu_id")
-                    ),
-                },
-            ): selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=qu,
-                    mode=selector.SelectSelectorMode.DROPDOWN,
-                    multiple=False,
-                )
-            ),
-        }
-    )
-    schemas.update(
-        {
-            vol.Required(
-                "qu_id_consume",
-                description={
-                    "suggested_value": suggested_values.get(
-                        "qu_id_consume", suggested_values.get("qu_id")
-                    ),
-                },
-            ): selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=qu,
-                    mode=selector.SelectSelectorMode.DROPDOWN,
-                    multiple=False,
-                )
-            ),
-        }
-    )
+    if not creating_parent:
+        schemas.update(
+            {
+                vol.Required(
+                    "qu_id_purchase",
+                    description={
+                        "suggested_value": suggested_values.get(
+                            "qu_id_purchase", suggested_values.get("qu_id")
+                        ),
+                    },
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=qu,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                        multiple=False,
+                    )
+                ),
+            }
+        )
+        schemas.update(
+            {
+                vol.Required(
+                    "qu_id_consume",
+                    description={
+                        "suggested_value": suggested_values.get(
+                            "qu_id_consume", suggested_values.get("qu_id")
+                        ),
+                    },
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=qu,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                        multiple=False,
+                    )
+                ),
+            }
+        )
     schemas.update(
         {
             vol.Required(

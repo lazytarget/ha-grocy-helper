@@ -82,7 +82,44 @@
             },
             "scan_add_product": {
                 "title": "Add product {name}",
-                "description": "{lookup_output}\n\n## Name suggestions\n{product_aliases}"
+                "description": "{lookup_output}\n\n## Name suggestions\n{product_aliases}",
+                "data_description": {
+                    "location_id": "Where any new and unopened products are usually stored",
+                    "qu_id_stock": "99% of cases this should be Piece/Pack (the one which sounds more appropriate)",
+                    "qu_id_purchase": "Should be same as ´qu_id_purchase´",
+                    "qu_id_consume": "Should be same as ´qu_id_consume´",
+                    "qu_id_price": "Same as ´qu_id_purchase´\nNote: this might get automatically updated later if product quantity is derrived from 'kg'/'L')"
+                }
+            },
+            "scan_add_product_parent": {
+                "title": "Add parent {name}",
+                "description": "{lookup_output}\n\n## Name suggestions\n{product_aliases}",
+                "data_description": {
+                    "qu_id_stock": "Avoid Piece/Pack. How do you want to measure the total amount? Often best with 'kg'/'L'",
+                    "qu_id_purchase": "This could basically be hidden from UI, since parents are never bought. Automatically set same as ´qu_id_stock´ in BE",
+                    "qu_id_consume": "This could basically be hidden from UI, since parents are never bought. Automatically set same as ´qu_id_stock´ in BE",
+                    "qu_id_price": "Avoid Piece/Pack. Often best with 'kg'/'L'"
+                }
+            },
+            "scan_update_product_details": {
+                "title": "Update product {name}",
+                "description": "{lookup_output}\n\n## Name suggestions\n{product_aliases}",
+                "data_description": {
+                    "default_consume_location_id": "Where are usually opened products placed. These will be consumed first",
+                    "product_quantity": "The quantity of the actual physcial Piece/Pack",
+                    "qu_id_product": "The quantity unit of the actual physcial Piece/Pack",
+                    "calories_per_100": "The amount of calories per 100 (g/ml). This will be re-calculated and the total calories per Piece/Pack will be saved, please verify after creation..."
+                }
+            },
+            "scan_add_product_barcode": {
+                "title": "Add barcode {barcode} to product {name}",
+                "description": "{lookup_output}\n\n## Name suggestions\n{product_aliases}",
+                "data_description": {
+                    "note": "A fully descriptive name of the specific product with barcode {barcode}",
+                    "shopping_location_id": "The default store when purchasing this specific barcode",
+                    "amount": "The default amount when purchasing with this specifc barcode",
+                    "qu_id": "The quantity unit of the amount"
+                }
             },
             "add_product": {
                 "title": "Add product",
