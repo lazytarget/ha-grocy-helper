@@ -510,7 +510,9 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 self.current_product_stock_info = (
                     await self._api_grocy.get_stock_product_by_barcode(code)
                 )
-                self.current_product = (self.current_product_stock_info or {}).get("product")
+                self.current_product = (self.current_product_stock_info or {}).get(
+                    "product"
+                )
 
         # Proceed with BarcodeBuddy processing
         return await self.async_step_scan_process(user_input=None)
@@ -636,7 +638,9 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         # Generate form schema
         schema: VolDictType = None
-        schema = GENERATE_CREATE_PRODUCT_SCHEMA(masterdata, user_input, creating_parent=creating_parent)
+        schema = GENERATE_CREATE_PRODUCT_SCHEMA(
+            masterdata, user_input, creating_parent=creating_parent
+        )
         schema = vol.Schema(schema)
 
         _LOGGER.info("Original input: %s", user_input)
@@ -805,9 +809,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     await self._api_grocy.update_product(product["id"], product_updates)
                     # TODO: Check for success
                     # update local cache with assumed changes
-                    self.current_product.update(
-                        product_updates
-                    )
+                    self.current_product.update(product_updates)
             else:
                 # Product has been successfully created
                 self.current_product_stock_info = (
@@ -842,7 +844,9 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         # Generate form schema
         schema: VolDictType = None
-        schema = GENERATE_CREATE_PRODUCT_SCHEMA(masterdata, user_input, creating_parent=creating_parent)
+        schema = GENERATE_CREATE_PRODUCT_SCHEMA(
+            masterdata, user_input, creating_parent=creating_parent
+        )
         schema = vol.Schema(schema)
 
         _LOGGER.info("Original input: %s", user_input)
@@ -861,6 +865,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     "COPY prop to parent: %s=%s", k, self.current_product[k]
                 )
                 val = self.current_product[k]
+
             if k not in [
                 "should_not_be_frozen",
                 "calories_per_100",
@@ -874,6 +879,17 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 val = str(val) if val is not None else None
             user_input[k] = val
         _LOGGER.info("Updated input: %s", user_input)
+
+        # Set kg/L when appropriate
+        if first_render:
+            piece_id = masterdata["known_qu"].get("Piece", {}).get("id")
+            pack_id = masterdata["known_qu"].get("Pack", {}).get("id")
+            if int(user_input.get("qu_id_stock", -99)) in [piece_id, pack_id] and int(
+                user_input.get("qu_id_price", -99)
+            ) not in [piece_id, pack_id]:
+                # Instead of Piece/Pack, copy from ´qu_id_price´ if not Piece/Pack (example: "KG" / "L")
+                _LOGGER.warning("Copying ´qu_id_price´ into ´qu_id_stock´: %s", user_input)
+                user_input["qu_id_stock"] = user_input["qu_id_price"]
 
         schema = self.add_suggested_values_to_schema(schema, user_input)
 
@@ -945,21 +961,21 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 "qu_id_stock", user_input.get("qu_id")
             )
             new_product["qu_id_purchase"] = user_input.get(
-                "qu_id_purchase", new_product["qu_id_stock"]
+                "qu_id_purchase",
+                new_product["qu_id_stock"],
                 # ...this unit is not really for parents, but will set as field is required
             )
             new_product["qu_id_consume"] = user_input.get(
-                "qu_id_consume", new_product["qu_id_stock"]
+                "qu_id_consume",
+                new_product["qu_id_stock"],
                 # ...this unit is not really for parents, but will set as field is required
             )
             new_product["qu_id_price"] = user_input.get(
-                "qu_id_price", user_input.get("qu_id")
+                "qu_id_price",
+                user_input.get("qu_id"),
                 # TODO: clear this value if is Piece/Pack, since it is best with a unit for Liquid / Weight
             )
-            if new_product["qu_id_stock"] == "PIECE_ID" and new_product["qu_id_price"] != "PIECE_ID":
-                # TODO: instead of Piece/Pack, copy from ´qu_id_price´ if is "KG" / "L"
-                pass
-            
+
             new_product["row_created_timestamp"] = dt.datetime.now().strftime(
                 "%Y-%m-%d %H:%M:%S"
             )
@@ -1014,15 +1030,17 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     "parent_product_id": self.current_parent["id"],
                 }
                 _LOGGER.info(
-                    "Will update product: #%s %s", self.current_product["id"], product_updates
+                    "Will update product: #%s %s",
+                    self.current_product["id"],
+                    product_updates,
                 )
-                await self._api_grocy.update_product(self.current_product["id"], product_updates)
+                await self._api_grocy.update_product(
+                    self.current_product["id"], product_updates
+                )
                 # TODO: Check for success
 
                 # update local cache with assumed changes
-                self.current_product.update(
-                    product_updates
-                )
+                self.current_product.update(product_updates)
         # Done with product, now continue with the Process work for the current barcode
         return await self.async_step_scan_queue(user_input=None)
 
@@ -1062,7 +1080,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             _LOGGER.info("form 'add_barcode' user_input: %s", user_input)
 
             # ask for input...
-            
+
             plc = {
                 "name": new_product.get("name"),
                 "barcode": code,
@@ -1226,7 +1244,6 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             schema = vol.Schema(schema)
             self.add_suggested_values_to_schema(schema, user_input)
 
-
             plc = {
                 "name": product.get("name"),
                 "barcode": self.current_barcode,
@@ -1322,9 +1339,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             await self._api_grocy.update_product(product["id"], product_updates)
 
             # update local cache with assumed changes
-            self.current_product.update(
-                product_updates
-            )
+            self.current_product.update(product_updates)
 
         # Done with product, check if create parent was requested...
         return await self.async_step_scan_add_product_parent(user_input=None)
@@ -1935,7 +1950,9 @@ def GENERATE_TRANSFER_STOCK_ENTRY(
 
 
 def GENERATE_CREATE_PRODUCT_SCHEMA(
-    masterdata: GrocyMasterData, suggested_values: dict[str, str], creating_parent: bool = False
+    masterdata: GrocyMasterData,
+    suggested_values: dict[str, str],
+    creating_parent: bool = False,
 ) -> VolDictType:
     locs = [
         selector.SelectOptionDict(

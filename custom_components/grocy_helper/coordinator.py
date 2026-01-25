@@ -79,6 +79,9 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
                 "quantity_units": quantity_units,
                 "products": products,
                 "known_qu": {
+                    "Piece": next((qu for qu in quantity_units if qu["name"] == "Piece"), None),
+                    "Pack": next((qu for qu in quantity_units if qu["name"] == "Pack"), None),
+
                     "g": next((qu for qu in quantity_units if qu["name"] == "g"), None),
                     "kg": next(
                         (qu for qu in quantity_units if qu["name"] == "kg"), None
