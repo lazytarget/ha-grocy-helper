@@ -537,6 +537,14 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             self.barcode_results.append(f"{code} maps to {p['name']}")
             return await self.async_step_scan_queue(user_input=None)
 
+        if self.barcode_scan_mode == SCAN_MODE.INVENTORY:
+            if not self.current_product_stock_info:
+                # Load stock info if not already loaded...
+                self.current_product_stock_info = (
+                    await self._api_grocy.get_stock_product_by_barcode(code)
+                )
+                self.current_product = (self.current_product_stock_info or {}).get("product")
+
         # Proceed with BarcodeBuddy processing
         return await self.async_step_scan_process(user_input=None)
 
