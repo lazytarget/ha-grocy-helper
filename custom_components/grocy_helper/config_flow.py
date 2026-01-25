@@ -2052,26 +2052,25 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
         for prod in product_options
         if prod["active"] == 1
     ]
-    prods.insert(
-        len(suggested_products),
-        selector.SelectOptionDict(
-            # value="-1", label="[CHOOSE FROM SUGGESTIONS / ENTER NAME]"
-            value="-1",
-            label=f"[{len(suggested_products)} SUGGESTIONS ABOVE]",
-        ),
-    )
 
     selected_product_id = None
-    if len(suggested_products) == 1:
-        selected_product_id = str(
-            suggested_values.get("product_id", suggested_products[0]["id"])
+    if len(suggested_products) > 0:
+        prods.insert(
+            len(suggested_products),
+            selector.SelectOptionDict(
+                # value="-1", label="[CHOOSE FROM SUGGESTIONS / ENTER NAME]"
+                value="-1",
+                label=f"\t[{len(suggested_products)} SUGGESTIONS ABOVE]",
+            ),
         )
-    elif len(suggested_products) > 0:
-        # If has suggestions, then pre-select "CREATE-NEW"
-        selected_product_id = "-1"
-    else:
-        # No suggestions, leave field empty
-        selected_product_id = ""
+        if len(suggested_products) == 1:
+            # Only has a single suggestion, then pre-select it
+            selected_product_id = str(
+                suggested_values.get("product_id", suggested_products[0]["id"])
+            )
+        else:
+            # If has more suggestions, then pre-select "CREATE-NEW"
+            selected_product_id = "-1"
 
     # TODO: rewrite this Schema to have radio button for Create / Create child? / Map existing
     # -> barcode
