@@ -890,8 +890,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         )
         for k in data_schema.schema.keys():
             # Fill user_input with current state of ´new_product´
-            user_input[k] = user_input.get(k, new_product.get(k))
-            if not user_input[k] and creating_parent:
+            val = user_input.get(k, new_product.get(k))
+            if not val and creating_parent:
                 # Copy values from Product when creating a Parent
                 if k in ["id", "name", "description"]:
                     # Exclude copying these props
@@ -900,18 +900,18 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     "COPY prop to parent: %s=%s", k, self.current_product[k]
                 )
                 val = self.current_product[k]
-                if k not in [
-                    "should_not_be_frozen",
-                    "calories_per_100",
-                    "default_best_before_days",
-                    "default_best_before_days_after_open",
-                    "default_best_before_days_after_freezing",
-                    "default_best_before_days_after_thawing",
-                ]:
-                    # if not part of exceptions, then set value in ´str´
-                    # Exceptions are most likley in ´int´
-                    val = str(val)
-                user_input[k] = val
+            if k not in [
+                "should_not_be_frozen",
+                "calories_per_100",
+                "default_best_before_days",
+                "default_best_before_days_after_open",
+                "default_best_before_days_after_freezing",
+                "default_best_before_days_after_thawing",
+            ]:
+                # if not part of exceptions, then set value in ´str´
+                # Exceptions are most likley in ´int´
+                val = str(val) if val is not None else None
+            user_input[k] = val
         _LOGGER.info("Updated input: %s", user_input)
 
         schema = self.add_suggested_values_to_schema(schema, user_input)
@@ -1101,10 +1101,9 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     await self._api_grocy.get_stock_product_by_id(product["id"])
                 )
                 self.current_product = product
-                if self.current_parent and not self.current_parent.get("id"):
-                    # Should map to parent, but it has no id yet...
-                    # Forward add_form again, but add the parent product instead...
-                    return await self.async_step_scan_add_product(user_input=None)
+                # if self.current_parent and not self.current_parent.get("id"):
+                #     # Should map to a parent, but it has no id yet...
+                #     return await self.async_step_scan_add_product(user_input=None)
 
         # TODO: MAKES MORE SENSE TO GO TO UPDATE PRODUCT DETAILS? EFTER PRODUCT-PARENTS REFACTOR??
         return await self.async_step_scan_add_product_barcode(user_input=None)
@@ -1149,8 +1148,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         )
         for k in data_schema.schema.keys():
             # Fill user_input with current state of ´new_product´
-            user_input[k] = user_input.get(k, new_product.get(k))
-            if not user_input[k] and creating_parent:
+            val = user_input.get(k, new_product.get(k))
+            if not val and creating_parent:
                 # Copy values from Product when creating a Parent
                 if k in ["id", "name", "description"]:
                     # Exclude copying these props
@@ -1159,18 +1158,18 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     "COPY prop to parent: %s=%s", k, self.current_product[k]
                 )
                 val = self.current_product[k]
-                if k not in [
-                    "should_not_be_frozen",
-                    "calories_per_100",
-                    "default_best_before_days",
-                    "default_best_before_days_after_open",
-                    "default_best_before_days_after_freezing",
-                    "default_best_before_days_after_thawing",
-                ]:
-                    # if not part of exceptions, then set value in ´str´
-                    # Exceptions are most likley in ´int´
-                    val = str(val)
-                user_input[k] = val
+            if k not in [
+                "should_not_be_frozen",
+                "calories_per_100",
+                "default_best_before_days",
+                "default_best_before_days_after_open",
+                "default_best_before_days_after_freezing",
+                "default_best_before_days_after_thawing",
+            ]:
+                # if not part of exceptions, then set value in ´str´
+                # Exceptions are most likley in ´int´
+                val = str(val) if val is not None else None
+            user_input[k] = val
         _LOGGER.info("Updated input: %s", user_input)
 
         schema = self.add_suggested_values_to_schema(schema, user_input)
@@ -1350,9 +1349,9 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     "parent_product_id": self.current_parent["id"],
                 }
                 _LOGGER.info(
-                    "Will update product: #%s %s", product["id"], product_updates
+                    "Will update product: #%s %s", self.current_product["id"], product_updates
                 )
-                await self._api_grocy.update_product(product["id"], product_updates)
+                await self._api_grocy.update_product(self.current_product["id"], product_updates)
                 # TODO: Check for success
                 self.current_product.update(
                     product_updates
@@ -2053,7 +2052,7 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
         if prod["active"] == 1
     ]
 
-    selected_product_id = None
+    selected_product_id = ""
     if len(suggested_products) > 0:
         prods.insert(
             len(suggested_products),
