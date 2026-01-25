@@ -932,9 +932,16 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             #     # fallback to a formatted name from OpenFoodFacts
             #     off_fullname,
             # )
-            new_product["location_id"] = user_input["location_id"]
+            new_product["location_id"] = user_input.get(
+                "location_id", self.current_product["location_id"]
+            )
             new_product["should_not_be_frozen"] = (
-                1 if user_input.get("should_not_be_frozen", False) else 0
+                1
+                if user_input.get(
+                    "should_not_be_frozen",
+                    self.current_product.get("should_not_be_frozen", False),
+                )
+                else 0
             )
             loc = next(
                 (
@@ -1982,60 +1989,61 @@ def GENERATE_CREATE_PRODUCT_SCHEMA(
             ): selector.TextSelector({"type": "text"})
         }
     )
-    schemas.update(
-        {
-            vol.Required(
-                "location_id",
-                description={
-                    "suggested_value": suggested_values.get("location_id"),
-                },
-            ): selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=locs,
-                    mode=selector.SelectSelectorMode.DROPDOWN,
-                    multiple=False,
-                )
-            ),
-        }
-    )
-    schemas.update(
-        {
-            vol.Required(
-                "should_not_be_frozen",
-                default=suggested_values.get("should_not_be_frozen", False),
-            ): selector.BooleanSelector()
-        }
-    )
-    schemas.update(
-        {
-            vol.Optional(
-                "default_best_before_days",
-                description={
-                    "suggested_value": suggested_values.get("default_best_before_days"),
-                },
-            ): selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    mode=selector.NumberSelectorMode.BOX, step=1
-                )
-            ),
-        }
-    )
-    schemas.update(
-        {
-            vol.Optional(
-                "default_best_before_days_after_open",
-                description={
-                    "suggested_value": suggested_values.get(
-                        "default_best_before_days_after_open"
-                    ),
-                },
-            ): selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    mode=selector.NumberSelectorMode.BOX, step=1
-                )
-            ),
-        }
-    )
+    if not creating_parent:
+        schemas.update(
+            {
+                vol.Required(
+                    "location_id",
+                    description={
+                        "suggested_value": suggested_values.get("location_id"),
+                    },
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=locs,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                        multiple=False,
+                    )
+                ),
+            }
+        )
+        schemas.update(
+            {
+                vol.Required(
+                    "should_not_be_frozen",
+                    default=suggested_values.get("should_not_be_frozen", False),
+                ): selector.BooleanSelector()
+            }
+        )
+        schemas.update(
+            {
+                vol.Optional(
+                    "default_best_before_days",
+                    description={
+                        "suggested_value": suggested_values.get("default_best_before_days"),
+                    },
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        mode=selector.NumberSelectorMode.BOX, step=1
+                    )
+                ),
+            }
+        )
+        schemas.update(
+            {
+                vol.Optional(
+                    "default_best_before_days_after_open",
+                    description={
+                        "suggested_value": suggested_values.get(
+                            "default_best_before_days_after_open"
+                        ),
+                    },
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        mode=selector.NumberSelectorMode.BOX, step=1
+                    )
+                ),
+            }
+        )
     schemas.update(
         {
             vol.Required(
