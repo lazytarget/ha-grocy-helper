@@ -1249,17 +1249,19 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 new_product["default_best_before_days_after_open"] = int(val)
             new_product["qu_id_stock"] = user_input.get(
                 "qu_id_stock", user_input.get("qu_id")
+                # TODO: clear this value if is Piece/Pack, since it is best with a unit for Liquid / Weight
             )
-            # ´qu_id_purchase´ is not really relevant for parents
             new_product["qu_id_purchase"] = user_input.get(
-                "qu_id_purchase", new_product["qu_id_stock"] #, user_input.get("qu_id")
+                "qu_id_purchase", new_product["qu_id_stock"]
+                # ...this unit is not really for parents, but will set as field is required
             )
-            # ´qu_id_consume´ is not really relevant for parents
             new_product["qu_id_consume"] = user_input.get(
-                "qu_id_consume", new_product["qu_id_stock"] #, user_input.get("qu_id")
+                "qu_id_consume", new_product["qu_id_stock"]
+                # ...this unit is not really for parents, but will set as field is required
             )
             new_product["qu_id_price"] = user_input.get(
                 "qu_id_price", user_input.get("qu_id")
+                # TODO: clear this value if is Piece/Pack, since it is best with a unit for Liquid / Weight
             )
             new_product["row_created_timestamp"] = dt.datetime.now().strftime(
                 "%Y-%m-%d %H:%M:%S"
@@ -1388,6 +1390,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
     ):
         """Handle input for adding product barcode."""
         errors: dict[str, str] = {}
+        self.current_form_args = None
 
         # code = current_barcode.strip().strip(",").strip()
         # code = user_input["code"]
@@ -1420,11 +1423,27 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             _LOGGER.info("form 'add_barcode' user_input: %s", user_input)
 
             # ask for input...
-            return self.async_show_form(
-                step_id=Step.SCAN_ADD_PRODUCT_BARCODE,
-                data_schema=schema,
-                errors=errors,
-            )
+            
+            plc = {
+                "name": new_product.get("name"),
+                "barcode": code,
+                # "lookup_name": ica_fullname or off_fullname,
+                "product_aliases": "\n".join(
+                    self.current_lookup.get("product_aliases", [])
+                ),
+                "lookup_output": self.current_lookup.get("lookup_output"),
+                # "product_matches": "\n".join(
+                #     f"{p['name']}" for p in self.matching_products
+                # ),
+            }
+            self.current_form_args = {
+                "step_id": Step.SCAN_ADD_PRODUCT_BARCODE,
+                "data_schema": schema,
+                "description_placeholders": plc,
+                "errors": errors,
+            }
+            _LOGGER.debug("FORM-ARGS: %s", self.current_form_args)
+            return self.async_show_form(**self.current_form_args)
 
         # Input has been passed!
         br: GrocyProductBarcode = {
@@ -1572,11 +1591,27 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             schema = vol.Schema(schema)
             self.add_suggested_values_to_schema(schema, user_input)
 
-            return self.async_show_form(
-                step_id=Step.SCAN_UPDATE_PRODUCT_DETAILS,
-                data_schema=schema,
-                errors=errors,
-            )
+
+            plc = {
+                "name": product.get("name"),
+                "barcode": self.current_barcode,
+                # "lookup_name": ica_fullname or off_fullname,
+                "product_aliases": "\n".join(
+                    self.current_lookup.get("product_aliases", [])
+                ),
+                "lookup_output": self.current_lookup.get("lookup_output"),
+                # "product_matches": "\n".join(
+                #     f"{p['name']}" for p in self.matching_products
+                # ),
+            }
+            self.current_form_args = {
+                "step_id": Step.SCAN_UPDATE_PRODUCT_DETAILS,
+                "data_schema": schema,
+                "description_placeholders": plc,
+                "errors": errors,
+            }
+            _LOGGER.debug("FORM-ARGS: %s", self.current_form_args)
+            return self.async_show_form(**self.current_form_args)
 
         _LOGGER.info(
             "About to add conv: %s %s %s",
@@ -1914,6 +1949,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 request["transaction_type"] = "purchase"
                 request["amount"] = (
                     1  # TODO: check barcode buddy current quantity context
+                    # TODO: introduce a field for manual input during scan (default to Barcode amount, then to 1). If not able to fetch override from BBuddy
                 )
                 product_id = self.current_product_stock_info["product"]["id"]
                 request.pop("barcode", None)  # Instead go by ´product_id´

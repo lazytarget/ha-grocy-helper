@@ -105,7 +105,7 @@
                 "title": "Update product {name}",
                 "description": "{lookup_output}\n\n## Name suggestions\n{product_aliases}",
                 "data_description": {
-                    "default_consume_location_id": "Where are usually opened products placed. These will be consumed first",
+                    "default_consume_location_id": "Where are usually opened products placed? These will be consumed first",
                     "product_quantity": "The quantity of the actual physcial Piece/Pack",
                     "qu_id_product": "The quantity unit of the actual physcial Piece/Pack",
                     "calories_per_100": "The amount of calories per 100 (g/ml). This will be re-calculated and the total calories per Piece/Pack will be saved, please verify after creation..."
