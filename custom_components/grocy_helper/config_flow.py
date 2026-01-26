@@ -589,6 +589,10 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 self.current_product = (self.current_product_stock_info or {}).get(
                     "product"
                 )
+                
+                # TODO: Validate that the product doesn't already belong to a (different) parent!!
+                # Allow for "" or "id" value of the actual parent
+                
             if self.current_product is None:
                 # Has not chosen product (or was not found)
                 # Set to create a new product (by omitting the 'id' field)
@@ -608,8 +612,12 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             # TODO: Verify
             return self.async_show_form(*self.current_form_args)
 
-        # Ready to ask for required fields for Product creation
-        return await self.async_step_scan_add_product(user_input=None)
+        # If Product is new, then proceed to generation
+        if not self.current_product.get("id"):
+            return await self.async_step_scan_add_product(user_input=None)
+
+        # else if Parent is new, then proceed to generation
+        return await self.async_step_scan_add_product_parent(user_input=None)
 
     async def async_step_scan_add_product(self, user_input: dict[str, Any] = None):
         """Handle input for adding a new product."""
@@ -618,17 +626,11 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         masterdata: GrocyMasterData = self._coordinator.data
         _LOGGER.info("form 'add_product' user_input: %s", user_input)
 
-        new_product: GrocyProduct = None
-        creating_parent: bool = False
-        if not self.current_product.get("id"):
+        new_product: GrocyProduct = (self.current_product or {}).copy()
+        if self.current_product.get("id"):
             # Create new product
-            _LOGGER.info("Create product: %s", self.current_product)
-            new_product = (self.current_product or {}).copy()
-        elif self.current_parent is not None and not self.current_parent.get("id"):
-            # Create parent product
-            _LOGGER.info("Create parent: %s", self.current_parent)
-            new_product = (self.current_parent or {}).copy()
-            creating_parent = True
+            _LOGGER.warning("Product already has an id: %s", self.current_product)
+            return self.async_abort(reason="Should not render Create product form, since a product already exists")
 
         code = self.current_barcode
 
@@ -639,7 +641,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         # Generate form schema
         schema: VolDictType = None
         schema = GENERATE_CREATE_PRODUCT_SCHEMA(
-            masterdata, user_input, creating_parent=creating_parent
+            masterdata, user_input, creating_parent=False
         )
         schema = vol.Schema(schema)
 
@@ -650,15 +652,6 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         for k in data_schema.schema.keys():
             # Fill user_input with current state of ´new_product´
             val = user_input.get(k, new_product.get(k))
-            if not val and creating_parent:
-                # Copy values from Product when creating a Parent
-                if k in ["id", "name", "description"]:
-                    # Exclude copying these props
-                    continue
-                _LOGGER.warning(
-                    "COPY prop to parent: %s=%s", k, self.current_product[k]
-                )
-                val = self.current_product[k]
             if k not in [
                 "should_not_be_frozen",
                 "calories_per_100",
@@ -752,29 +745,19 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             new_product["row_created_timestamp"] = dt.datetime.now().strftime(
                 "%Y-%m-%d %H:%M:%S"
             )
-            if creating_parent:
-                new_product["description"] = user_input.get(
-                    "description", new_product.get("description")
-                )
-                new_product["no_own_stock"] = 1
-                new_product["hide_on_stock_overview"] = 1
-                new_product["disable_open"] = 1
-                new_product["cumulate_min_stock_amount_of_sub_products"] = 1
-                new_product["parent_product_id"] = None
-            else:
-                new_product["description"] = user_input.get(
+            new_product["description"] = user_input.get(
+                "description",
+                new_product.get(
                     "description",
-                    new_product.get(
-                        "description",
-                        (
-                            # fallback to the lookup results
-                            self.current_lookup.get("lookup_output")
-                        ),
+                    (
+                        # fallback to the lookup results
+                        self.current_lookup.get("lookup_output")
                     ),
-                )
-                new_product["parent_product_id"] = user_input.get(
-                    "parent_product_id", new_product["parent_product_id"]
-                )
+                ),
+            )
+            new_product["parent_product_id"] = user_input.get(
+                "parent_product_id", new_product.get("parent_product_id")
+            )
 
             _LOGGER.info("user_input: %s", user_input)
             _LOGGER.info("new_product: %s", new_product)
@@ -794,33 +777,12 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             product = await self._api_grocy.add_product(new_product)
             # TODO: check for success!
             _LOGGER.info("created prod: %s", product)
-            if creating_parent:
-                # Parent has been successfully created
-                self.current_parent = product
+            # Product has been successfully created
+            self.current_product_stock_info = (
+                await self._api_grocy.get_stock_product_by_id(product["id"])
+            )
+            self.current_product = (self.current_product_stock_info or {}).get("product") or product
 
-                if not self.current_product.get("parent_product_id"):
-                    # Update Product with the new Parent mapping
-                    product_updates = {
-                        "parent_product_id": self.current_parent["id"],
-                    }
-                    _LOGGER.info(
-                        "Will update product: #%s %s", product["id"], product_updates
-                    )
-                    await self._api_grocy.update_product(product["id"], product_updates)
-                    # TODO: Check for success
-                    # update local cache with assumed changes
-                    self.current_product.update(product_updates)
-            else:
-                # Product has been successfully created
-                self.current_product_stock_info = (
-                    await self._api_grocy.get_stock_product_by_id(product["id"])
-                )
-                self.current_product = product
-                # if self.current_parent and not self.current_parent.get("id"):
-                #     # Should map to a parent, but it has no id yet...
-                #     return await self.async_step_scan_add_product(user_input=None)
-
-        # TODO: MAKES MORE SENSE TO GO TO UPDATE PRODUCT DETAILS? EFTER PRODUCT-PARENTS REFACTOR??
         return await self.async_step_scan_add_product_barcode(user_input=None)
 
     async def async_step_scan_add_product_parent(
@@ -835,6 +797,14 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         _LOGGER.info("Create parent: %s", self.current_parent)
         new_product: GrocyProduct = (self.current_parent or {}).copy()
         creating_parent = True
+        if self.current_parent is None:
+            # Should not link to a parent, continue to next step...
+            _LOGGER.debug("Product will not be linked to a parent, continue to next step...")
+            return await self.async_step_scan_queue(user_input=None)
+        elif self.current_parent.get("id"):
+            # Parent already exists, continue to next step...
+            _LOGGER.debug("Product parent already exists, continue to next step...")
+            return await self.async_step_scan_queue(user_input=None)
 
         code = self.current_barcode
 
@@ -881,14 +851,17 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         _LOGGER.info("Updated input: %s", user_input)
 
         # Set kg/L when appropriate
+        _LOGGER.info("First render? %s", first_render)
         if first_render:
             piece_id = masterdata["known_qu"].get("Piece", {}).get("id")
             pack_id = masterdata["known_qu"].get("Pack", {}).get("id")
-            if int(user_input.get("qu_id_stock", -99)) in [piece_id, pack_id] and int(
-                user_input.get("qu_id_price", -99)
-            ) not in [piece_id, pack_id]:
+            if (int(user_input.get("qu_id_stock", -99)) in [piece_id, pack_id]) and (
+                int(user_input.get("qu_id_price", -99)) not in [piece_id, pack_id]
+            ):
                 # Instead of Piece/Pack, copy from ´qu_id_price´ if not Piece/Pack (example: "KG" / "L")
-                _LOGGER.warning("Copying ´qu_id_price´ into ´qu_id_stock´: %s", user_input)
+                _LOGGER.warning(
+                    "Copying ´qu_id_price´ into ´qu_id_stock´: %s. Known: %s", user_input, masterdata["known_qu"]
+                )
                 user_input["qu_id_stock"] = user_input["qu_id_price"]
 
         schema = self.add_suggested_values_to_schema(schema, user_input)
@@ -2019,7 +1992,9 @@ def GENERATE_CREATE_PRODUCT_SCHEMA(
                 vol.Optional(
                     "default_best_before_days",
                     description={
-                        "suggested_value": suggested_values.get("default_best_before_days"),
+                        "suggested_value": suggested_values.get(
+                            "default_best_before_days"
+                        ),
                     },
                 ): selector.NumberSelector(
                     selector.NumberSelectorConfig(
