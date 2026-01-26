@@ -67,6 +67,18 @@
                 },
                 "title": "Create a group sensor"
             },
+            "scan_match_to_product": {
+                "title": "Barcode {barcode}",
+                "description": "{lookup_output}\n\n## Name suggestions\n{product_aliases}",
+                "data": {
+                    "product_id": "Product"
+                },
+                "data_description": {
+                    "product_id": "Barcode {barcode} will be mapped to this product. Enter a new name to create new.",
+                    "product_mode": "Decide how to map",
+                    "parent_product": "Specify existing or new parent. Leave empty to ignore."
+                }
+            },
             "add_product": {
                 "title": "Add product",
                 "data": {

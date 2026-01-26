@@ -208,12 +208,14 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
             return OpenFoodFactsProduct(
                 brand_owner=p.get("brand_owner"),
                 brands=p.get("brands"),
+                generic_name=p.get("generic_name"),
                 product_name=p.get("product_name"),
                 product_type=p.get("product_type"),
                 product_quantity=p.get("product_quantity"),
                 product_quantity_unit=p.get("product_quantity_unit"),
                 quantity=p.get("quantity"),
                 categories=p.get("categories_hierarchy"),
+                categories_hierarchy=p.get("categories_hierarchy"),
                 nutriments={
                     "energy_kcal": nutriments.get("energy"),
                     "energy_kcal_100g": nutriments.get(
