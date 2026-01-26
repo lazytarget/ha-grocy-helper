@@ -292,13 +292,13 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
         to_qu_id,
         amount: float,
     ) -> GrocyQuantityUnitConversionResult | None:
-        if from_qu_id == to_qu_id:
-            _LOGGER.warning(
-                "Trying to resolve quantity conversion for the same unit: %s",
-                from_qu_id,
-            )
-            # TODO: return GrocyQuantityUnitConversionResult, with strings etc.s
-            pass
+        # if from_qu_id == to_qu_id:
+        #     _LOGGER.warning(
+        #         "Trying to resolve quantity conversion for the same unit: %s",
+        #         from_qu_id,
+        #     )
+        #     # TODO: return GrocyQuantityUnitConversionResult, with strings etc.s
+        #     pass
 
         conversions = (
             await self._api_grocy.resolve_quantity_unit_conversions_for_product_id(

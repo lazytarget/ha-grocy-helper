@@ -610,7 +610,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             _LOGGER.warning("Passing new form args: %s", self.current_form_args)
             # Use a cached version of 'schema'...
             # TODO: Verify
-            return self.async_show_form(*self.current_form_args)
+            return self.async_show_form(**self.current_form_args)
 
         # If Product is new, then proceed to generation
         if not self.current_product.get("id"):
@@ -855,8 +855,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         if first_render:
             piece_id = masterdata["known_qu"].get("Piece", {}).get("id")
             pack_id = masterdata["known_qu"].get("Pack", {}).get("id")
-            if (int(user_input.get("qu_id_stock", -99)) in [piece_id, pack_id]) and (
-                int(user_input.get("qu_id_price", -99)) not in [piece_id, pack_id]
+            if (int(user_input.get("qu_id_stock") or -99) in [piece_id, pack_id]) and (
+                int(user_input.get("qu_id_price") or -99) not in [piece_id, pack_id]
             ):
                 # Instead of Piece/Pack, copy from ´qu_id_price´ if not Piece/Pack (example: "KG" / "L")
                 _LOGGER.warning(

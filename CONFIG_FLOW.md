@@ -39,13 +39,7 @@ Submit:
 
 - If ´product´ is int, then has selected an existing product to map to.
   -> Fetch product, and cache it as ´map_product´
-- If ´product´ is str, then should create product to map to. 
+- If ´product´ is str, then a new product should be created to map to. 
   -> Next form to render is FORM:create_product
 
-
-
-a. If ´product´ is int AND ´parent_product´ is set, then should maphas selected an existing product to map to.
- If ´product´ is int AND ´parent_product´ is set, then should maphas selected an existing product to map to.
--> Fetch product, and cache it
--> If `parent_product` is set (id or str)
--> Update `product` with `parent_product`.id
+- If ´product.parent_product_id´ is not set, then set it as long as ´parent´ is defined
