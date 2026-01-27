@@ -196,6 +196,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         "input_bestBeforeInDays": True,
         "input_shoppingLocationId": True,
         "input_product_details_during_provision": True,
+        # TODO: Enable detailed Barcode details; defaults for: [shopping_location_id, qu_id, amount] for specific Barcode
     }
     current_bb_mode: int = -1
     barcode_scan_mode: str = None
@@ -535,16 +536,19 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             # Has matching product, display as a suggestion
             _LOGGER.warning("Matching products: %s", self.matching_products)
             schema = GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
-                self._coordinator.data,
-                self.matching_products,
+                masterdata=self._coordinator.data,
+                suggested_products=self.matching_products,
+                lookup=self.current_lookup,
             )
             schema = vol.Schema(schema)
 
+            # Format aliases as a Markdown-list
+            aliases = self.current_lookup.get("product_aliases") or []
             plc = {
                 "barcode": code,
                 "product_aliases": "\n".join(
-                    self.current_lookup.get("product_aliases", [])
-                ),
+                    [f"- {a.strip()}" for a in aliases if a]
+                ),  # Format aliases as a Markdown-list
                 "lookup_output": self.current_lookup.get("lookup_output"),
                 "product_matches": "\n".join(
                     f"{p['name']}" for p in self.matching_products
@@ -668,13 +672,14 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         schema = self.add_suggested_values_to_schema(schema, user_input)
 
+        aliases = self.current_lookup.get("product_aliases") or []
         plc = {
             "name": new_product.get("name"),
             "barcode": code,
             # "lookup_name": ica_fullname or off_fullname,
             "product_aliases": "\n".join(
-                self.current_lookup.get("product_aliases", [])
-            ),
+                [f"- {a.strip()}" for a in aliases if a]
+            ),  # Format aliases as a Markdown-list
             "lookup_output": self.current_lookup.get("lookup_output"),
             # "product_matches": "\n".join(
             #     f"{p['name']}" for p in self.matching_products
@@ -868,13 +873,14 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         schema = self.add_suggested_values_to_schema(schema, user_input)
 
+        aliases = self.current_lookup.get("product_aliases") or []
         plc = {
             "name": new_product.get("name"),
             "barcode": code,
             # "lookup_name": ica_fullname or off_fullname,
             "product_aliases": "\n".join(
-                self.current_lookup.get("product_aliases", [])
-            ),
+                [f"- {a.strip()}" for a in aliases if a]
+            ),  # Format aliases as a Markdown-list
             "lookup_output": self.current_lookup.get("lookup_output"),
             # "product_matches": "\n".join(
             #     f"{p['name']}" for p in self.matching_products
@@ -1063,13 +1069,14 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
             # ask for input...
 
+            aliases = self.current_lookup.get("product_aliases") or []
             plc = {
                 "name": new_product.get("name"),
                 "barcode": code,
                 # "lookup_name": ica_fullname or off_fullname,
                 "product_aliases": "\n".join(
-                    self.current_lookup.get("product_aliases", [])
-                ),
+                    [f"- {a.strip()}" for a in aliases if a]
+                ),  # Format aliases as a Markdown-list
                 "lookup_output": self.current_lookup.get("lookup_output"),
                 # "product_matches": "\n".join(
                 #     f"{p['name']}" for p in self.matching_products
@@ -1226,12 +1233,13 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             schema = vol.Schema(schema)
             self.add_suggested_values_to_schema(schema, user_input)
 
+            aliases = self.current_lookup.get("product_aliases") or []
             plc = {
                 "name": product.get("name"),
                 "barcode": self.current_barcode,
                 "product_aliases": "\n".join(
-                    self.current_lookup.get("product_aliases", [])
-                ),
+                    [f"- {a.strip()}" for a in aliases if a]
+                ),  # Format aliases as a Markdown-list
                 "lookup_output": self.current_lookup.get("lookup_output"),
                 # "product_matches": "\n".join(
                 #     f"{p['name']}" for p in self.matching_products
@@ -1699,6 +1707,7 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
     masterdata: GrocyMasterData,
     suggested_products: list[GrocyProduct],
     suggested_values: dict[str, str] = {},
+    lookup: BarcodeLookup | None = None,
 ) -> VolDictType:
     child_products = [
         prod for prod in masterdata["products"] if prod["parent_product_id"]
@@ -1733,7 +1742,12 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
     ]
 
     selected_product_id = ""
-    if len(suggested_products) > 0:
+    aliases = (lookup or {}).get("product_aliases", [])
+    if len(suggested_products) == 0 and len(aliases) > 0:
+        # No suggested existing products
+        # Check if has a name suggestion...
+        selected_product_id = aliases[0]
+    elif len(suggested_products) > 0:
         prods.insert(
             len(suggested_products),
             selector.SelectOptionDict(

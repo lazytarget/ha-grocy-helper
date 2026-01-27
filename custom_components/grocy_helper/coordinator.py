@@ -194,15 +194,12 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
         )
         lookup_output = f"# Barcode lookup\nBarcode: {code}\n\n{lookup_output}"
 
-        # Format aliases as a Markdown-list
-        product_aliases = [f"- {a.strip()}" for a in product_aliases if a]
-
         result: BarcodeLookup = {
             "ica": ica,
             "off": off,
             "barcode": code,
             # "lookup_name": ica_fullname or off_fullname,
-            "product_aliases": sorted(set(product_aliases)),
+            "product_aliases": sorted(set(product_aliases)),  # sort
             "lookup_output": lookup_output,
             # "product_matches": "\n".join(
             #     f"{p['name']}" for p in self.matching_products
