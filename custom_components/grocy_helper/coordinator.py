@@ -120,17 +120,16 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
                 # TODO: handle lookup fails (example network issue, auth)
                 if r and r.get("success"):
                     ica = r.get("data")
-            # else:
-            #     _LOGGER.warning("Has no ICA lookup service")
-        except BaseException as be:
-            _LOGGER.warning("Error fetching data from ICA: %s", be)
+            # If the ICA lookup service is not available, we simply skip this provider.
+        except Exception as err:
+            _LOGGER.warning("Error fetching data from ICA: %s", err)
 
         # Lookup in OpenFoodFacts
         try:
             off = await self.get_product_from_open_food_facts(code)
             _LOGGER.info("OpenFoodFacts product: %s", off)
-        except BaseException as be:
-            _LOGGER.warning("Error fetching data from OpenFoodFacts: %s", be)
+        except Exception as err:
+            _LOGGER.warning("Error fetching data from OpenFoodFacts: %s", err)
 
         ica_output: list[str] = []
         if ica is not None:
@@ -268,17 +267,6 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
         # create product
         _LOGGER.info("user_input: %s", user_input)
         _LOGGER.info("new_product: %s", new_product)
-        # if errors:
-        #     schema: VolDictType = None
-        #     schema = GENERATE_CREATE_PRODUCT_SCHEMA(masterdata, user_input)
-        #     schema = vol.Schema(schema)
-        #     self.add_suggested_values_to_schema(schema, user_input)
-        #     _LOGGER.warning("Input errors: %s", errors)
-        #     return self.async_show_form(
-        #         step_id=Step.SCAN_ADD_PRODUCT,
-        #         data_schema=schema,
-        #         errors=errors,
-        #     )
 
         product = await self._api_grocy.add_product(new_product)
         # TODO: check for success!

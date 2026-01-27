@@ -853,8 +853,10 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         # Set kg/L when appropriate
         _LOGGER.info("First render? %s", first_render)
         if first_render:
-            piece_id = masterdata["known_qu"].get("Piece", {}).get("id")
-            pack_id = masterdata["known_qu"].get("Pack", {}).get("id")
+            piece_qu = masterdata["known_qu"].get("Piece")
+            pack_qu = masterdata["known_qu"].get("Pack")
+            piece_id = piece_qu.get("id") if isinstance(piece_qu, dict) else getattr(piece_qu, "id", None)
+            pack_id = pack_qu.get("id") if isinstance(pack_qu, dict) else getattr(pack_qu, "id", None)
             if (int(user_input.get("qu_id_stock") or -99) in [piece_id, pack_id]) and (
                 int(user_input.get("qu_id_price") or -99) not in [piece_id, pack_id]
             ):
