@@ -203,3 +203,11 @@ class OpenFoodFactsProduct(TypedDict):
     nutriments: OpenFoodFactsProductNutriments | None
     categories: list[str]
     categories_hierarchy: list[str]
+
+
+class BarcodeLookup(TypedDict):
+    barcode: str
+    off: OpenFoodFactsProduct | None
+    ica: dict | None
+    lookup_output: str
+    product_aliases: list[str]

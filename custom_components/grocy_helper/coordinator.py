@@ -2,7 +2,7 @@
 
 import logging
 import traceback
-from datetime import timedelta
+import datetime as dt
 from typing import Optional
 
 from homeassistant.config_entries import ConfigEntry
@@ -13,7 +13,9 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .grocyapi import GrocyAPI
 from .barcodebuddyapi import BarcodeBuddyAPI
 from .grocytypes import (
+    BarcodeLookup,
     GrocyMasterData,
+    GrocyProduct,
     GrocyQuantityUnitConversionResolved,
     GrocyQuantityUnitConversionResult,
     OpenFoodFactsProduct,
@@ -33,7 +35,7 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
         grocy_api: GrocyAPI,
         barcodebuddy_api: BarcodeBuddyAPI,
         logger: logging.Logger,
-        update_interval: timedelta,
+        update_interval: dt.timedelta,
     ) -> None:
         """Initialize the Grocy-helper coordinator."""
         super().__init__(
@@ -77,6 +79,9 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
                 "quantity_units": quantity_units,
                 "products": products,
                 "known_qu": {
+                    "Piece": next((qu for qu in quantity_units if qu["name"] == "Piece"), None),
+                    "Pack": next((qu for qu in quantity_units if qu["name"] == "Pack"), None),
+
                     "g": next((qu for qu in quantity_units if qu["name"] == "g"), None),
                     "kg": next(
                         (qu for qu in quantity_units if qu["name"] == "kg"), None
@@ -93,6 +98,181 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
             _LOGGER.error(traceback.format_exc())
             raise UpdateFailed(f"Error communicating with API: {err}") from err
 
+    async def lookup_barcode(self, code: str) -> BarcodeLookup:
+        product_aliases: list[str] = []
+        ica: dict | None = None
+        off: OpenFoodFactsProduct | None = None
+
+        # Lookup in ICA integration
+        try:
+            if self._hass.services.has_service("ica", "lookup_product"):
+                _LOGGER.debug("Querying ICA for barcode: %s", code)
+                r = await self._hass.services.async_call(
+                    domain="ica",
+                    service="lookup_product",
+                    service_data={"identifier": code},
+                    blocking=True,
+                    context=None,
+                    target=None,
+                    return_response=True,
+                )
+                _LOGGER.debug("Got ICA response: %s", r)
+                # TODO: handle lookup fails (example network issue, auth)
+                if r and r.get("success"):
+                    ica = r.get("data")
+            # If the ICA lookup service is not available, we simply skip this provider.
+        except Exception as err:
+            _LOGGER.warning("Error fetching data from ICA: %s", err)
+
+        # Lookup in OpenFoodFacts
+        try:
+            off = await self.get_product_from_open_food_facts(code)
+            _LOGGER.info("OpenFoodFacts product: %s", off)
+        except Exception as err:
+            _LOGGER.warning("Error fetching data from OpenFoodFacts: %s", err)
+
+        ica_output: list[str] = []
+        if ica is not None:
+            p = ica
+            ica_output.append("## ICA provider")
+            if b := p.get("ean_name"):
+                ica_output.append(f"ean_name: {b}")
+                product_aliases.append(b)
+            if a := p.get("article"):
+                if b := a.get("name"):
+                    ica_output.append(f"Article name: **{b}**")
+                    product_aliases.append(b)
+                if b := a.get("articleId"):
+                    ica_output.append(f"Article id: {b}")
+                    # TODO: look up more info by articleId?
+                if b := a.get("articleGroupId"):
+                    ica_output.append(f"ArticleGroupId: {b}")
+                    # TODO: map articleGroupId into Grocy Product Group
+            if a := p.get("offers"):
+                # TODO: add to name suggestion based on Offers
+                pass
+
+        off_output: list[str] = []
+        if off is not None:
+            p = off
+            off_output.append("## OpenFoodFacts")
+            if b := p.get("product_type"):
+                off_output.append(f"Product type: {b}")
+            if b := p.get("brand_owner"):
+                off_output.append(f"Brand Owner: {b}")
+            if b := p.get("brands"):
+                off_output.append(f"Brands: {b}")
+            if b := p.get("product_name"):
+                off_output.append(f"Product name: **{b}**")
+                product_aliases.append(b)
+            if b := p.get("generic_name"):
+                off_output.append(f"Generic name: {b}")
+                product_aliases.append(b)
+
+            if b := p.get("product_quantity"):
+                u = p.get("product_quantity_unit")
+                off_output.append(f"Product Quantity: {b} {u}")
+            elif b := p.get("quantity"):
+                off_output.append(f"Quantity: {b}")
+
+            if b := p.get("serving_quantity"):
+                u = p.get("serving_quantity_unit")
+                off_output.append(f"Serving Quantity: {b} {u}")
+
+            if n := p.get("nutriments"):
+                if b := n.get("energy_kcal"):
+                    off_output.append(f"Energy (per product): {b} kcal")
+                if b := n.get("energy_kcal_100g"):
+                    off_output.append(f"Energy (per 100): {b} kcal")
+
+            if b := p.get("categories"):
+                off_output.append(f"Categories: {b}")
+
+        # Format results
+        lookup_output = "\n\n".join(
+            ["\n".join(p) for p in (ica_output, off_output) if len(p) > 1]
+        )
+        lookup_output = f"# Barcode lookup\nBarcode: {code}\n\n{lookup_output}"
+
+        # Format aliases as a Markdown-list
+        product_aliases = [f"- {a.strip()}" for a in product_aliases if a]
+
+        result: BarcodeLookup = {
+            "ica": ica,
+            "off": off,
+            "barcode": code,
+            # "lookup_name": ica_fullname or off_fullname,
+            "product_aliases": sorted(set(product_aliases)),
+            "lookup_output": lookup_output,
+            # "product_matches": "\n".join(
+            #     f"{p['name']}" for p in self.matching_products
+            # ),
+        }
+        return result
+
+    async def create_product(self, user_input) -> GrocyProduct:
+        # argument 'user_input' should instead be 'new_product'?
+        # ..let validation and fallback values be a part of Config flow not coordinator?
+        new_product: GrocyProduct = {}
+        new_product["name"] = user_input["name"]
+        new_product["description"] = user_input.get("description")
+        new_product["location_id"] = user_input["location_id"]
+        new_product["should_not_be_frozen"] = (
+            1 if user_input.get("should_not_be_frozen", False) else 0
+        )
+        # TODO: Remove obsolete validation, that is done in config_flow right now
+        # loc = next(
+        #     (
+        #         loc
+        #         for loc in masterdata["locations"]
+        #         if str(loc["id"]) == str(new_product["location_id"])
+        #     ),
+        #     None,
+        # )
+        # if not loc:
+        #     errors["location_id"] = "invalid_location"
+        # elif new_product["should_not_be_frozen"] == 1 and loc["is_freezer"] == 1:
+        #     errors["location_id"] = "location_is_freezer"
+
+        if val := user_input.get("default_best_before_days"):
+            new_product["default_best_before_days"] = int(val)
+        if val := user_input.get("default_best_before_days_after_open"):
+            new_product["default_best_before_days_after_open"] = int(val)
+        new_product["qu_id_purchase"] = user_input.get(
+            "qu_id_purchase", user_input.get("qu_id")
+        )
+        new_product["qu_id_stock"] = user_input.get(
+            "qu_id_stock", user_input.get("qu_id")
+        )
+        new_product["qu_id_price"] = user_input.get(
+            "qu_id_price", user_input.get("qu_id")
+        )
+        new_product["qu_id_consume"] = user_input.get(
+            "qu_id_consume", user_input.get("qu_id")
+        )
+        new_product["row_created_timestamp"] = dt.datetime.now().strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        if b := user_input.get("parent_product_id"):
+            new_product["parent_product_id"] = b
+        if b := user_input.get("no_own_stock"):
+            new_product["no_own_stock"] = b
+        if b := user_input.get("hide_on_stock_overview"):
+            new_product["hide_on_stock_overview"] = b
+        if b := user_input.get("disable_open"):
+            new_product["disable_open"] = b
+        if b := user_input.get("cumulate_min_stock_amount_of_sub_products"):
+            new_product["cumulate_min_stock_amount_of_sub_products"] = b
+
+        # create product
+        _LOGGER.info("user_input: %s", user_input)
+        _LOGGER.info("new_product: %s", new_product)
+
+        product = await self._api_grocy.add_product(new_product)
+        # TODO: check for success!
+        _LOGGER.info("created prod: %s", product)
+        return product
+
     async def convert_quantity_for_product(
         self,
         product_id,
@@ -100,6 +280,14 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
         to_qu_id,
         amount: float,
     ) -> GrocyQuantityUnitConversionResult | None:
+        # if from_qu_id == to_qu_id:
+        #     _LOGGER.warning(
+        #         "Trying to resolve quantity conversion for the same unit: %s",
+        #         from_qu_id,
+        #     )
+        #     # TODO: return GrocyQuantityUnitConversionResult, with strings etc.s
+        #     pass
+
         conversions = (
             await self._api_grocy.resolve_quantity_unit_conversions_for_product_id(
                 product_id

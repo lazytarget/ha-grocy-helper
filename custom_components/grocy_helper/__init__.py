@@ -39,7 +39,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         minutes=entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
     )
     # Setup global services, if not already setup
-    # todo: verify timings when multiple config_entries
+    # TODO: verify timings when multiple config_entries
     setup_global_services(hass)
 
     # websession = async_get_clientsession(hass)

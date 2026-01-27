@@ -23,6 +23,7 @@ from .coordinator import GrocyHelperCoordinator
 from .grocyapi import GrocyAPI
 from .barcodebuddyapi import BarcodeBuddyAPI
 from .grocytypes import (
+    BarcodeLookup,
     ExtendedGrocyProductStockInfo,
     GrocyAddProductQuantityUnitConversion,
     GrocyProduct,
@@ -33,6 +34,7 @@ from .grocytypes import (
     GrocyStockEntry,
     OpenFoodFactsProduct,
 )
+from .utils import try_parse_int
 
 from .const import (
     DOMAIN,
@@ -74,6 +76,7 @@ class Step(StrEnum):
     SCAN_QUEUE = "scan_queue"
     SCAN_MATCH_PRODUCT = "scan_match_to_product"
     SCAN_ADD_PRODUCT = "scan_add_product"
+    SCAN_ADD_PRODUCT_PARENT = "scan_add_product_parent"
     SCAN_ADD_PRODUCT_BARCODE = "scan_add_product_barcode"
     SCAN_UPDATE_PRODUCT_DETAILS = "scan_update_product_details"
     SCAN_TRANSFER_START = "scan_transfer_start"
@@ -204,8 +207,16 @@ class GrocyOptionsFlowHandler(OptionsFlow):
     current_product_stock_info: ExtendedGrocyProductStockInfo | None = None
     current_product_openfoodfacts: OpenFoodFactsProduct | None = None
     current_product_ica: dict | None = None
+    current_lookup: BarcodeLookup | None = None
+
     matching_products: list[GrocyProduct] = []
     current_stock_entries: list[GrocyStockEntry] = []
+
+    current_product: GrocyProduct | None = None
+    current_parent: GrocyProduct | None = None
+
+    # Cache of the form schema, to easily return errors (must be set to null in forms that support it)
+    current_form_args: VolDictType | None = None
 
     def __init__(self, config_entry: ConfigEntry) -> None:
         """Initialize Grocy-helper options flow"""
@@ -284,7 +295,6 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             _LOGGER.info("BBuddy mode is: %s (%s)", bb_mode, scan_mode_from_bbuddy)
             return self.async_show_form(
                 step_id=Step.SCAN_START,
-                # data_schema=STEP_SCAN_START,
                 data_schema=GENERATE_STEP_SCAN_START_SCHEMA(scan_mode_from_bbuddy),
                 errors=errors,
             )
@@ -317,7 +327,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         if not current_barcode:
             # Nothing in queue, show summary
-            # todo: Add result info to message...
+            # TODO: Add result info to message...
             msg = (
                 "\r\n".join(self.barcode_results)
                 if self.barcode_results
@@ -330,10 +340,15 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             return self.async_abort(reason=msg)
 
         code = current_barcode.strip().strip(",").strip().lstrip("0")
+        if self.current_barcode != code:
+            # Different barcode since last time. Clear all info
+            self.current_product_stock_info = None
+            self.current_product_openfoodfacts = None
+            self.current_product_ica = None
+            self.current_product = None
+            self.current_parent = None
+            self.current_lookup = None
         self.current_barcode = code
-        self.current_product_stock_info = None
-        self.current_product_openfoodfacts = None
-        self.current_product_ica = None
 
         if self.barcode_scan_mode == SCAN_MODE.SCAN_BBUDDY:
             bb_mode = await self._api_bbuddy.get_mode()
@@ -356,6 +371,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                         await self._api_grocy.get_stock_product_by_barcode(code)
                     )
                     product: GrocyProduct = (product_stock_info or {}).get("product")
+                    self.current_product = product
                     self.current_product_stock_info = product_stock_info
                     self.matching_products: list[GrocyProduct] = []
                     _LOGGER.info(
@@ -385,95 +401,85 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                             code,
                         )
 
-                        # Lookup in ICA integration
-                        hass = self._coordinator._hass
-                        if hass.services.has_service("ica", "lookup_product"):
-                            _LOGGER.debug("Querying ICA for barcode: %s", code)
-                            r = await hass.services.async_call(
-                                domain="ica",
-                                service="lookup_product",
-                                service_data={"identifier": code},
-                                blocking=True,
-                                context=None,
-                                target=None,
-                                return_response=True,
+                        if (
+                            not self.current_lookup
+                            or self.current_lookup["barcode"] != code
+                        ):
+                            # Refresh lookup info, if needed
+                            self.current_lookup = (
+                                await self._coordinator.lookup_barcode(code)
                             )
-                            _LOGGER.debug("Got ICA response: %s", r)
-                            # todo: handle lookup fails (example network issue, auth)
-                            if r and r.get("success"):
-                                self.current_product_ica = r.get("data")
-                            _LOGGER.debug("ICA product: %s", self.current_product_ica)
-                        # else:
-                        #     _LOGGER.warning("Has no ICA lookup service")
-
-                        # Lookup in OpenFoodFacts
-                        self.current_product_openfoodfacts: (
-                            OpenFoodFactsProduct | None
-                        ) = await self._coordinator.get_product_from_open_food_facts(
-                            code
-                        )
-                        # todo: handle lookup fails (example network issue)
-                        _LOGGER.info(
-                            "OpenFoodFacts product: %s",
-                            self.current_product_openfoodfacts,
-                        )
+                            self.current_product_openfoodfacts = (
+                                self.current_lookup.get("off")
+                            )
+                            self.current_product_ica = self.current_lookup.get("ica")
 
                         masterdata: GrocyMasterData = self._coordinator.data
                         for matching_product in filter(
                             lambda p: (
-                                # OFF.product_name
-                                (
-                                    self.current_product_openfoodfacts is not None
-                                    and (
-                                        p["name"].casefold()
-                                        == self.current_product_openfoodfacts.get(
-                                            "product_name", ""
-                                        ).casefold()
+                                # # OFF.product_name
+                                # (
+                                #     self.current_product_openfoodfacts is not None
+                                #     and (
+                                #         p["name"].casefold()
+                                #         == self.current_product_openfoodfacts.get(
+                                #             "product_name", ""
+                                #         ).casefold()
+                                #     )
+                                # )
+                                # # OFF.genric_name
+                                # or (
+                                #     self.current_product_openfoodfacts is not None
+                                #     and (
+                                #         p["name"].casefold()
+                                #         == (
+                                #             self.current_product_openfoodfacts.get(
+                                #                 "generic_name", ""
+                                #             )
+                                #             or ""
+                                #         ).casefold()
+                                #     )
+                                # )
+                                # # ICA.ean_name
+                                # or (
+                                #     self.current_product_ica is not None
+                                #     and (
+                                #         p["name"].casefold()
+                                #         == (
+                                #             self.current_product_ica.get("ean_name", "")
+                                #             or ""
+                                #         ).casefold()
+                                #     )
+                                # )
+                                # # ICA.article.name
+                                # or (
+                                #     self.current_product_ica is not None
+                                #     and (
+                                #         p["name"].casefold()
+                                #         == (
+                                #             self.current_product_ica.get(
+                                #                 "article", {}
+                                #             ).get("name", "")
+                                #             or ""
+                                #         ).casefold()
+                                #     )
+                                # )
+                                # or
+                                # Match against collected aliases
+                                self.current_lookup.get("product_aliases")
+                                and (
+                                    p["name"].casefold()
+                                    in map(
+                                        str.casefold,
+                                        self.current_lookup["product_aliases"],
                                     )
                                 )
-                                # OFF.genric_name
-                                or (
-                                    self.current_product_openfoodfacts is not None
-                                    and (
-                                        p["name"].casefold()
-                                        == (
-                                            self.current_product_openfoodfacts.get(
-                                                "generic_name", ""
-                                            )
-                                            or ""
-                                        ).casefold()
-                                    )
-                                )
-                                # ICA.ean_name
-                                or (
-                                    self.current_product_ica is not None
-                                    and (
-                                        p["name"].casefold()
-                                        == (
-                                            self.current_product_ica.get("ean_name", "")
-                                            or ""
-                                        ).casefold()
-                                    )
-                                )
-                                # ICA.article.name
-                                or (
-                                    self.current_product_ica is not None
-                                    and (
-                                        p["name"].casefold()
-                                        == (
-                                            self.current_product_ica.get(
-                                                "article", {}
-                                            ).get("name", "")
-                                            or ""
-                                        ).casefold()
-                                    )
-                                )
-                                # todo: ICA offer name
+                                # TODO: ICA offer name
                             ),
                             masterdata["products"],
                         ):
-                            # todo: also loop through ProductBarcode notes
-                            # todo: skip Active==0 products
+                            # TODO: also loop through ProductBarcode notes
+                            # TODO: skip Active==0 products
                             _LOGGER.info("Match: %s", matching_product)
                             self.matching_products.append(matching_product)
 
@@ -498,281 +504,191 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             self.barcode_results.append(f"{code} maps to {p['name']}")
             return await self.async_step_scan_queue(user_input=None)
 
+        if self.barcode_scan_mode == SCAN_MODE.INVENTORY:
+            if not self.current_product_stock_info:
+                # Load stock info if not already loaded...
+                self.current_product_stock_info = (
+                    await self._api_grocy.get_stock_product_by_barcode(code)
+                )
+                self.current_product = (self.current_product_stock_info or {}).get(
+                    "product"
+                )
+
         # Proceed with BarcodeBuddy processing
         return await self.async_step_scan_process(user_input=None)
 
     async def async_step_scan_match_to_product(self, user_input: dict[str, Any] = None):
         """Handle input for adding barcode to a product."""
         errors: dict[str, str] = {}
+        self.current_form_args = None
         _LOGGER.info("match-product: %s", user_input)
         _LOGGER.info("matches: %s", self.matching_products)
 
         code = self.current_barcode
 
-        if (
-            self.current_product_openfoodfacts is None
-            and self.current_product_ica is None
-        ):
-            # todo: Not found in other providers, then show input's for manual registration?
-            _LOGGER.error("No product info found!: %s", code)
-            # errors["NoProduct"] = "No product found!"
-            # return self.async_show_form(
-            #     step_id=Step.SCAN_ADD_PRODUCT,
-            #     data_schema=self.current_barcode_schema,
-            #     errors=errors,
-            # )
-            return self.async_step_scan_add_product(user_input=None)
-
         # Handle input, for required fields
         if user_input is None:
+            # lookup = await self._coordinator.lookup_barcode(code)
+            # self.current_product_openfoodfacts = lookup.get("off")
+            # self.current_product_ica = lookup.get("ica")
+
             # Has matching product, display as a suggestion
             _LOGGER.warning("Matching products: %s", self.matching_products)
             schema = GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
                 self._coordinator.data,
                 self.matching_products,
             )
-            _LOGGER.info("schema: %s", schema)
-
             schema = vol.Schema(schema)
-
-            # # todo: move to seperate function?
-            # def format_off_name(off_product: OpenFoodFactsProduct) -> str:
-            #     brand = off_product.get("brand_owner") or (
-            #         (off_product.get("brands") or "").split(",")[0].strip()
-            #     )
-            #     product_name = (off_product.get("product_name") or "").strip()
-            #     quantity = (off_product.get("quantity") or "").strip()
-
-            #     off_fullname_parts: list[str] = [
-            #         part for part in (brand, product_name, quantity) if part
-            #     ]
-            #     off_fullname = " - ".join(off_fullname_parts)
-            #     _LOGGER.debug(
-            #         "Parsed product name: %s from: %s", off_fullname, off_product
-            #     )
-            #     return off_fullname
-
-            # off_fullname = (
-            #     format_off_name(self.current_product_openfoodfacts)
-            #     if self.current_product_openfoodfacts is not None
-            #     else None
-            # )
-            # ica_fullname = (
-            #     self.current_product_ica.get("ean_name")
-            #     if self.current_product_ica is not None
-            #     else None
-            # )
-
-            product_aliases: list[str] = []
-
-            ica_output: list[str] = []
-            if self.current_product_ica is not None:
-                p = self.current_product_ica
-                ica_output.append("## ICA provider")
-                if b := p.get("ean_name"):
-                    ica_output.append(f"ean_name: {b}")
-                    product_aliases.append(b)
-                if a := p.get("article"):
-                    if b := a.get("name"):
-                        ica_output.append(f"Article name: **{b}**")
-                        product_aliases.append(b)
-                    if b := a.get("articleId"):
-                        ica_output.append(f"Article id: {b}")
-                        # todo: look up more info by articleId?
-                    if b := a.get("articleGroupId"):
-                        ica_output.append(f"ArticleGroupId: {b}")
-                if a := p.get("offers"):
-                    pass
-
-            off_output: list[str] = []
-            if self.current_product_openfoodfacts is not None:
-                p = self.current_product_openfoodfacts
-                off_output.append("## OpenFoodFacts")
-                if b := p.get("product_type"):
-                    off_output.append(f"Product type: {b}")
-                if b := p.get("brand_owner"):
-                    off_output.append(f"Brand Owner: {b}")
-                if b := p.get("brands"):
-                    off_output.append(f"Brands: {b}")
-                if b := p.get("product_name"):
-                    off_output.append(f"Product name: **{b}**")
-                    product_aliases.append(b)
-                if b := p.get("generic_name"):
-                    off_output.append(f"Generic name: {b}")
-                    product_aliases.append(b)
-
-                if b := p.get("product_quantity"):
-                    u = p.get("product_quantity_unit")
-                    off_output.append(f"Product Quantity: {b} {u}")
-                elif b := p.get("quantity"):
-                    off_output.append(f"Quantity: {b}")
-
-                if b := p.get("serving_quantity"):
-                    u = p.get("serving_quantity_unit")
-                    off_output.append(f"Serving Quantity: {b} {u}")
-
-                if n := p.get("nutriments"):
-                    if b := n.get("energy_kcal"):
-                        off_output.append(f"Energy (per product): {b} kcal")
-                    if b := n.get("energy_kcal_100g"):
-                        off_output.append(f"Energy (per 100): {b} kcal")
-
-                if b := p.get("categories"):
-                    off_output.append(f"Categories: {b}")
-
-            lookup_output = "\n\n".join(
-                ["\n".join(p) for p in (ica_output, off_output) if len(p) > 1]
-            )
-            lookup_output = f"# Barcode lookup\n\n{lookup_output}"
-
-            # Markdown list
-            product_aliases = [f"- {a.strip()}" for a in product_aliases if a]
 
             plc = {
                 "barcode": code,
-                # "lookup_name": ica_fullname or off_fullname,
-                "product_aliases": "\n".join(sorted(set(product_aliases))),
-                "lookup_output": lookup_output,
+                "product_aliases": "\n".join(
+                    self.current_lookup.get("product_aliases", [])
+                ),
+                "lookup_output": self.current_lookup.get("lookup_output"),
                 "product_matches": "\n".join(
                     f"{p['name']}" for p in self.matching_products
                 ),
             }
-            _LOGGER.warning("PLC: %s", plc)
-            # ask for input...
-            return self.async_show_form(
-                step_id=Step.SCAN_MATCH_PRODUCT,
-                data_schema=schema,
-                description_placeholders=plc,
-                errors=errors,
-            )
+            self.current_form_args = {
+                "step_id": Step.SCAN_MATCH_PRODUCT,
+                "data_schema": schema,
+                "description_placeholders": plc,
+                "errors": errors,
+            }
+            _LOGGER.debug("FORM-ARGS: %s", self.current_form_args)
+            return self.async_show_form(**self.current_form_args)
 
-        # Input has been passed!
-        if user_input.get("product_id") and user_input["product_id"] != "-1":
-            # A specific product was chosen, use that instead of creation...
-            _LOGGER.info("exist_products: %s", self.matching_products)
-            self.current_product_stock_info = (
-                await self._api_grocy.get_stock_product_by_id(
-                    int(user_input["product_id"])
-                )
-            )
+        # Form has been submitted!
+        # TODO: Validate
+
+        self.current_product = None
+        self.current_parent = None
+
+        # Parent product (if specified)
+        if p := user_input.get("parent_product"):
+            (r, i) = try_parse_int(p)
+            if r and i > 0:
+                if i == 1337:
+                    user_input["product_id"] = None
+                # Has chosen existing Parent product
+                self.current_parent = await self._api_grocy.get_product_by_id(i)
+            if self.current_parent is None:
+                self.current_parent = {"name": p if p != "-1" else None}
         else:
-            # Create a new product
-            _LOGGER.info("no-product-id: %s", user_input)
+            _LOGGER.debug("No parent was input")
+
+        # Product
+        if p := user_input.get("product_id"):
+            (r, i) = try_parse_int(p)
+            if r and i > 0:
+                # Has chosen existing Product
+                self.current_product_stock_info = (
+                    await self._api_grocy.get_stock_product_by_id(i)
+                )
+                self.current_product = (self.current_product_stock_info or {}).get(
+                    "product"
+                )
+                
+                # TODO: Validate that the product doesn't already belong to a (different) parent!!
+                # Allow for "" or "id" value of the actual parent
+                
+            if self.current_product is None:
+                # Has not chosen product (or was not found)
+                # Set to create a new product (by omitting the 'id' field)
+                # Currently the only thing we know is the name (this will be filled in on the next form page)
+                self.current_product = {
+                    "name": p if p != "-1" else None,
+                    "parent_product_id": self.current_parent.get("id", None)
+                    if self.current_parent
+                    else None,
+                }
+        else:
+            # Invalid value in 'product_id' field which is required
+            errors["product_id"] = "Missing value"
+            self.current_form_args["errors"] = errors
+            _LOGGER.warning("Passing new form args: %s", self.current_form_args)
+            # Use a cached version of 'schema'...
+            # TODO: Verify
+            return self.async_show_form(**self.current_form_args)
+
+        # If Product is new, then proceed to generation
+        if not self.current_product.get("id"):
             return await self.async_step_scan_add_product(user_input=None)
 
-        return await self.async_step_scan_add_product_barcode(user_input=None)
+        # else if Parent is new, then proceed to generation
+        return await self.async_step_scan_add_product_parent(user_input=None)
 
     async def async_step_scan_add_product(self, user_input: dict[str, Any] = None):
         """Handle input for adding a new product."""
         errors: dict[str, str] = {}
+        self.current_form_args = None
         masterdata: GrocyMasterData = self._coordinator.data
-        _LOGGER.info("add-product: %s", user_input)
+        _LOGGER.info("form 'add_product' user_input: %s", user_input)
 
-        # code = current_barcode.strip().strip(",").strip()
-        # code = user_input["code"]
+        new_product: GrocyProduct = (self.current_product or {}).copy()
+        if self.current_product.get("id"):
+            # Create new product
+            _LOGGER.warning("Product already has an id: %s", self.current_product)
+            return self.async_abort(reason="Should not render Create product form, since a product already exists")
+
         code = self.current_barcode
 
-        new_product: GrocyProduct = {}
-
-        show_form = user_input is None
+        first_render = user_input is None
         if user_input is None:
             user_input = user_input or {}
 
-        # # # New barcode (Not provisioned in Grocy)
-        # # # todo: Lookup in other providers...
-        # # self.current_product_openfoodfacts = (
-        # #     await self._coordinator.get_product_from_open_food_facts(code)
-        # # )
-        # # _LOGGER.info("OpenFoodFacts product: %s", self.current_product_openfoodfacts)
-        # # self.current_product_ica: dict = {}
-        # # # _LOGGER.info("OpenFoodFacts product: %s", self.current_product_ica)
-
-        if (
-            self.current_product_openfoodfacts is None
-            and self.current_product_ica is None
-        ):
-            # Not found in other providers, then will show empty input for manual registration
-            _LOGGER.warning("No product info found from providers, code: %s", code)
-
-            # hass.services.supports_response -> SupportsResponse
-
-            # todo: Service.entity_service_call
-            # `ica.lookup_product`
-            # check if exists, then invoke...
-
-            # errors["NoProduct"] = "No product found!"
-            # return self.async_show_form(
-            #     step_id=Step.SCAN_ADD_PRODUCT,
-            #     data_schema=self.current_barcode_schema,
-            #     errors=errors,
-            # )
-
-        user_input = user_input or {}
-        # self.matching_product = None
-
-        def format_off_name(off_product: OpenFoodFactsProduct) -> str:
-            brand = off_product.get("brand_owner") or (
-                (off_product.get("brands") or "").split(",")[0].strip()
-            )
-            product_name = (off_product.get("product_name") or "").strip()
-            quantity = (off_product.get("quantity") or "").strip()
-
-            off_fullname_parts: list[str] = [
-                part for part in (brand, product_name, quantity) if part
-            ]
-            off_fullname = " - ".join(off_fullname_parts)
-            _LOGGER.debug("Parsed product name: %s from: %s", off_fullname, off_product)
-            return off_fullname
-
-        off_fullname = (
-            format_off_name(self.current_product_openfoodfacts)
-            if self.current_product_openfoodfacts is not None
-            else None
+        # Generate form schema
+        schema: VolDictType = None
+        schema = GENERATE_CREATE_PRODUCT_SCHEMA(
+            masterdata, user_input, creating_parent=False
         )
+        schema = vol.Schema(schema)
 
-        if self.current_product_ica is not None:
-            # Fill in info from ICA
-            user_input["name"] = user_input.get("name") or self.current_product_ica.get(
-                "ean_name"
-            )
+        _LOGGER.info("Original input: %s", user_input)
+        data_schema: vol.Schema = (
+            self.current_form_args["data_schema"] if self.current_form_args else schema
+        )
+        for k in data_schema.schema.keys():
+            # Fill user_input with current state of ´new_product´
+            val = user_input.get(k, new_product.get(k))
+            if k not in [
+                "should_not_be_frozen",
+                "calories_per_100",
+                "default_best_before_days",
+                "default_best_before_days_after_open",
+                "default_best_before_days_after_freezing",
+                "default_best_before_days_after_thawing",
+            ]:
+                # if not part of exceptions, then set value in ´str´
+                # Exceptions are most likley in ´int´
+                val = str(val) if val is not None else None
+            user_input[k] = val
+        _LOGGER.info("Updated input: %s", user_input)
 
-        if self.current_product_openfoodfacts is not None:
-            # Fill in from OpenFoodFacts
-            user_input["name"] = (
-                user_input.get("name")
-                or off_fullname
-                or self.current_product_openfoodfacts["product_name"]
-            )
-            unit = self.current_product_openfoodfacts.get("product_quantity_unit")
-            if unit:
-                for qq in filter(
-                    lambda qu: qu.get("name") == unit,
-                    masterdata["quantity_units"],
-                ):
-                    # todo: replace this ´product_quantity_unit ´suggestion, with Pack/Piece suggestion
-                    # user_input["qu_id"] = str(qq["id"])
-                    _LOGGER.warning("Unit: %s, QQ: %s", unit, qq)
-                if not user_input.get("qu_id"):
-                    # todo: find closest similiar Unit (example: g -> kg)
-                    pass
-            # todo: fill in guess of QuantityUnit...
+        schema = self.add_suggested_values_to_schema(schema, user_input)
 
-        if show_form:
-            schema: VolDictType = None
-            schema = GENERATE_CREATE_PRODUCT_SCHEMA(masterdata, user_input)
-
-            _LOGGER.info("schema: %s", schema)
-            _LOGGER.info("form 'add_product' user_input: %s", user_input)
-
-            schema = vol.Schema(schema)
-            self.add_suggested_values_to_schema(schema, user_input)
-
-            # ask for input...
-            return self.async_show_form(
-                step_id=Step.SCAN_ADD_PRODUCT,
-                data_schema=schema,
-                errors=errors,
-            )
+        plc = {
+            "name": new_product.get("name"),
+            "barcode": code,
+            # "lookup_name": ica_fullname or off_fullname,
+            "product_aliases": "\n".join(
+                self.current_lookup.get("product_aliases", [])
+            ),
+            "lookup_output": self.current_lookup.get("lookup_output"),
+            # "product_matches": "\n".join(
+            #     f"{p['name']}" for p in self.matching_products
+            # ),
+        }
+        if first_render:
+            self.current_form_args = {
+                "step_id": Step.SCAN_ADD_PRODUCT,
+                "data_schema": schema,
+                "description_placeholders": plc,
+                "errors": errors,
+            }
+            _LOGGER.debug("FORM-ARGS: %s", self.current_form_args)
+            return self.async_show_form(**self.current_form_args)
 
         # Input has been passed!
         if user_input.get("product_id") and user_input["product_id"] != "-1":
@@ -786,14 +702,13 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             )
         else:
             # Create a new product
-
             # more friendly name (barcode has specific name/"note")
             new_product["name"] = user_input["name"]
-            new_product["description"] = user_input.get(
-                "description",
-                # fallback to a formatted name from OpenFoodFacts
-                off_fullname,
-            )
+            # new_product["description"] = user_input.get(
+            #     "description",
+            #     # fallback to a formatted name from OpenFoodFacts
+            #     off_fullname,
+            # )
             new_product["location_id"] = user_input["location_id"]
             new_product["should_not_be_frozen"] = (
                 1 if user_input.get("should_not_be_frozen", False) else 0
@@ -815,54 +730,309 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 new_product["default_best_before_days"] = int(val)
             if val := user_input.get("default_best_before_days_after_open"):
                 new_product["default_best_before_days_after_open"] = int(val)
-            new_product["qu_id_purchase"] = user_input.get(
-                "qu_id_purchase", user_input.get("qu_id")
-            )
             new_product["qu_id_stock"] = user_input.get(
                 "qu_id_stock", user_input.get("qu_id")
             )
-            new_product["qu_id_price"] = user_input.get(
-                "qu_id_price", user_input.get("qu_id")
+            new_product["qu_id_purchase"] = user_input.get(
+                "qu_id_purchase", user_input.get("qu_id")
             )
             new_product["qu_id_consume"] = user_input.get(
                 "qu_id_consume", user_input.get("qu_id")
             )
+            new_product["qu_id_price"] = user_input.get(
+                "qu_id_price", user_input.get("qu_id")
+            )
             new_product["row_created_timestamp"] = dt.datetime.now().strftime(
                 "%Y-%m-%d %H:%M:%S"
             )
+            new_product["description"] = user_input.get(
+                "description",
+                new_product.get(
+                    "description",
+                    (
+                        # fallback to the lookup results
+                        self.current_lookup.get("lookup_output")
+                    ),
+                ),
+            )
+            new_product["parent_product_id"] = user_input.get(
+                "parent_product_id", new_product.get("parent_product_id")
+            )
+
+            _LOGGER.info("user_input: %s", user_input)
+            _LOGGER.info("new_product: %s", new_product)
+            if errors:
+                # schema = self.add_suggested_values_to_schema(schema, user_input)
+                _LOGGER.warning("Input errors: %s", errors)
+                self.current_form_args = {
+                    "step_id": Step.SCAN_ADD_PRODUCT,
+                    "data_schema": schema,
+                    "description_placeholders": plc,
+                    "errors": errors,
+                }
+                _LOGGER.debug("FORM-ARGS: %s", self.current_form_args)
+                return self.async_show_form(**self.current_form_args)
+
+            # Create product
+            product = await self._api_grocy.add_product(new_product)
+            # TODO: check for success!
+            _LOGGER.info("created prod: %s", product)
+            # Product has been successfully created
+            self.current_product_stock_info = (
+                await self._api_grocy.get_stock_product_by_id(product["id"])
+            )
+            self.current_product = (self.current_product_stock_info or {}).get("product") or product
+
+        return await self.async_step_scan_add_product_barcode(user_input=None)
+
+    async def async_step_scan_add_product_parent(
+        self, user_input: dict[str, Any] = None
+    ):
+        """Handle input for adding a new product parent."""
+        errors: dict[str, str] = {}
+        self.current_form_args = None
+        masterdata: GrocyMasterData = self._coordinator.data
+        _LOGGER.info("form 'add_product_parent' user_input: %s", user_input)
+
+        _LOGGER.info("Create parent: %s", self.current_parent)
+        new_product: GrocyProduct = (self.current_parent or {}).copy()
+        creating_parent = True
+        if self.current_parent is None:
+            # Should not link to a parent, continue to next step...
+            _LOGGER.debug("Product will not be linked to a parent, continue to next step...")
+            return await self.async_step_scan_queue(user_input=None)
+        elif self.current_parent.get("id"):
+            # Parent already exists, continue to next step...
+            _LOGGER.debug("Product parent already exists, continue to next step...")
+            return await self.async_step_scan_queue(user_input=None)
+
+        code = self.current_barcode
+
+        first_render = user_input is None
+        if user_input is None:
+            user_input = user_input or {}
+
+        # Generate form schema
+        schema: VolDictType = None
+        schema = GENERATE_CREATE_PRODUCT_SCHEMA(
+            masterdata, user_input, creating_parent=creating_parent
+        )
+        schema = vol.Schema(schema)
+
+        _LOGGER.info("Original input: %s", user_input)
+        data_schema: vol.Schema = (
+            self.current_form_args["data_schema"] if self.current_form_args else schema
+        )
+        for k in data_schema.schema.keys():
+            # Fill user_input with current state of ´new_product´
+            val = user_input.get(k, new_product.get(k))
+            if not val and creating_parent:
+                # Copy values from Product when creating a Parent
+                if k in ["id", "name", "description"]:
+                    # Exclude copying these props
+                    continue
+                _LOGGER.warning(
+                    "COPY prop to parent: %s=%s", k, self.current_product[k]
+                )
+                val = self.current_product[k]
+
+            if k not in [
+                "should_not_be_frozen",
+                "calories_per_100",
+                "default_best_before_days",
+                "default_best_before_days_after_open",
+                "default_best_before_days_after_freezing",
+                "default_best_before_days_after_thawing",
+            ]:
+                # if not part of exceptions, then set value in ´str´
+                # Exceptions are most likley in ´int´
+                val = str(val) if val is not None else None
+            user_input[k] = val
+        _LOGGER.info("Updated input: %s", user_input)
+
+        # Set kg/L when appropriate
+        _LOGGER.info("First render? %s", first_render)
+        if first_render:
+            piece_qu = masterdata["known_qu"].get("Piece")
+            pack_qu = masterdata["known_qu"].get("Pack")
+            piece_id = piece_qu.get("id") if isinstance(piece_qu, dict) else getattr(piece_qu, "id", None)
+            pack_id = pack_qu.get("id") if isinstance(pack_qu, dict) else getattr(pack_qu, "id", None)
+            if (int(user_input.get("qu_id_stock") or -99) in [piece_id, pack_id]) and (
+                int(user_input.get("qu_id_price") or -99) not in [piece_id, pack_id]
+            ):
+                # Instead of Piece/Pack, copy from ´qu_id_price´ if not Piece/Pack (example: "KG" / "L")
+                _LOGGER.warning(
+                    "Copying ´qu_id_price´ into ´qu_id_stock´: %s. Known: %s", user_input, masterdata["known_qu"]
+                )
+                user_input["qu_id_stock"] = user_input["qu_id_price"]
+
+        schema = self.add_suggested_values_to_schema(schema, user_input)
+
+        plc = {
+            "name": new_product.get("name"),
+            "barcode": code,
+            # "lookup_name": ica_fullname or off_fullname,
+            "product_aliases": "\n".join(
+                self.current_lookup.get("product_aliases", [])
+            ),
+            "lookup_output": self.current_lookup.get("lookup_output"),
+            # "product_matches": "\n".join(
+            #     f"{p['name']}" for p in self.matching_products
+            # ),
+        }
+        if first_render:
+            self.current_form_args = {
+                "step_id": Step.SCAN_ADD_PRODUCT_PARENT,
+                "data_schema": schema,
+                "description_placeholders": plc,
+                "errors": errors,
+            }
+            _LOGGER.debug("FORM-ARGS: %s", self.current_form_args)
+            return self.async_show_form(**self.current_form_args)
+
+        # Input has been passed!
+        if user_input.get("product_id") and user_input["product_id"] != "-1":
+            # A specific product was chosen, use that instead of creation...
+            _LOGGER.info("exist_products: %s", self.matching_products)
+            _LOGGER.info("usr_inp: %s", user_input)
+            self.current_parent = await self._api_grocy.get_product_by_id(
+                int(user_input["product_id"])
+            )
+        else:
+            # Create a new product
+            # more friendly name (barcode has specific name/"note")
+            new_product["name"] = user_input["name"]
+            # new_product["description"] = user_input.get(
+            #     "description",
+            #     # fallback to a formatted name from OpenFoodFacts
+            #     off_fullname,
+            # )
+            new_product["location_id"] = user_input.get(
+                "location_id", self.current_product["location_id"]
+            )
+            new_product["should_not_be_frozen"] = (
+                1
+                if user_input.get(
+                    "should_not_be_frozen",
+                    self.current_product.get("should_not_be_frozen", False),
+                )
+                else 0
+            )
+            loc = next(
+                (
+                    loc
+                    for loc in masterdata["locations"]
+                    if str(loc["id"]) == str(new_product["location_id"])
+                ),
+                None,
+            )
+
+            # TODO: Location not super relevant for Parent products, perhaps set value as per child. But don't render field for it?
+            if not loc:
+                errors["location_id"] = "invalid_location"
+            elif new_product["should_not_be_frozen"] == 1 and loc["is_freezer"] == 1:
+                errors["location_id"] = "location_is_freezer"
+
+            # TODO: Since not handling any physical products with the Parent product, perhaps the due date-fields are irrelevant? (Set value as per child). Don't render field for it, to simplify?
+            if val := user_input.get("default_best_before_days"):
+                new_product["default_best_before_days"] = int(val)
+            if val := user_input.get("default_best_before_days_after_open"):
+                new_product["default_best_before_days_after_open"] = int(val)
+
+            new_product["qu_id_stock"] = user_input.get(
+                "qu_id_stock", user_input.get("qu_id")
+            )
+            new_product["qu_id_purchase"] = user_input.get(
+                "qu_id_purchase",
+                new_product["qu_id_stock"],
+                # ...this unit is not really for parents, but will set as field is required
+            )
+            new_product["qu_id_consume"] = user_input.get(
+                "qu_id_consume",
+                new_product["qu_id_stock"],
+                # ...this unit is not really for parents, but will set as field is required
+            )
+            new_product["qu_id_price"] = user_input.get(
+                "qu_id_price",
+                user_input.get("qu_id"),
+                # TODO: clear this value if is Piece/Pack, since it is best with a unit for Liquid / Weight
+            )
+
+            new_product["row_created_timestamp"] = dt.datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+            if creating_parent:
+                new_product["description"] = user_input.get(
+                    "description", new_product.get("description")
+                )
+                new_product["no_own_stock"] = 1
+                new_product["hide_on_stock_overview"] = 1
+                new_product["disable_open"] = 1
+                new_product["cumulate_min_stock_amount_of_sub_products"] = 1
+                new_product["parent_product_id"] = None
+            else:
+                new_product["description"] = user_input.get(
+                    "description",
+                    new_product.get(
+                        "description",
+                        (
+                            # fallback to the lookup results
+                            self.current_lookup.get("lookup_output")
+                        ),
+                    ),
+                )
+                new_product["parent_product_id"] = user_input.get(
+                    "parent_product_id", new_product["parent_product_id"]
+                )
 
             # create product
             _LOGGER.info("user_input: %s", user_input)
             _LOGGER.info("new_product: %s", new_product)
             if errors:
-                schema: VolDictType = None
-                schema = GENERATE_CREATE_PRODUCT_SCHEMA(masterdata, user_input)
-                schema = vol.Schema(schema)
-                self.add_suggested_values_to_schema(schema, user_input)
+                # schema = self.add_suggested_values_to_schema(schema, user_input)
                 _LOGGER.warning("Input errors: %s", errors)
-                return self.async_show_form(
-                    step_id=Step.SCAN_ADD_PRODUCT,
-                    data_schema=schema,
-                    errors=errors,
-                )
+                self.current_form_args = {
+                    "step_id": Step.SCAN_ADD_PRODUCT_PARENT,
+                    "data_schema": schema,
+                    "description_placeholders": plc,
+                    "errors": errors,
+                }
+                _LOGGER.debug("FORM-ARGS: %s", self.current_form_args)
+                return self.async_show_form(**self.current_form_args)
 
+            # Create product
             product = await self._api_grocy.add_product(new_product)
+            # TODO: check for success!
             _LOGGER.info("created prod: %s", product)
-            # todo: check for success!
-            self.current_product_stock_info = (
-                await self._api_grocy.get_stock_product_by_id(product["id"])
-            )
+            self.current_parent = product
 
-        return await self.async_step_scan_add_product_barcode(user_input=None)
+            if not self.current_product.get("parent_product_id"):
+                # Update Product with the new Parent mapping
+                product_updates = {
+                    "parent_product_id": self.current_parent["id"],
+                }
+                _LOGGER.info(
+                    "Will update product: #%s %s",
+                    self.current_product["id"],
+                    product_updates,
+                )
+                await self._api_grocy.update_product(
+                    self.current_product["id"], product_updates
+                )
+                # TODO: Check for success
+
+                # update local cache with assumed changes
+                self.current_product.update(product_updates)
+        # Done with product, now continue with the Process work for the current barcode
+        return await self.async_step_scan_queue(user_input=None)
 
     async def async_step_scan_add_product_barcode(
         self, user_input: dict[str, Any] = None
     ):
         """Handle input for adding product barcode."""
         errors: dict[str, str] = {}
+        self.current_form_args = None
 
-        # code = current_barcode.strip().strip(",").strip()
-        # code = user_input["code"]
         code = self.current_barcode
 
         new_product: GrocyProduct = (self.current_product_stock_info or {}).get(
@@ -881,8 +1051,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             #     q = self.current_product_openfoodfacts.get("product_quantity")
             #     qu = self.current_product_openfoodfacts.get("product_quantity_unit")
             #     if q and qu:
-            #         # todo: compare qu, against the defaulted "qu_id_purchase" or "qui_id_stock"
-            #         # todo: make conversion, if necessary...
+            #         # TODO: compare qu, against the defaulted "qu_id_purchase" or "qui_id_stock"
+            #         # TODO: make conversion, if necessary...
             #         user_input["amount"] = q
 
             schema = GENERATE_CREATE_PRODUCT_BARCODESCHEMA(
@@ -892,11 +1062,27 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             _LOGGER.info("form 'add_barcode' user_input: %s", user_input)
 
             # ask for input...
-            return self.async_show_form(
-                step_id=Step.SCAN_ADD_PRODUCT_BARCODE,
-                data_schema=schema,
-                errors=errors,
-            )
+
+            plc = {
+                "name": new_product.get("name"),
+                "barcode": code,
+                # "lookup_name": ica_fullname or off_fullname,
+                "product_aliases": "\n".join(
+                    self.current_lookup.get("product_aliases", [])
+                ),
+                "lookup_output": self.current_lookup.get("lookup_output"),
+                # "product_matches": "\n".join(
+                #     f"{p['name']}" for p in self.matching_products
+                # ),
+            }
+            self.current_form_args = {
+                "step_id": Step.SCAN_ADD_PRODUCT_BARCODE,
+                "data_schema": schema,
+                "description_placeholders": plc,
+                "errors": errors,
+            }
+            _LOGGER.debug("FORM-ARGS: %s", self.current_form_args)
+            return self.async_show_form(**self.current_form_args)
 
         # Input has been passed!
         br: GrocyProductBarcode = {
@@ -910,21 +1096,20 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         }
         pcode = await self._api_grocy.add_product_barcode(br)
         _LOGGER.info("created prod_barcode: %s", pcode)
-        # todo: append barcode to product
+        # TODO: append barcode to product
 
         if self.scan_options.get("input_product_details_during_provision"):
             # Add more product info...
             return await self.async_step_scan_update_product_details(user_input=None)
 
-        # created product, now re-run process for same barcode
-        # todo: in-future this could be merged to same process-work (avoid extra form)
-        return await self.async_step_scan_queue(user_input=None)
+        # Created product, check if create parent was requested...
+        return await self.async_step_scan_add_product_parent(user_input=None)
 
     async def async_step_scan_update_product_details(
         self, user_input: dict[str, Any] = None
     ):
         errors: dict[str, str] = {}
-        _LOGGER.info("update-product: %s", user_input)
+        _LOGGER.info("form update-product: %s", user_input)
         masterdata: GrocyMasterData = self._coordinator.data
         product_stock_info: ExtendedGrocyProductStockInfo = (
             self.current_product_stock_info
@@ -962,15 +1147,15 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     ]
                     product_quantity_unit_as_weight = qq["name"] in ["g", "hg", "kg"]
                 if not user_input.get("qu_id"):
-                    # todo: find closest similiar Unit (example: g -> kg)
+                    # TODO: find closest similiar Unit (example: g -> kg)
                     # product_quantity_unit =
                     pass
 
         if self.current_product_ica is not None:
-            # todo: fill in info from ICA...
+            # TODO: fill in info from ICA...
             pass
 
-        # todo: fill in guess of QuantityUnit...
+        # TODO: fill in guess of QuantityUnit...
 
         kcal = user_input["calories_per_100"] = user_input.get("calories_per_100") or (
             self.current_product_openfoodfacts or {}
@@ -988,6 +1173,23 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             # Don't lookup resolved conversions
             skip_add_qu_conversions = True
 
+        # Lookup Unit charasteristics
+        if qu_id_product:
+            for qq in filter(
+                lambda qu: qu.get("id") == qu_id_product,
+                masterdata["quantity_units"],
+            ):
+                _LOGGER.warning("Chosen unit: %s", qq)
+                product_quantity_unit_as_liquid = qq["name"] in [
+                    "ml",
+                    "cl",
+                    "dl",
+                    "l",
+                    "L",
+                ]
+                product_quantity_unit_as_weight = qq["name"] in ["g", "hg", "kg"]
+                break
+
         if not skip_add_qu_conversions:
             # The looked up product quantity unit (of the Pack/Piece)
             if qu_id_product in [
@@ -1003,8 +1205,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     product["id"]
                 )
                 _LOGGER.warning("Convers: %s", conversions)
-                # todo: check if there already is a resolved conversion for those qu_id
-                # todo: if already exists then set ´skip_add_qu_conversions = True´
+                # TODO: check if there already is a resolved conversion for those qu_id
+                # TODO: if already exists then set ´skip_add_qu_conversions = True´
 
         if show_form:
             user_input["qu_id_product"] = str(
@@ -1024,11 +1226,25 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             schema = vol.Schema(schema)
             self.add_suggested_values_to_schema(schema, user_input)
 
-            return self.async_show_form(
-                step_id=Step.SCAN_UPDATE_PRODUCT_DETAILS,
-                data_schema=schema,
-                errors=errors,
-            )
+            plc = {
+                "name": product.get("name"),
+                "barcode": self.current_barcode,
+                "product_aliases": "\n".join(
+                    self.current_lookup.get("product_aliases", [])
+                ),
+                "lookup_output": self.current_lookup.get("lookup_output"),
+                # "product_matches": "\n".join(
+                #     f"{p['name']}" for p in self.matching_products
+                # ),
+            }
+            self.current_form_args = {
+                "step_id": Step.SCAN_UPDATE_PRODUCT_DETAILS,
+                "data_schema": schema,
+                "description_placeholders": plc,
+                "errors": errors,
+            }
+            _LOGGER.debug("FORM-ARGS: %s", self.current_form_args)
+            return self.async_show_form(**self.current_form_args)
 
         _LOGGER.info(
             "About to add conv: %s %s %s",
@@ -1038,7 +1254,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         )
         product_updates = {}
         if not skip_add_qu_conversions and qu_id_product and product_quantity:
-            # todo: create explicit product quantity unit conversion
+            # TODO: create explicit product quantity unit conversion
             # Example Pack -> g
             conv: GrocyAddProductQuantityUnitConversion = {
                 "from_qu_id": product["qu_id_stock"],  # Pack/Piece
@@ -1087,6 +1303,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     to_qu_id=gram_unit["id"],  # grams or millilitres
                 )
             )
+            # TODO: handle `c is None`
             _LOGGER.warning(
                 "Converted: %s %s -> %s %s",
                 c["from_amount"],
@@ -1103,8 +1320,11 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             _LOGGER.info("Will update product: #%s %s", product["id"], product_updates)
             await self._api_grocy.update_product(product["id"], product_updates)
 
-        # Done with product, now continue with the Process work for the current barcode
-        return await self.async_step_scan_queue(user_input=None)
+            # update local cache with assumed changes
+            self.current_product.update(product_updates)
+
+        # Done with product, check if create parent was requested...
+        return await self.async_step_scan_add_product_parent(user_input=None)
 
     async def async_step_scan_transfer_start(self, user_input: dict[str, Any] = None):
         """Handle input for choosing what Stock entry to transfer."""
@@ -1195,7 +1415,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         result = await self._api_grocy.transfer_stock_entry(product["id"], data=data)
         _LOGGER.info("Completed transfer: %s", result)
 
-        # todo: check for success!
+        # TODO: check for success!
 
         # Transfer has been complete...
         # remove it from queue, and then restart the queue...
@@ -1311,9 +1531,10 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                                         label=loc["name"],
                                     )
                                     for loc in shopping_locations
-                                    # todo: append a blank value too?
+                                    # TODO: append a blank value too?
                                 ],
                                 mode=selector.SelectSelectorMode.DROPDOWN,
+                                # TODO: Able to create new store? via ´custom_value=True,´
                             )
                         ),
                     }
@@ -1328,7 +1549,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             )
 
         # Once product has been ensured to exist in Grocy, we can continue with BBuddy call
-        # todo: ignore BBuddy call if scan-mode is "lookup-barcode" or "provision-barcode"
+        # TODO: ignore BBuddy call if scan-mode is "lookup-barcode" or "provision-barcode"
         request = {
             "barcode": str(code),
         }
@@ -1360,22 +1581,24 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     del request["bestBeforeInDays"]
                 request["transaction_type"] = "purchase"
                 request["amount"] = (
-                    1  # todo: check barcode buddy current quantity context
+                    1  # TODO: check barcode buddy current quantity context
+                    # TODO: introduce a field for manual input during scan (default to Barcode amount, then to 1). If not able to fetch override from BBuddy
                 )
                 product_id = self.current_product_stock_info["product"]["id"]
                 request.pop("barcode", None)  # Instead go by ´product_id´
                 response = await self._api_grocy.add_stock_product(product_id, request)
-                # response = ""   # todo: set based on response from Grocy
+                # response = ""   # TODO: set based on response from Grocy
             else:
                 # Call Barcode Buddy scan
+                # TODO: make Barcode Buddy obsolete? Instead do everything via Grocy API?. Gives more control, and cuts of middlehand. But looses the BBuddy UI and it's contextual settings.
                 response = await self._api_bbuddy.post_scan(request)
-                # todo: handle responses with HTML-tags (warning/error messages)
+                # TODO: handle responses with HTML-tags (warning/error messages)
             _LOGGER.info("SCAN-RESP: %s", response)
 
             # if success, then remove from queue, and re-run this method again
             self.barcode_queue.pop(0)
 
-            # todo: handle responses with HTML-tags (warning/error messages)
+            # TODO: handle responses with HTML-tags (warning/error messages)
             self.barcode_results.append(str(response))
 
             # Re-run process method until queue is empty...
@@ -1443,7 +1666,7 @@ def GENERATE_STEP_SCAN_START_SCHEMA(scan_mode: SCAN_MODE) -> vol.Schema:
                         ),
                         selector.SelectOptionDict(
                             value=SCAN_MODE.TRANSFER, label="Transfer"
-                        ),  # todo: only add option if has more than 1 locations setup
+                        ),  # TODO: only add option if has more than 1 locations setup
                         selector.SelectOptionDict(value=SCAN_MODE.OPEN, label="Open"),
                         selector.SelectOptionDict(
                             value=SCAN_MODE.INVENTORY, label="Inventory"
@@ -1482,6 +1705,7 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
     ]
     # child_product_ids = [prod["id"] for prod in child_products]
     parent_product_ids = [prod["parent_product_id"] for prod in child_products]
+    # TODO: NOTE CURRENT FLAW/FEATURE: If a product is not already a Parent, then cannot be chosen to be come a parent (actually logical to prevent children from becoming ones). Not an issue if ALL parents are provisioned via this flow...
     parent_products = [
         prod for prod in masterdata["products"] if prod["id"] in parent_product_ids
     ]
@@ -1491,6 +1715,7 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
         prod
         for prod in masterdata["products"]
         if prod["id"] not in suggested_product_ids
+        and prod["id"] not in parent_product_ids
     ]
     non_suggested_prods.sort(key=lambda product: product["name"])
 
@@ -1506,21 +1731,27 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
         for prod in product_options
         if prod["active"] == 1
     ]
-    prods.insert(
-        len(suggested_products),
-        selector.SelectOptionDict(value="-1", label="--CREATE NEW--"),
-    )
 
-    # If no suggestions, then pre-select "CREATE-NEW"
-    selected_product_id = "-1"
+    selected_product_id = ""
     if len(suggested_products) > 0:
-        selected_product_id = suggested_values.get(
-            "product_id", suggested_products[0]["id"]
+        prods.insert(
+            len(suggested_products),
+            selector.SelectOptionDict(
+                # value="-1", label="[CHOOSE FROM SUGGESTIONS / ENTER NAME]"
+                value="-1",
+                label=f"\t[{len(suggested_products)} SUGGESTIONS ABOVE]",
+            ),
         )
-    selected_product_id = str(selected_product_id)
+        if len(suggested_products) == 1:
+            # Only has a single suggestion, then pre-select it
+            selected_product_id = str(
+                suggested_values.get("product_id", suggested_products[0]["id"])
+            )
+        else:
+            # If has more suggestions, then pre-select "CREATE-NEW"
+            selected_product_id = "-1"
 
-    # todo: rewrite this Schema to have radio button for Create / Create child? / Map existing
-
+    # TODO: rewrite this Schema to have radio button for Create / Create child? / Map existing
     # -> barcode
 
     # Form1:
@@ -1549,62 +1780,14 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
     )
     schemas.update(
         {
-            vol.Required(
-                "product_mode",
-                description={
-                    "suggested_value": suggested_values.get("product_mode")
-                    or (
-                        "create_new_child_and_parent"
-                        if suggested_values.get("parent_product")
-                        else None
-                    )
-                },
-            ): selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=[
-                        selector.SelectOptionDict(
-                            value="choose_child",  # todo: possible in the future to want to scan parents??
-                            label="Map to existing product above",
-                        ),
-                        selector.SelectOptionDict(
-                            value="create_new_product",
-                            label="Create a new specific product",
-                        ),
-                        selector.SelectOptionDict(
-                            value="create_new_child_and_parent",
-                            label="Create new child and/or parent",
-                        ),
-                    ],
-                    mode=selector.SelectSelectorMode.LIST,
-                    multiple=False,
-                )
-            ),
-        }
-    )
-    schemas.update(
-        {
             vol.Optional(
                 "parent_product",
                 description={
                     "suggested_value": suggested_values.get("parent_product"),
-                    # todo: ...or if product_alias matches another product WHICH has a parent, then suggest that parent
+                    # TODO: ...or if product_alias matches another product WHICH has a parent, then suggest that parent
                 },
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
-                    # options=[
-                    #     selector.SelectOptionDict(
-                    #         value="1",
-                    #         label="Mango färsk",
-                    #     ),
-                    #     selector.SelectOptionDict(
-                    #         value="2",
-                    #         label="Mango färsk",
-                    #     ),
-                    #     selector.SelectOptionDict(
-                    #         value="mjölk",
-                    #         label="Mjölk",
-                    #     ),
-                    # ],
                     # List existing Parent products
                     options=[
                         selector.SelectOptionDict(
@@ -1643,7 +1826,7 @@ def GENERATE_CHOOSE_EXISTING_STOCK_ENTRY(
         selector.SelectOptionDict(
             value=str(e["id"]),
             label=f"{product['name']} {e['amount']} {qu['name_plural'] if e['amount'] > 1 else qu['name']}, due: {e['best_before_date']}",
-            # todo: append current location name
+            # TODO: append current location name
         )
         for e in suggested_stockentries
     ]
@@ -1749,7 +1932,9 @@ def GENERATE_TRANSFER_STOCK_ENTRY(
 
 
 def GENERATE_CREATE_PRODUCT_SCHEMA(
-    masterdata: GrocyMasterData, suggested_values: dict[str, str]
+    masterdata: GrocyMasterData,
+    suggested_values: dict[str, str],
+    creating_parent: bool = False,
 ) -> VolDictType:
     locs = [
         selector.SelectOptionDict(
@@ -1773,66 +1958,69 @@ def GENERATE_CREATE_PRODUCT_SCHEMA(
                 "name",
                 description={
                     "suggested_value": suggested_values.get("name"),
-                    # todo: render as listbox with suggested values, but allow for custom text?
+                    # TODO: render as listbox with suggested values, but allow for custom text?
                     # Example: Mango / Mango Fryst 250g ICA / Fryst mango
                 },
             ): selector.TextSelector({"type": "text"})
         }
     )
-    schemas.update(
-        {
-            vol.Required(
-                "location_id",
-                description={
-                    "suggested_value": suggested_values.get("location_id"),
-                },
-            ): selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=locs,
-                    mode=selector.SelectSelectorMode.DROPDOWN,
-                    multiple=False,
-                )
-            ),
-        }
-    )
-    schemas.update(
-        {
-            vol.Required(
-                "should_not_be_frozen",
-                default=suggested_values.get("should_not_be_frozen", False),
-            ): selector.BooleanSelector()
-        }
-    )
-    schemas.update(
-        {
-            vol.Optional(
-                "default_best_before_days",
-                description={
-                    "suggested_value": suggested_values.get("default_best_before_days"),
-                },
-            ): selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    mode=selector.NumberSelectorMode.BOX, step=1
-                )
-            ),
-        }
-    )
-    schemas.update(
-        {
-            vol.Optional(
-                "default_best_before_days_after_open",
-                description={
-                    "suggested_value": suggested_values.get(
-                        "default_best_before_days_after_open"
-                    ),
-                },
-            ): selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    mode=selector.NumberSelectorMode.BOX, step=1
-                )
-            ),
-        }
-    )
+    if not creating_parent:
+        schemas.update(
+            {
+                vol.Required(
+                    "location_id",
+                    description={
+                        "suggested_value": suggested_values.get("location_id"),
+                    },
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=locs,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                        multiple=False,
+                    )
+                ),
+            }
+        )
+        schemas.update(
+            {
+                vol.Required(
+                    "should_not_be_frozen",
+                    default=suggested_values.get("should_not_be_frozen", False),
+                ): selector.BooleanSelector()
+            }
+        )
+        schemas.update(
+            {
+                vol.Optional(
+                    "default_best_before_days",
+                    description={
+                        "suggested_value": suggested_values.get(
+                            "default_best_before_days"
+                        ),
+                    },
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        mode=selector.NumberSelectorMode.BOX, step=1
+                    )
+                ),
+            }
+        )
+        schemas.update(
+            {
+                vol.Optional(
+                    "default_best_before_days_after_open",
+                    description={
+                        "suggested_value": suggested_values.get(
+                            "default_best_before_days_after_open"
+                        ),
+                    },
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        mode=selector.NumberSelectorMode.BOX, step=1
+                    )
+                ),
+            }
+        )
     schemas.update(
         {
             vol.Required(
@@ -1851,42 +2039,43 @@ def GENERATE_CREATE_PRODUCT_SCHEMA(
             ),
         }
     )
-    schemas.update(
-        {
-            vol.Required(
-                "qu_id_purchase",
-                description={
-                    "suggested_value": suggested_values.get(
-                        "qu_id_purchase", suggested_values.get("qu_id")
-                    ),
-                },
-            ): selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=qu,
-                    mode=selector.SelectSelectorMode.DROPDOWN,
-                    multiple=False,
-                )
-            ),
-        }
-    )
-    schemas.update(
-        {
-            vol.Required(
-                "qu_id_consume",
-                description={
-                    "suggested_value": suggested_values.get(
-                        "qu_id_consume", suggested_values.get("qu_id")
-                    ),
-                },
-            ): selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=qu,
-                    mode=selector.SelectSelectorMode.DROPDOWN,
-                    multiple=False,
-                )
-            ),
-        }
-    )
+    if not creating_parent:
+        schemas.update(
+            {
+                vol.Required(
+                    "qu_id_purchase",
+                    description={
+                        "suggested_value": suggested_values.get(
+                            "qu_id_purchase", suggested_values.get("qu_id")
+                        ),
+                    },
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=qu,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                        multiple=False,
+                    )
+                ),
+            }
+        )
+        schemas.update(
+            {
+                vol.Required(
+                    "qu_id_consume",
+                    description={
+                        "suggested_value": suggested_values.get(
+                            "qu_id_consume", suggested_values.get("qu_id")
+                        ),
+                    },
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=qu,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                        multiple=False,
+                    )
+                ),
+            }
+        )
     schemas.update(
         {
             vol.Required(

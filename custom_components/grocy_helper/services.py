@@ -14,10 +14,10 @@ _LOGGER = logging.getLogger(__name__)
 
 RESOLVE_QUANTITY_UNIT_CONVERSION_FOR_PRODUCT_SCHEMA = vol.Schema(
     {
-        vol.Optional("integration"): cv.string,  # todo: to allow to choose from list?
-        vol.Required("product_id"): int,  # todo: to allow to choose from list?
-        vol.Required("from_qu_id"): int,  # todo: to allow to choose from list?
-        vol.Required("to_qu_id"): int,  # todo: to allow to choose from list?
+        vol.Optional("integration"): cv.string,  # TODO: to allow to choose from list?
+        vol.Required("product_id"): int,  # TODO: to allow to choose from list?
+        vol.Required("from_qu_id"): int,  # TODO: to allow to choose from list?
+        vol.Required("to_qu_id"): int,  # TODO: to allow to choose from list?
         vol.Required("amount"): cv.Number,
     }
 )

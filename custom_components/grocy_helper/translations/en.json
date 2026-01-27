@@ -71,12 +71,67 @@
                 "title": "Barcode {barcode}",
                 "description": "{lookup_output}\n\n## Name suggestions\n{product_aliases}",
                 "data": {
-                    "product_id": "Product"
+                    "product_id": "Product",
+                    "parent_product": "Parent product"
                 },
                 "data_description": {
-                    "product_id": "Barcode {barcode} will be mapped to this product. Enter a new name to create new.",
-                    "product_mode": "Decide how to map",
+                    "product_id": "Barcode {barcode} will be mapped to this product. \nName suggestions are grouped on top of dropdown.",
                     "parent_product": "Specify existing or new parent. Leave empty to ignore."
+                }
+            },
+            "scan_add_product": {
+                "title": "Add product {name}",
+                "description": "{lookup_output}\n\n## Name suggestions\n{product_aliases}",
+                "data": {
+                    "name": "Product name",
+                    "location_id": "Default storage location",
+                    "should_not_be_frozen": "Should not be frozen?",
+                    "default_best_before_days": "Default best before days",
+                    "default_best_before_days_after_open": "Default best before days after open",
+                    "qu_id_stock": "Stock unit",
+                    "qu_id_purchase": "Purchase unit",
+                    "qu_id_consume": "Consume unit",
+                    "qu_id_price": "Price unit"
+                },
+                "data_description": {
+                    "location_id": "Where any new and unopened products are usually stored",
+                    "qu_id_stock": "99% of cases this should be Piece/Pack (the one which sounds more appropriate)",
+                    "qu_id_purchase": "Should be same as ´qu_id_purchase´",
+                    "qu_id_consume": "Should be same as ´qu_id_consume´",
+                    "qu_id_price": "Same as ´qu_id_purchase´\nNote: this might get automatically updated later if product quantity is derived from 'kg'/'L')"
+                }
+            },
+            "scan_add_product_parent": {
+                "title": "Add parent {name}",
+                "description": "{lookup_output}\n\n## Name suggestions\n{product_aliases}",
+                "data": {
+                    "name": "Product name"
+                },
+                "data_description": {
+                    "qu_id_stock": "How do you want to measure the total amount? Often best with 'kg'/'L'\n**Avoid Piece/Pack!**",
+                    "qu_id_purchase": "This could basically be hidden from UI, since parents are never bought. Automatically set same as ´qu_id_stock´ in BE",
+                    "qu_id_consume": "This could basically be hidden from UI, since parents are never bought. Automatically set same as ´qu_id_stock´ in BE",
+                    "qu_id_price": "How do you want to compare prices? Often best with 'kg' or 'L'\n**Avoid Piece/Pack!**"
+                }
+            },
+            "scan_update_product_details": {
+                "title": "Update product {name}",
+                "description": "{lookup_output}\n\n## Name suggestions\n{product_aliases}",
+                "data_description": {
+                    "default_consume_location_id": "Where are usually opened products placed? These will be consumed first",
+                    "product_quantity": "The quantity of the actual physical Piece/Pack",
+                    "qu_id_product": "The quantity unit of the actual physical Piece/Pack",
+                    "calories_per_100": "The amount of calories per 100 (g/ml). This will be re-calculated and the total calories per Piece/Pack will be saved, please verify after creation..."
+                }
+            },
+            "scan_add_product_barcode": {
+                "title": "Add barcode to {name}",
+                "description": "{lookup_output}\n\n## Name suggestions\n{product_aliases}",
+                "data_description": {
+                    "note": "A fully descriptive name of the specific product with barcode {barcode}",
+                    "shopping_location_id": "The default store when purchasing this specific barcode",
+                    "amount": "The default amount when purchasing with this specific barcode",
+                    "qu_id": "The quantity unit of the amount"
                 }
             },
             "add_product": {
