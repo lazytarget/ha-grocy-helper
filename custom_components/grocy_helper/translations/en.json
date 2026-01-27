@@ -82,6 +82,17 @@
             "scan_add_product": {
                 "title": "Add product {name}",
                 "description": "{lookup_output}\n\n## Name suggestions\n{product_aliases}",
+                "data": {
+                    "name": "Product name",
+                    "location_id": "Default storage location",
+                    "should_not_be_frozen": "Should not be frozen?",
+                    "default_best_before_days": "Default best before days",
+                    "default_best_before_days_after_open": "Default best before days after open",
+                    "qu_id_stock": "Stock unit",
+                    "qu_id_purchase": "Purchase unit",
+                    "qu_id_consume": "Consume unit",
+                    "qu_id_price": "Price unit"
+                },
                 "data_description": {
                     "location_id": "Where any new and unopened products are usually stored",
                     "qu_id_stock": "99% of cases this should be Piece/Pack (the one which sounds more appropriate)",
@@ -93,6 +104,9 @@
             "scan_add_product_parent": {
                 "title": "Add parent {name}",
                 "description": "{lookup_output}\n\n## Name suggestions\n{product_aliases}",
+                "data": {
+                    "name": "Product name"
+                },
                 "data_description": {
                     "qu_id_stock": "How do you want to measure the total amount? Often best with 'kg'/'L'\n**Avoid Piece/Pack!**",
                     "qu_id_purchase": "This could basically be hidden from UI, since parents are never bought. Automatically set same as ´qu_id_stock´ in BE",
