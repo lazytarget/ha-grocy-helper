@@ -762,7 +762,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             "product_aliases": "\n".join(
                 [f"- {a.strip()}" for a in aliases if a]
             ),  # Format aliases as a Markdown-list
-            "lookup_output": self.current_lookup.get("lookup_output"),
+            "lookup_output": (self.current_lookup or {}).get("lookup_output"),
             # "product_matches": "\n".join(
             #     f"{p['name']}" for p in self.matching_products
             # ),
@@ -836,10 +836,10 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 "description",
                 new_product.get(
                     "description",
-                    (
-                        # fallback to the lookup results
-                        self.current_lookup.get("lookup_output")
-                    ),
+                    # (
+                    #     # fallback to the lookup results
+                    #     self.current_lookup.get("lookup_output")
+                    # ),
                 ),
             )
             new_product["parent_product_id"] = user_input.get(
@@ -955,7 +955,16 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         schema = self.add_suggested_values_to_schema(schema, user_input)
 
-        aliases = self.current_lookup.get("product_aliases") or []
+        # aliases = self.current_lookup.get("product_aliases") or []
+        aliases = (
+            (self.current_lookup.get("product_aliases") or [])
+            if self.current_lookup
+            else (
+                [f"Matlåda: {self.current_recipe["name"]}"]
+                if self.current_recipe
+                else []
+            )
+        )
         plc = {
             "name": new_product.get("name"),
             "barcode": code,
@@ -963,7 +972,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             "product_aliases": "\n".join(
                 [f"- {a.strip()}" for a in aliases if a]
             ),  # Format aliases as a Markdown-list
-            "lookup_output": self.current_lookup.get("lookup_output"),
+            "lookup_output": (self.current_lookup or {}).get("lookup_output"),
             # "product_matches": "\n".join(
             #     f"{p['name']}" for p in self.matching_products
             # ),
@@ -1063,10 +1072,10 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     "description",
                     new_product.get(
                         "description",
-                        (
-                            # fallback to the lookup results
-                            self.current_lookup.get("lookup_output")
-                        ),
+                        # (
+                        #     # fallback to the lookup results
+                        #     self.current_lookup.get("lookup_output")
+                        # ),
                     ),
                 )
                 new_product["parent_product_id"] = user_input.get(
@@ -1168,7 +1177,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 "product_aliases": "\n".join(
                     [f"- {a.strip()}" for a in aliases if a]
                 ),  # Format aliases as a Markdown-list
-                "lookup_output": self.current_lookup.get("lookup_output"),
+                "lookup_output": (self.current_lookup or {}).get("lookup_output"),
                 # "product_matches": "\n".join(
                 #     f"{p['name']}" for p in self.matching_products
                 # ),
@@ -1340,7 +1349,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 "product_aliases": "\n".join(
                     [f"- {a.strip()}" for a in aliases if a]
                 ),  # Format aliases as a Markdown-list
-                "lookup_output": self.current_lookup.get("lookup_output"),
+                "lookup_output": (self.current_lookup or {}).get("lookup_output"),
                 # "product_matches": "\n".join(
                 #     f"{p['name']}" for p in self.matching_products
                 # ),
