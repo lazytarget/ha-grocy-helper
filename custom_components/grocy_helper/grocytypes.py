@@ -191,6 +191,7 @@ class GrocyMasterData(TypedDict):
     shopping_locations: list[GrocyShoppingLocation]
     quantity_units: list[GrocyQuantityUnit]
     products: list[GrocyProduct]
+    recipes: list[GrocyRecipe]
     known_qu: dict[str, GrocyQuantityUnit | None]
 
 

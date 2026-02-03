@@ -31,6 +31,7 @@ from .grocytypes import (
     GrocyMasterData,
     GrocyQuantityUnit,
     GrocyQuantityUnitConversionResult,
+    GrocyRecipe,
     GrocyStockEntry,
     OpenFoodFactsProduct,
 )
@@ -215,6 +216,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
     current_product: GrocyProduct | None = None
     current_parent: GrocyProduct | None = None
+    current_recipe: GrocyRecipe | None = None
+    current_recipe_id: int | None = None
 
     # Cache of the form schema, to easily return errors (must be set to null in forms that support it)
     current_form_args: VolDictType | None = None
@@ -348,7 +351,10 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             self.current_product_ica = None
             self.current_product = None
             self.current_parent = None
+            self.current_recipe = None
+            self.current_recipe_id = None
             self.current_lookup = None
+            self.matching_products: list[GrocyProduct] = []
         self.current_barcode = code
 
         if self.barcode_scan_mode == SCAN_MODE.SCAN_BBUDDY:
@@ -359,150 +365,167 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         else:
             self.current_bb_mode = None
 
-        product: ExtendedGrocyProductStockInfo = None
+        masterdata: GrocyMasterData = self._coordinator.data
         if self.barcode_scan_mode == SCAN_MODE.PROVISION or (
             self.barcode_scan_mode != SCAN_MODE.INVENTORY
             and self.barcode_scan_mode != SCAN_MODE.QUANTITY
         ):
-            if "BBUDDY-" not in code:
-                # Not a BarcodeBuddy code...
-                # Lookup product in Grocy
-                try:
-                    product_stock_info = (
-                        await self._api_grocy.get_stock_product_by_barcode(code)
+            if "grcy:r:" in code:
+                # TODO: Handle "Purchase"/Consume/Inventory/Provision, /Transfer etc.
+                (r, i) = try_parse_int(code.replace("grcy:r:", ""))
+                if r and i > 0:
+                    # Passed a barcode/reference to an Grocy recipe
+                    self.current_recipe_id = i
+                    self.current_recipe = next(
+                        (
+                            recipe
+                            for recipe in masterdata["recipes"]
+                            if recipe["id"] == self.current_recipe_id
+                        ),
+                        None,
                     )
-                    product: GrocyProduct = (product_stock_info or {}).get("product")
-                    self.current_product = product
-                    self.current_product_stock_info = product_stock_info
-                    self.matching_products: list[GrocyProduct] = []
+                    if product_id := self.current_recipe["product_id"]:
+                        self.current_product_stock_info = await self._api_grocy.get_stock_product_by_id(product_id)
+                        self.current_product = (self.current_product_stock_info or {}).get("product")
+                        _LOGGER.info("Recipe '%s' produces product: %s", self.current_recipe["id"], self.current_product)
+                else:
+                    return self.async_abort(reason=f"Could not parse recipe barcode: {code}")
+
+            # Check for BarcodeBuddy code (those should be passed directly to BBuddy for updating context)
+            if "BBUDDY-" not in code:
+                # Not a BarcodeBuddy code
+
+                # Lookup product in Grocy (if not already loaded...)
+                if not self.current_product:
+                    try:
+                        self.current_product_stock_info = await self._api_grocy.get_stock_product_by_barcode(code)
+                        self.current_product = (self.current_product_stock_info or {}).get("product")
+                        _LOGGER.info(
+                            "GrocyProduct lookup: %s",
+                            self.current_product_stock_info,
+                        )
+                    except BaseException as be:
+                        _LOGGER.error("Get product excep: %s", be)
+                        errors["Exception"] = be
+                        raise be
+
+                # Init Transfer-mode
+                if (
+                    self.current_product
+                    and self.current_product.get("id")
+                    and self.barcode_scan_mode == SCAN_MODE.TRANSFER
+                ):
+                    stock_entries = (
+                        await self._api_grocy.get_stock_entries_by_product_id(
+                            self.current_product["id"]
+                        )
+                    )
+                    self.current_stock_entries = stock_entries
+                    return await self.async_step_scan_transfer_start(
+                        user_input=None
+                    )
+
+                # If product doesn't exist, then enter flow to create it
+                if not self.current_product:
+                    # New product (Not provisioned in Grocy)
                     _LOGGER.info(
-                        "GrocyProduct lookup: %s",
-                        self.current_product_stock_info,
+                        "New product, doing lookup against barcode providers: %s",
+                        code,
                     )
 
                     if (
-                        product
-                        and product.get("id")
-                        and self.barcode_scan_mode == SCAN_MODE.TRANSFER
+                        not self.current_lookup
+                        or self.current_lookup["barcode"] != code
                     ):
-                        stock_entries = (
-                            await self._api_grocy.get_stock_entries_by_product_id(
-                                product["id"]
-                            )
+                        # Refresh lookup info, if needed
+                        self.current_lookup = (
+                            await self._coordinator.lookup_barcode(code)
                         )
-                        self.current_stock_entries = stock_entries
-                        return await self.async_step_scan_transfer_start(
-                            user_input=None
+                        self.current_product_openfoodfacts = (
+                            self.current_lookup.get("off")
                         )
+                        self.current_product_ica = self.current_lookup.get("ica")
 
-                    if not product:
-                        # New barcode (Not provisioned in Grocy)
-                        _LOGGER.info(
-                            "New product, doing lookup against barcode providers: %s",
-                            code,
-                        )
-
-                        if (
-                            not self.current_lookup
-                            or self.current_lookup["barcode"] != code
-                        ):
-                            # Refresh lookup info, if needed
-                            self.current_lookup = (
-                                await self._coordinator.lookup_barcode(code)
-                            )
-                            self.current_product_openfoodfacts = (
-                                self.current_lookup.get("off")
-                            )
-                            self.current_product_ica = self.current_lookup.get("ica")
-
-                        masterdata: GrocyMasterData = self._coordinator.data
-                        for matching_product in filter(
-                            lambda p: (
-                                # # OFF.product_name
-                                # (
-                                #     self.current_product_openfoodfacts is not None
-                                #     and (
-                                #         p["name"].casefold()
-                                #         == self.current_product_openfoodfacts.get(
-                                #             "product_name", ""
-                                #         ).casefold()
-                                #     )
-                                # )
-                                # # OFF.genric_name
-                                # or (
-                                #     self.current_product_openfoodfacts is not None
-                                #     and (
-                                #         p["name"].casefold()
-                                #         == (
-                                #             self.current_product_openfoodfacts.get(
-                                #                 "generic_name", ""
-                                #             )
-                                #             or ""
-                                #         ).casefold()
-                                #     )
-                                # )
-                                # # ICA.ean_name
-                                # or (
-                                #     self.current_product_ica is not None
-                                #     and (
-                                #         p["name"].casefold()
-                                #         == (
-                                #             self.current_product_ica.get("ean_name", "")
-                                #             or ""
-                                #         ).casefold()
-                                #     )
-                                # )
-                                # # ICA.article.name
-                                # or (
-                                #     self.current_product_ica is not None
-                                #     and (
-                                #         p["name"].casefold()
-                                #         == (
-                                #             self.current_product_ica.get(
-                                #                 "article", {}
-                                #             ).get("name", "")
-                                #             or ""
-                                #         ).casefold()
-                                #     )
-                                # )
-                                # or
-                                # Match against collected aliases
-                                self.current_lookup.get("product_aliases")
-                                and (
-                                    p["name"].casefold()
-                                    in map(
-                                        str.casefold,
-                                        self.current_lookup["product_aliases"],
-                                    )
+                    for matching_product in filter(
+                        lambda p: (
+                            # # OFF.product_name
+                            # (
+                            #     self.current_product_openfoodfacts is not None
+                            #     and (
+                            #         p["name"].casefold()
+                            #         == self.current_product_openfoodfacts.get(
+                            #             "product_name", ""
+                            #         ).casefold()
+                            #     )
+                            # )
+                            # # OFF.genric_name
+                            # or (
+                            #     self.current_product_openfoodfacts is not None
+                            #     and (
+                            #         p["name"].casefold()
+                            #         == (
+                            #             self.current_product_openfoodfacts.get(
+                            #                 "generic_name", ""
+                            #             )
+                            #             or ""
+                            #         ).casefold()
+                            #     )
+                            # )
+                            # # ICA.ean_name
+                            # or (
+                            #     self.current_product_ica is not None
+                            #     and (
+                            #         p["name"].casefold()
+                            #         == (
+                            #             self.current_product_ica.get("ean_name", "")
+                            #             or ""
+                            #         ).casefold()
+                            #     )
+                            # )
+                            # # ICA.article.name
+                            # or (
+                            #     self.current_product_ica is not None
+                            #     and (
+                            #         p["name"].casefold()
+                            #         == (
+                            #             self.current_product_ica.get(
+                            #                 "article", {}
+                            #             ).get("name", "")
+                            #             or ""
+                            #         ).casefold()
+                            #     )
+                            # )
+                            # or
+                            # Match against collected aliases
+                            self.current_lookup.get("product_aliases")
+                            and (
+                                p["name"].casefold()
+                                in map(
+                                    str.casefold,
+                                    self.current_lookup["product_aliases"],
                                 )
-                                # TODO: ICA offer name
-                            ),
-                            masterdata["products"],
-                        ):
-                            # TODO: also loop through ProductBarcode notes
-                            # TODO: skip Active==0 products
-                            _LOGGER.info("Match: %s", matching_product)
-                            self.matching_products.append(matching_product)
+                            )
+                            # TODO: ICA offer name
+                        ),
+                        masterdata["products"],
+                    ):
+                        # TODO: also loop through ProductBarcode notes
+                        # TODO: skip Active==0 products
+                        _LOGGER.info("Match: %s", matching_product)
+                        self.matching_products.append(matching_product)
 
-                        # always give option to map to an existing product...
-                        return await self.async_step_scan_match_to_product(
-                            user_input=None
-                        )
-                except BaseException as be:
-                    _LOGGER.error("Get product excep: %s", be)
-                    errors["Exception"] = be
-                    raise be
+                    # always give option to map to an existing product...
+                    return await self.async_step_scan_match_to_product(
+                        user_input=None
+                    )
 
         if self.barcode_scan_mode == SCAN_MODE.PROVISION:
             # Mode is to simply ensure product/barcode exists
             # remove from queue, and then restart the queue...
             self.barcode_queue.pop(0)
 
-            p = (product or {}).get("product") or (
-                self.current_product_stock_info or {}
-            ).get("product")
-            _LOGGER.info("Provisioned: %s", p)
-            self.barcode_results.append(f"{code} maps to {p['name']}")
+            _LOGGER.info("Provisioned: %s", self.current_product)
+            self.barcode_results.append(f"{code} maps to {self.current_product['name']}")
             return await self.async_step_scan_queue(user_input=None)
 
         if self.barcode_scan_mode == SCAN_MODE.INVENTORY:
@@ -595,6 +618,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 )
                 
                 # TODO: Validate that the product doesn't already belong to a (different) parent!!
+                # TODO: Validate that the product doesn't already have a different barcode. Which could cause differences in quantities. (Submit again to add anyway?)
                 # Allow for "" or "id" value of the actual parent
                 
             if self.current_product is None:
