@@ -681,6 +681,16 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     if self.current_parent
                     else None,
                 }
+                if self.current_recipe:
+                    # Creating product for recipe... fill in some defaults...
+                    self.current_product["location_id"] = 5 # TODO: "default" Freezer
+                    self.current_product["default_consume_location_id"] = 2 # TODO: "default" Fridge
+                    self.current_product["default_best_before_days"] = 3    # default to 3 days
+                    self.current_product["default_best_before_days_after_open"] = 3
+                    self.current_product["default_best_before_days_after_freezing"] = 60
+                    self.current_product["default_best_before_days_after_thawing"] = 3
+                    # self.current_product["calories"] = 1 # TODO: Calculate total calories of all ingredients / serving
+                    # self.current_product["product_group_id"] = 1 # TODO: Assign an appropriate product group?
         else:
             # Invalid value in 'product_id' field which is required
             errors["product_id"] = "Missing value"
@@ -813,10 +823,17 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             elif new_product["should_not_be_frozen"] == 1 and loc["is_freezer"] == 1:
                 errors["location_id"] = "location_is_freezer"
 
+            if val := user_input.get("default_consume_location_id"):
+                new_product["default_consume_location_id"] = int(val)
+
             if val := user_input.get("default_best_before_days"):
                 new_product["default_best_before_days"] = int(val)
             if val := user_input.get("default_best_before_days_after_open"):
                 new_product["default_best_before_days_after_open"] = int(val)
+            if val := user_input.get("default_best_before_days_after_freezing"):
+                new_product["default_best_before_days_after_freezing"] = int(val)
+            if val := user_input.get("default_best_before_days_after_thawing"):
+                new_product["default_best_before_days_after_thawing"] = int(val)
             new_product["qu_id_stock"] = user_input.get(
                 "qu_id_stock", user_input.get("qu_id")
             )
@@ -1227,6 +1244,30 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         if user_input is None:
             user_input = user_input or {}
 
+
+        def appendDefault(ui: dict[str, Any], key: str, suggestions: dict[str, Any]):
+            val = ui.get(key, suggestions.get(key))
+            if key not in [
+                "should_not_be_frozen",
+                "calories_per_100",
+                "default_best_before_days",
+                "default_best_before_days_after_open",
+                "default_best_before_days_after_freezing",
+                "default_best_before_days_after_thawing",
+            ]:
+                # if not part of exceptions, then set value in ´str´
+                # Exceptions are most likley in ´int´
+                val = str(val) if val is not None else None
+            ui[key] = val
+
+        _LOGGER.info("Original input: %s", user_input)
+        appendDefault(user_input, "should_not_be_frozen", self.current_product)
+        appendDefault(user_input, "default_consume_location_id", self.current_product)
+        appendDefault(user_input, "default_best_before_days_after_freezing", self.current_product)
+        appendDefault(user_input, "default_best_before_days_after_thawing", self.current_product)
+        _LOGGER.info("Updated input: %s", user_input)
+
+
         product_quantity = None
         product_quantity_unit: int | None = None
         product_quantity_unit_as_liquid = False
@@ -1319,6 +1360,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             user_input["qu_id_product"] = str(
                 user_input.get("qu_id_product", qu_id_product)
             )
+            if not user_input["qu_id_product"]:
+                del user_input["qu_id_product"]
             user_input["product_quantity"] = user_input.get(
                 "product_quantity", product_quantity
             )
@@ -1549,7 +1592,16 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         schemas: VolDictType = {}
 
         code = self.current_barcode
-        product = self.current_product_stock_info.get("product", {})
+        
+        if not self.current_product_stock_info:
+            # Load stock info if not already loaded...
+            self.current_product_stock_info = (
+                await self._api_grocy.get_stock_product_by_barcode(code)
+            )
+            self.current_product = (self.current_product_stock_info or {}).get(
+                "product"
+            )
+        product = self.current_product or self.current_product_stock_info.get("product", {})
 
         # Handle input, for Price/BestBeforeInDays
         price = user_input.get("price") if user_input else None
@@ -2252,6 +2304,9 @@ def GENERATE_UPDATE_PRODUCT_DETAILS_SCHEMA(
         {
             vol.Optional(
                 "default_consume_location_id",
+                description={
+                    "suggested_value": suggested_values.get("default_consume_location_id"),
+                },
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=locs,
