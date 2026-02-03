@@ -12,6 +12,7 @@ from .grocytypes import (
     GrocyProductBarcode,
     GrocyQuantityUnit,
     GrocyQuantityUnitConversionResolved,
+    GrocyRecipe,
     GrocyShoppingLocation,
     GrocyStockEntry,
 )
@@ -161,3 +162,7 @@ class GrocyAPI:
         url = self.get_rest_url(API.URLs.GET_QUANTITY_UNIT_CONVERSIONS_RESOLVED)
         params = [("query[]", f"product_id={product_id}")]
         return await async_get(self._session, url, self._api_key, params=params)
+
+    async def get_recipes(self) -> list[GrocyRecipe]:
+        url = self.get_rest_url(API.URLs.GET_RECIPES)
+        return await async_get(self._session, url, self._api_key)

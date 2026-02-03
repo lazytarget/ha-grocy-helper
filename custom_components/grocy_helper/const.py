@@ -62,6 +62,7 @@ class API:
         ADD_PRODUCT_BARCODE: Final = "api/objects/product_barcodes"
         UPDATE_PRODUCT: Final = "api/objects/products/%s"
         ADD_PRODUCT_QUANTITY_UNIT_CONVERSION: Final = "api/objects/quantity_unit_conversions"
+        GET_RECIPES: Final = "api/objects/recipes"
 
         BBUDDY_SCAN: Final = "api/action/scan"
         BBUDDY_GET_MODE: Final = "api/state/getmode"

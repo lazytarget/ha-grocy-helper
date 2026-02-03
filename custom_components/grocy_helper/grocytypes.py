@@ -152,6 +152,20 @@ class GrocyQuantityUnitConversionResult(GrocyQuantityUnitConversionResolved):
     to_amount: float
 
 
+class GrocyRecipe(TypedDict):
+    id: int
+    name: str
+    description: str | None
+    row_created_timestamp: str
+    picture_file_name: str | None
+    base_servings: int
+    desired_servings: int
+    not_check_shoppinglist: int
+    type: str
+    product_id: int | None
+    userfields: dict[str, Any] | None
+
+
 class BarcodeBuddyScanRequest(TypedDict):
     barcode: str
     price: float | None
