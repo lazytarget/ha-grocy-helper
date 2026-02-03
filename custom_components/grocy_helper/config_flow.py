@@ -413,7 +413,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 # Not a BarcodeBuddy code
 
                 # Lookup product in Grocy (if not already loaded...)
-                if not self.current_product:
+                if not self.current_product and not self.current_recipe:
                     try:
                         self.current_product_stock_info = await self._api_grocy.get_stock_product_by_barcode(code)
                         self.current_product = (self.current_product_stock_info or {}).get("product")
@@ -451,8 +451,11 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     )
 
                     if (
-                        not self.current_lookup
-                        or self.current_lookup["barcode"] != code
+                        not self.current_recipe
+                        and (
+                            not self.current_lookup
+                            or self.current_lookup["barcode"] != code
+                        )
                     ):
                         # Refresh lookup info, if needed
                         self.current_lookup = (
@@ -514,12 +517,24 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                             # )
                             # or
                             # Match against collected aliases
-                            self.current_lookup.get("product_aliases")
-                            and (
-                                p["name"].casefold()
-                                in map(
-                                    str.casefold,
-                                    self.current_lookup["product_aliases"],
+                            (
+                                (self.current_lookup or {}).get("product_aliases")
+                                and (
+                                    p["name"].casefold()
+                                    in map(
+                                        str.casefold,
+                                        self.current_lookup["product_aliases"],
+                                    )
+                                )
+                            )
+                            or
+                            # Match against recipe name
+                            (
+                                self.current_recipe and (
+                                    p["name"] in [
+                                        self.current_recipe["name"],
+                                        f"Matlåda: {self.current_recipe["name"]}"
+                                    ]
                                 )
                             )
                             # TODO: ICA offer name
@@ -561,7 +576,9 @@ class GrocyOptionsFlowHandler(OptionsFlow):
     async def async_step_scan_match_to_product(self, user_input: dict[str, Any] = None):
         """Handle input for adding barcode to a product."""
         errors: dict[str, str] = {}
-        self.current_form_args = None
+        # self.current_form_args = None
+        if self.current_form_args:
+            self.current_form_args["errors"] = errors
         _LOGGER.info("match-product: %s", user_input)
         _LOGGER.info("matches: %s", self.matching_products)
 
@@ -569,27 +586,32 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         # Handle input, for required fields
         if user_input is None:
-            # lookup = await self._coordinator.lookup_barcode(code)
-            # self.current_product_openfoodfacts = lookup.get("off")
-            # self.current_product_ica = lookup.get("ica")
-
             # Has matching product, display as a suggestion
             _LOGGER.warning("Matching products: %s", self.matching_products)
+            aliases = (
+                (self.current_lookup.get("product_aliases") or [])
+                if self.current_lookup
+                else (
+                    [f"Matlåda: {self.current_recipe["name"]}"]
+                    if self.current_recipe
+                    else []
+                )
+            )
+
             schema = GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
                 masterdata=self._coordinator.data,
                 suggested_products=self.matching_products,
                 lookup=self.current_lookup,
+                aliases=aliases,
             )
             schema = vol.Schema(schema)
 
-            # Format aliases as a Markdown-list
-            aliases = self.current_lookup.get("product_aliases") or []
             plc = {
                 "barcode": code,
                 "product_aliases": "\n".join(
                     [f"- {a.strip()}" for a in aliases if a]
                 ),  # Format aliases as a Markdown-list
-                "lookup_output": self.current_lookup.get("lookup_output"),
+                "lookup_output": (self.current_lookup or {}).get("lookup_output"),
                 "product_matches": "\n".join(
                     f"{p['name']}" for p in self.matching_products
                 ),
@@ -611,10 +633,21 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         # Parent product (if specified)
         if p := user_input.get("parent_product"):
+            if self.current_recipe:
+                errors["parent_product"] = "Not allowed when creating a recipe product"
+                self.current_form_args["errors"] = errors
+                _LOGGER.warning("Passing new form args: %s", self.current_form_args)
+                # Use a cached version of 'schema'...
+                # TODO: Verify
+                return self.async_show_form(**self.current_form_args)
+            
             (r, i) = try_parse_int(p)
             if r and i > 0:
+
+                # TODO: Remove this WIP testing code
                 if i == 1337:
                     user_input["product_id"] = None
+
                 # Has chosen existing Parent product
                 self.current_parent = await self._api_grocy.get_product_by_id(i)
             if self.current_parent is None:
@@ -713,7 +746,15 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         schema = self.add_suggested_values_to_schema(schema, user_input)
 
-        aliases = self.current_lookup.get("product_aliases") or []
+        aliases = (
+            (self.current_lookup.get("product_aliases") or [])
+            if self.current_lookup
+            else (
+                [f"Matlåda: {self.current_recipe["name"]}"]
+                if self.current_recipe
+                else []
+            )
+        )
         plc = {
             "name": new_product.get("name"),
             "barcode": code,
@@ -1110,7 +1151,16 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
             # ask for input...
 
-            aliases = self.current_lookup.get("product_aliases") or []
+            # aliases = self.current_lookup.get("product_aliases") or []
+            aliases = (
+                (self.current_lookup.get("product_aliases") or [])
+                if self.current_lookup
+                else (
+                    [f"Matlåda: {self.current_recipe["name"]}"]
+                    if self.current_recipe
+                    else []
+                )
+            )
             plc = {
                 "name": new_product.get("name"),
                 "barcode": code,
@@ -1274,7 +1324,16 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             schema = vol.Schema(schema)
             self.add_suggested_values_to_schema(schema, user_input)
 
-            aliases = self.current_lookup.get("product_aliases") or []
+            # aliases = self.current_lookup.get("product_aliases") or []
+            aliases = (
+                (self.current_lookup.get("product_aliases") or [])
+                if self.current_lookup
+                else (
+                    [f"Matlåda: {self.current_recipe["name"]}"]
+                    if self.current_recipe
+                    else []
+                )
+            )
             plc = {
                 "name": product.get("name"),
                 "barcode": self.current_barcode,
@@ -1749,6 +1808,7 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
     suggested_products: list[GrocyProduct],
     suggested_values: dict[str, str] = {},
     lookup: BarcodeLookup | None = None,
+    aliases: list[str] | None = None,
 ) -> VolDictType:
     child_products = [
         prod for prod in masterdata["products"] if prod["parent_product_id"]
@@ -1783,7 +1843,7 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
     ]
 
     selected_product_id = ""
-    aliases = (lookup or {}).get("product_aliases", [])
+    aliases = aliases or (lookup or {}).get("product_aliases", [])
     if len(suggested_products) == 0 and len(aliases) > 0:
         # No suggested existing products
         # Check if has a name suggestion...
