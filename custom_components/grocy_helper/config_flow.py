@@ -388,6 +388,23 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                         self.current_product_stock_info = await self._api_grocy.get_stock_product_by_id(product_id)
                         self.current_product = (self.current_product_stock_info or {}).get("product")
                         _LOGGER.info("Recipe '%s' produces product: %s", self.current_recipe["id"], self.current_product)
+
+                        # TODO: "Purchase" on a recipe, without product, should start the provision product flow... (With Parent-mapping disabled, with recipe barcode, no options for shopping_location)
+                        # TODO: Investigate possibilty with using Recipe products, with a barcode of "grcy:r:" to help with Purchase/Consume flows?
+                        # TODO: Recipe produced product: Able to provision automatically:
+                        #           Unit?? 
+                        #           Location: Freezer
+                        #           Consume: Fridge
+                        #           Due days,   (helps prevent Freezer burn)
+                        #           ProductGroup: Matlåda/Färdiglagat
+                        #           Calories/serving  (helps with kcal per day in Meal plan)
+                        #           Barcode: add "grcy:r:<id>"
+                        #   stock entry/journal or Product overview will tell info like: Spoil rate, last purchased (is when cooked last)
+
+                        # TODO: During "Purchase"/Produce: Omit fields for ´shopping_location_id´
+                        # TODO: During "Purchase"/Produce: Gather the cost of the used stock entries used for this batch. And input as price for the Recipe product. That way you could track the cost historically per recipe (per serving)
+                        # TODO: (During "Purchase"/Produce: Pre-fill bestBeforeInDays from the Produce Product)
+                        # TODO: During "Purchase"/Produce: Allow to choose the outcome per serving: Eaten/Fridge/Freezer        (mark as "Open", if left in Fridge)
                 else:
                     return self.async_abort(reason=f"Could not parse recipe barcode: {code}")
 
