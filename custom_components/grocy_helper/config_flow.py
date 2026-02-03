@@ -904,11 +904,11 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         if self.current_parent is None:
             # Should not link to a parent, continue to next step...
             _LOGGER.debug("Product will not be linked to a parent, continue to next step...")
-            return await self.async_step_scan_queue(user_input=None)
+            return await self.async_step_scan_process(user_input=None)
         elif self.current_parent.get("id"):
             # Parent already exists, continue to next step...
             _LOGGER.debug("Product parent already exists, continue to next step...")
-            return await self.async_step_scan_queue(user_input=None)
+            return await self.async_step_scan_process(user_input=None)
 
         code = self.current_barcode
 
@@ -1357,11 +1357,9 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 # TODO: if already exists then set ´skip_add_qu_conversions = True´
 
         if show_form:
-            user_input["qu_id_product"] = str(
-                user_input.get("qu_id_product", qu_id_product)
-            )
-            if not user_input["qu_id_product"]:
-                del user_input["qu_id_product"]
+            qu_id_product = user_input.get("qu_id_product", qu_id_product)
+            if qu_id_product:
+                user_input["qu_id_product"] = str(qu_id_product)
             user_input["product_quantity"] = user_input.get(
                 "product_quantity", product_quantity
             )
@@ -1592,18 +1590,10 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         schemas: VolDictType = {}
 
         code = self.current_barcode
-        
-        if not self.current_product_stock_info:
-            # Load stock info if not already loaded...
-            self.current_product_stock_info = (
-                await self._api_grocy.get_stock_product_by_barcode(code)
-            )
-            self.current_product = (self.current_product_stock_info or {}).get(
-                "product"
-            )
         product = self.current_product or self.current_product_stock_info.get("product", {})
 
-        # Handle input, for Price/BestBeforeInDays
+        # Handle input, for Price/BestBeforeInDays/shopping_location_id
+        # TODO: Input default price from Recipe (cost of ingredients)
         price = user_input.get("price") if user_input else None
         bestBeforeInDays = (
             user_input.get("bestBeforeInDays", product.get("default_best_before_days"))
@@ -1651,7 +1641,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             # Input for shopping_location_id
             if shopping_location_id is None and self.scan_options.get(
                 "input_shoppingLocationId"
-            ):
+            ): # TODO: ´and not self.current_recipe:´
                 _LOGGER.info(
                     "shoppingLocationId input enabled: append schema field, value: %s",
                     shopping_location_id,
@@ -2298,6 +2288,10 @@ def GENERATE_UPDATE_PRODUCT_DETAILS_SCHEMA(
         )
         for qu in masterdata["quantity_units"]
     ]
+    qu.insert(0, selector.SelectOptionDict(
+        value="",
+        label=""
+    ))
 
     schemas: VolDictType = {}
     schemas.update(
