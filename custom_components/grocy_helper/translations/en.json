@@ -69,7 +69,7 @@
             },
             "scan_match_to_product": {
                 "title": "Barcode {barcode}",
-                "description": "{lookup_output}\n\n## Name suggestions\n{product_aliases}",
+                "description": "{lookup_output}{recipe_info}\n\n## Name suggestions\n{product_aliases}",
                 "data": {
                     "product_id": "Product",
                     "parent_product": "Parent product"
@@ -151,6 +151,13 @@
                 "data_description": {
                     "barcodes": "A list of barcodes to Provision/Purchase/Consume/etc. in Grocy"
                 }
+            }
+        }
+    },
+    "selector": {
+        "scan_mode_DISABLE": {
+            "options": {
+                "BBUDDY-P": "Purchase / Produce"
             }
         }
     }
