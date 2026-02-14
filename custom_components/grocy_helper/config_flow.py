@@ -592,6 +592,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         _LOGGER.info("match-product: %s", user_input)
         _LOGGER.info("matches: %s", self.matching_products)
 
+        masterdata: GrocyMasterData = self._coordinator.data
         code = self.current_barcode
 
         # Handle input, for required fields
@@ -609,7 +610,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             )
             allow_parent = not self.current_recipe
             schema = GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
-                masterdata=self._coordinator.data,
+                masterdata=masterdata,
                 suggested_products=self.matching_products,
                 lookup=self.current_lookup,
                 aliases=aliases,
@@ -652,7 +653,7 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 # Use a cached version of 'schema'...
                 # TODO: Verify
                 return self.async_show_form(**self.current_form_args)
-            
+
             (r, i) = try_parse_int(p)
             if r and i > 0:
 
@@ -678,19 +679,31 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 self.current_product = (self.current_product_stock_info or {}).get(
                     "product"
                 )
-                
+
                 if self.current_product and self.current_recipe:
                     # Selected an existing product for the recipe. Connect them together!
                     recipe_changes = {
                         "product_id": self.current_product["id"]
                     }
                     await self._api_grocy.update_recipe(self.current_recipe["id"], recipe_changes)
+                    # TODO: Check for success?
                     _LOGGER.info("Updated recipe '%s' with consuming product '%s'", self.current_recipe["id"], self.current_product["id"])
-                
-                # TODO: Validate that the product doesn't already belong to a (different) parent!!
-                # TODO: Validate that the product doesn't already have a different barcode. Which could cause differences in quantities. (Submit again to add anyway?)
-                # Allow for "" or "id" value of the actual parent
-                
+                    # update local cache with assumed changes
+                    self.current_recipe.update(recipe_changes)
+                    if r := next(
+                        (
+                            recipe
+                            for recipe in masterdata["recipes"]
+                            if str(recipe["id"]) == str(self.current_recipe["id"])
+                        ),
+                        None,
+                    ):
+                        r.update(recipe_changes)
+
+            # TODO: Validate that the product doesn't already belong to a (different) parent!!
+            # TODO: Validate that the product doesn't already have a different barcode. Which could cause differences in quantities. (Submit again to add anyway?)
+            # Allow for "" or "id" value of the actual parent
+
             if self.current_product is None:
                 # Has not chosen product (or was not found)
                 # Set to create a new product (by omitting the 'id' field)
@@ -1631,6 +1644,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         )
         if user_input is None and in_purchase_mode:
             # If is in a "Purchase"-context
+            
+            # TODO: If in Purchase context AND self.current_recipe, then add field for target to place "Matlådor", and how many portions that where produced...
 
             # Input for price
             if (price is None 
