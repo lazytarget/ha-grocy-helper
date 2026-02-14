@@ -96,8 +96,8 @@
                 "data_description": {
                     "location_id": "Where any new and unopened products are usually stored",
                     "qu_id_stock": "99% of cases this should be Piece/Pack (the one which sounds more appropriate)",
-                    "qu_id_purchase": "Should be same as ´qu_id_purchase´",
-                    "qu_id_consume": "Should be same as ´qu_id_consume´",
+                    "qu_id_purchase": "Should be same as ´qu_id_consume´",
+                    "qu_id_consume": "Should be same as ´qu_id_purchase´",
                     "qu_id_price": "Same as ´qu_id_purchase´\nNote: this might get automatically updated later if product quantity is derived from 'kg'/'L')"
                 }
             },

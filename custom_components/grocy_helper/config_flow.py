@@ -1623,6 +1623,12 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         schemas: VolDictType = {}
 
         code = self.current_barcode
+
+        # Make sure that stock info is loaded...
+        if self.current_product and not self.current_product_stock_info:
+            _LOGGER.warning("Product stock was not loaded, loading it now!")
+            self.current_product_stock_info = await self._api_grocy.get_stock_product_by_id(self.current_product["id"])
+            self.current_product = (self.current_product_stock_info or {}).get("product")
         product = self.current_product or self.current_product_stock_info.get("product", {})
 
         # Handle input, for Price/BestBeforeInDays/shopping_location_id
@@ -1677,8 +1683,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     }
                 )
             # Input for shopping_location_id
-            if (shopping_location_id is None 
-                and self.scan_options.get("input_shoppingLocationId") 
+            if (shopping_location_id is None
+                and self.scan_options.get("input_shoppingLocationId")
                 and not self.current_recipe
             ):
                 _LOGGER.info(
