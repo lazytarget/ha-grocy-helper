@@ -1633,7 +1633,10 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             # If is in a "Purchase"-context
 
             # Input for price
-            if price is None and self.scan_options.get("input_price"):
+            if (price is None 
+                and self.scan_options.get("input_price")
+                and not self.current_recipe
+            ):
                 _LOGGER.info(
                     "Price input enabled: append schema field, value: %s", price
                 )
@@ -1659,9 +1662,10 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     }
                 )
             # Input for shopping_location_id
-            if shopping_location_id is None and self.scan_options.get(
-                "input_shoppingLocationId"
-            ): # TODO: ´and not self.current_recipe:´
+            if (shopping_location_id is None 
+                and self.scan_options.get("input_shoppingLocationId") 
+                and not self.current_recipe
+            ):
                 _LOGGER.info(
                     "shoppingLocationId input enabled: append schema field, value: %s",
                     shopping_location_id,
