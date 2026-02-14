@@ -384,7 +384,13 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                         ),
                         None,
                     )
+                    if not self.current_recipe:
+                        # TODO: Flow for creating new recipe??
+                        return self.async_abort(reason=f"Recipe with id '{i}' was not found")
+                    
+                    _LOGGER.debug('Found recipe: %s', self.current_recipe)
                     if product_id := self.current_recipe["product_id"]:
+                        # Recipe has a producing product, then fetch info and continue flow with product state
                         self.current_product_stock_info = await self._api_grocy.get_stock_product_by_id(product_id)
                         self.current_product = (self.current_product_stock_info or {}).get("product")
                         _LOGGER.info("Recipe '%s' produces product: %s", self.current_recipe["id"], self.current_product)
@@ -405,6 +411,10 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                         # TODO: During "Purchase"/Produce: Gather the cost of the used stock entries used for this batch. And input as price for the Recipe product. That way you could track the cost historically per recipe (per serving)
                         # TODO: (During "Purchase"/Produce: Pre-fill bestBeforeInDays from the Produce Product)
                         # TODO: During "Purchase"/Produce: Allow to choose the outcome per serving: Eaten/Fridge/Freezer        (mark as "Open", if left in Fridge)
+                    else:
+                        # Recipe doesn't produce a product
+                        # Continue flow without a `self.current_product` set, to provision it (and attach to recipe)
+                        pass
                 else:
                     return self.async_abort(reason=f"Could not parse recipe barcode: {code}")
 
@@ -597,17 +607,19 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     else []
                 )
             )
-
+            allow_parent = not self.current_recipe
             schema = GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
                 masterdata=self._coordinator.data,
                 suggested_products=self.matching_products,
                 lookup=self.current_lookup,
                 aliases=aliases,
+                allow_parent=allow_parent,
             )
             schema = vol.Schema(schema)
 
             plc = {
                 "barcode": code,
+                "recipe_info": f"## Recipe\n\#{self.current_recipe["id"]} {self.current_recipe["name"]}" if self.current_recipe else None,
                 "product_aliases": "\n".join(
                     [f"- {a.strip()}" for a in aliases if a]
                 ),  # Format aliases as a Markdown-list
@@ -666,6 +678,14 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                 self.current_product = (self.current_product_stock_info or {}).get(
                     "product"
                 )
+                
+                if self.current_product and self.current_recipe:
+                    # Selected an existing product for the recipe. Connect them together!
+                    recipe_changes = {
+                        "product_id": self.current_product["id"]
+                    }
+                    await self._api_grocy.update_recipe(self.current_recipe["id"], recipe_changes)
+                    _LOGGER.info("Updated recipe '%s' with consuming product '%s'", self.current_recipe["id"], self.current_product["id"])
                 
                 # TODO: Validate that the product doesn't already belong to a (different) parent!!
                 # TODO: Validate that the product doesn't already have a different barcode. Which could cause differences in quantities. (Submit again to add anyway?)
@@ -1861,6 +1881,7 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
     suggested_values: dict[str, str] = {},
     lookup: BarcodeLookup | None = None,
     aliases: list[str] | None = None,
+    allow_parent: bool = False,
 ) -> VolDictType:
     child_products = [
         prod for prod in masterdata["products"] if prod["parent_product_id"]
@@ -1945,31 +1966,32 @@ def GENERATE_CHOOSE_EXISTING_PRODUCT_SCHEMA(
             ),
         }
     )
-    schemas.update(
-        {
-            vol.Optional(
-                "parent_product",
-                description={
-                    "suggested_value": suggested_values.get("parent_product"),
-                    # TODO: ...or if product_alias matches another product WHICH has a parent, then suggest that parent
-                },
-            ): selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    # List existing Parent products
-                    options=[
-                        selector.SelectOptionDict(
-                            value=str(prod["id"]), label=prod["name"]
-                        )
-                        for prod in parent_products
-                        if prod["active"] == 1
-                    ],
-                    mode=selector.SelectSelectorMode.DROPDOWN,
-                    multiple=False,
-                    custom_value=True,  # allows for creating a new parent
-                )
-            ),
-        }
-    )
+    if allow_parent:
+        schemas.update(
+            {
+                vol.Optional(
+                    "parent_product",
+                    description={
+                        "suggested_value": suggested_values.get("parent_product"),
+                        # TODO: ...or if product_alias matches another product WHICH has a parent, then suggest that parent
+                    },
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        # List existing Parent products
+                        options=[
+                            selector.SelectOptionDict(
+                                value=str(prod["id"]), label=prod["name"]
+                            )
+                            for prod in parent_products
+                            if prod["active"] == 1
+                        ],
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                        multiple=False,
+                        custom_value=True,  # allows for creating a new parent
+                    )
+                ),
+            }
+        )
     return schemas
 
 

@@ -166,3 +166,8 @@ class GrocyAPI:
     async def get_recipes(self) -> list[GrocyRecipe]:
         url = self.get_rest_url(API.URLs.GET_RECIPES)
         return await async_get(self._session, url, self._api_key)
+
+    async def update_recipe(self, recipe_id: int, data: GrocyRecipe):
+        url = self.get_rest_url(API.URLs.UPDATE_RECIPE) % recipe_id
+        response = await async_put(self._session, url, self._api_key, json_data=data)
+        return response
