@@ -1821,7 +1821,7 @@ def GENERATE_STEP_SCAN_START_SCHEMA(scan_mode: SCAN_MODE) -> vol.Schema:
                             value=SCAN_MODE.CONSUME_ALL, label="Consume (All)"
                         ),
                         selector.SelectOptionDict(
-                            value=SCAN_MODE.PURCHASE, label="Purchase"
+                            value=SCAN_MODE.PURCHASE, label="Purchase / Produce"
                         ),
                         selector.SelectOptionDict(
                             value=SCAN_MODE.TRANSFER, label="Transfer"
@@ -1842,6 +1842,7 @@ def GENERATE_STEP_SCAN_START_SCHEMA(scan_mode: SCAN_MODE) -> vol.Schema:
                             value=SCAN_MODE.PROVISION, label="Provision barcode"
                         ),
                     ],
+                    # translation_key="scan_mode",
                     mode=selector.SelectSelectorMode.LIST,
                     multiple=False,
                 )
