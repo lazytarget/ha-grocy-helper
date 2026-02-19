@@ -5,7 +5,7 @@ flow framework and the framework-agnostic ``ScanSession`` business logic
 defined in ``scan_session.py``.
 
 If you need to change barcode scanning behaviour, edit ``scan_session.py``
-or ``scan_types.py`` – this file should only contain HA-specific glue.
+or ``scan_types.py`` - this file should only contain HA-specific glue.
 """
 
 import copy
