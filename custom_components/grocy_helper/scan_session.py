@@ -80,6 +80,7 @@ _NUMERIC_FIELDS = frozenset(
         "default_best_before_days_after_thawing",
     }
 )
+# TODO: This is a lazy hack. Improve!
 
 
 class ScanSession:
@@ -244,13 +245,13 @@ class ScanSession:
 
         return await self._step_scan_queue()
 
-    # ── scan_queue (internal – never shows its own form) ─────────────
+    # ── scan_queue (internal - never shows its own form) ─────────────
 
-    async def _step_scan_queue(self) -> StepResult:  # noqa: C901 – complex but faithful to original
+    async def _step_scan_queue(self) -> StepResult:    # noqa: C901 - complex but faithful to original
         """Process the next barcode in the queue.
 
-        This is an *internal* step – it never renders its own form.  It
-        chains to whichever visible step is appropriate.
+        This is an *internal* step - it never renders its own form.
+        It chains to whichever visible step is appropriate.
         """
 
         self.current_product_stock_info = None
@@ -271,7 +272,7 @@ class ScanSession:
 
         code = current_barcode.strip().strip(",").strip().lstrip("0")
         if self.current_barcode != code:
-            # New barcode – clear contextual state
+            # New barcode - clear contextual state
             self.current_product_stock_info = None
             self.current_product_openfoodfacts = None
             self.current_product_ica = None
@@ -295,9 +296,9 @@ class ScanSession:
 
         masterdata = self._masterdata
 
-        if self.barcode_scan_mode == SCAN_MODE.PROVISION or (
-            self.barcode_scan_mode != SCAN_MODE.INVENTORY
-            and self.barcode_scan_mode != SCAN_MODE.QUANTITY
+        if (
+            self.barcode_scan_mode == SCAN_MODE.PROVISION
+            or self.barcode_scan_mode not in [SCAN_MODE.INVENTORY, SCAN_MODE.QUANTITY]
         ):
             # ── recipe barcode ──────────────────────────────────────
             if "grcy:r:" in code:
@@ -324,7 +325,7 @@ class ScanSession:
                         _LOGGER.error("Get product excep: %s", be)
                         raise
 
-                # Transfer mode
+                # ── transfer mode ──────────────────────────────────────────
                 if (
                     self.current_product
                     and self.current_product.get("id")
@@ -784,7 +785,7 @@ class ScanSession:
                 "qu_id_purchase", "qu_id_consume",
             ])
 
-        # Merge values – copy from child product when creating parent
+        # Merge values - copy from child product when creating parent
         suggested: dict[str, Any] = {}
         for k in parent_keys:
             val = user_input.get(k, new_product.get(k))
