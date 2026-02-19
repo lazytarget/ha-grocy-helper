@@ -119,12 +119,29 @@ class ScanSession:
         lookup_barcode: Callable[[str], Awaitable[BarcodeLookup]],
         convert_quantity: Callable[..., Awaitable[GrocyQuantityUnitConversionResult | None]],
         scan_options: dict[str, bool] | None = None,
+        # CRUD operations (injected from coordinator)
+        create_product: Callable[[dict], Awaitable[GrocyProduct]] | None = None,
+        update_product: Callable[[int, dict], Awaitable[dict]] | None = None,
+        create_barcode: Callable[[dict], Awaitable[dict]] | None = None,
+        create_qu_conversion: Callable[[dict], Awaitable[dict]] | None = None,
+        transfer_stock: Callable[[int, dict], Awaitable[dict]] | None = None,
+        add_stock: Callable[[int, dict], Awaitable[dict]] | None = None,
+        update_recipe: Callable[[int, dict], Awaitable[dict]] | None = None,
     ) -> None:
         self._api_grocy = api_grocy
         self._api_bbuddy = api_bbuddy
         self._masterdata = masterdata
         self._lookup_barcode = lookup_barcode
         self._convert_quantity = convert_quantity
+        
+        # CRUD operations - fallback to direct API calls if not provided
+        self._create_product = create_product or self._default_create_product
+        self._update_product = update_product or self._default_update_product
+        self._create_barcode = create_barcode or self._default_create_barcode
+        self._create_qu_conversion = create_qu_conversion or self._default_create_qu_conversion
+        self._transfer_stock = transfer_stock or self._default_transfer_stock
+        self._add_stock = add_stock or self._default_add_stock
+        self._update_recipe = update_recipe or self._default_update_recipe
 
         self.scan_options: dict[str, bool] = scan_options or {
             "input_price": True,
@@ -157,6 +174,60 @@ class ScanSession:
         self._cached_form: FormRequest | None = None
         # Cached process-step schema fields (for error re-display)
         self._cached_process_fields: list[FormField] | None = None
+
+    # ── default CRUD operations (fallback to direct API calls) ──────
+
+    async def _default_create_product(self, product_data: dict) -> GrocyProduct:
+        """Default: create product via direct API call."""
+        product_data["row_created_timestamp"] = dt.datetime.now().strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        return await self._api_grocy.add_product(product_data)
+
+    async def _default_update_product(self, product_id: int, changes: dict) -> dict:
+        """Default: update product via direct API call."""
+        result = await self._api_grocy.update_product(product_id, changes)
+        # Update local cache
+        if self.current_product and self.current_product.get("id") == product_id:
+            self.current_product.update(changes)
+        return result
+
+    async def _default_create_barcode(self, barcode_data: dict) -> dict:
+        """Default: create barcode via direct API call."""
+        barcode_data["row_created_timestamp"] = dt.datetime.now().strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        return await self._api_grocy.add_product_barcode(barcode_data)
+
+    async def _default_create_qu_conversion(self, conversion_data: dict) -> dict:
+        """Default: create QU conversion via direct API call."""
+        conversion_data["row_created_timestamp"] = dt.datetime.now().strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        return await self._api_grocy.add_product_quantity_unit_conversion(
+            conversion_data
+        )
+
+    async def _default_transfer_stock(
+        self, product_id: int, transfer_data: dict
+    ) -> dict:
+        """Default: transfer stock via direct API call."""
+        return await self._api_grocy.transfer_stock_entry(product_id, transfer_data)
+
+    async def _default_add_stock(self, product_id: int, stock_data: dict) -> dict:
+        """Default: add stock via direct API call."""
+        return await self._api_grocy.add_stock_product(product_id, stock_data)
+
+    async def _default_update_recipe(self, recipe_id: int, changes: dict) -> dict:
+        """Default: update recipe via direct API call."""
+        result = await self._api_grocy.update_recipe(recipe_id, changes)
+        # Update local cache
+        if self._masterdata and "recipes" in self._masterdata:
+            for recipe in self._masterdata["recipes"]:
+                if recipe["id"] == recipe_id:
+                    recipe.update(changes)
+                    break
+        return result
 
     # ── public helpers ───────────────────────────────────────────────
 
@@ -453,132 +524,29 @@ class ScanSession:
 
     # ── match_to_product ─────────────────────────────────────────────
 
-    async def _step_match_to_product(  # noqa: C901
+    async def _step_match_to_product(
         self, user_input: dict[str, Any] | None
     ) -> StepResult:
         """Let the user match the barcode to an existing or new product."""
 
-        errors: dict[str, str] = {}
-        masterdata = self._masterdata
-        code = self.current_barcode
-
-        # ── first render ────────────────────────────────────────────
+        # First render - show form
         if user_input is None:
-            _LOGGER.warning("Matching products: %s", self.matching_products)
-            aliases = self._get_aliases()
-            allow_parent = not self.current_recipe
-            fields = self._build_match_product_fields(
-                suggested_products=self.matching_products,
-                aliases=aliases,
-                allow_parent=allow_parent,
-            )
-            plc = {
-                "barcode": code,
-                "recipe_info": (
-                    f"## Recipe\n#{self.current_recipe['id']} {self.current_recipe['name']}"
-                    if self.current_recipe
-                    else None
-                ),
-                "product_aliases": "\n".join(
-                    [f"- {a.strip()}" for a in aliases if a]
-                ),
-                "lookup_output": (self.current_lookup or {}).get("lookup_output"),
-                "product_matches": "\n".join(
-                    f"{p['name']}" for p in self.matching_products
-                ),
-            }
-            self._cached_form = FormRequest(
-                step_id=Step.SCAN_MATCH_PRODUCT,
-                fields=fields,
-                description_placeholders=plc,
-                errors=errors,
-            )
-            return self._cached_form
+            return self._show_match_product_form()
 
-        # ── process submitted form ──────────────────────────────────
-        _LOGGER.info("match-product: %s", user_input)
-        self.current_product = None
-        self.current_parent = None
+        # Process submitted form
+        _LOGGER.info("match-product input: %s", user_input)
+        
+        # Validate and process parent product
+        parent_error = await self._process_parent_selection(user_input)
+        if parent_error:
+            return parent_error
 
-        # Parent product
-        if p := user_input.get("parent_product"):
-            if self.current_recipe:
-                errors["parent_product"] = (
-                    "Not allowed when creating a recipe product"
-                )
-                if self._cached_form:
-                    self._cached_form.errors = errors
-                    return self._cached_form
-                return AbortResult(reason=errors["parent_product"])
+        # Validate and process product
+        product_error = await self._process_product_selection(user_input)
+        if product_error:
+            return product_error
 
-            (r, i) = try_parse_int(p)
-            if r and i > 0:
-                # TODO: Remove this WIP testing code
-                if i == 1337:
-                    user_input["product_id"] = None
-                self.current_parent = await self._api_grocy.get_product_by_id(i)
-            if self.current_parent is None:
-                self.current_parent = {"name": p if p != "-1" else None}
-        else:
-            _LOGGER.debug("No parent was input")
-
-        # Product
-        if p := user_input.get("product_id"):
-            (r, i) = try_parse_int(p)
-            if r and i > 0:
-                self.current_product_stock_info = (
-                    await self._api_grocy.get_stock_product_by_id(i)
-                )
-                self.current_product = (
-                    self.current_product_stock_info or {}
-                ).get("product")
-
-                if self.current_product and self.current_recipe:
-                    recipe_changes = {"product_id": self.current_product["id"]}
-                    await self._api_grocy.update_recipe(
-                        self.current_recipe["id"], recipe_changes
-                    )
-                    _LOGGER.info(
-                        "Updated recipe '%s' with consuming product '%s'",
-                        self.current_recipe["id"],
-                        self.current_product["id"],
-                    )
-                    self.current_recipe.update(recipe_changes)
-                    if rec := next(
-                        (
-                            r
-                            for r in masterdata["recipes"]
-                            if str(r["id"]) == str(self.current_recipe["id"])
-                        ),
-                        None,
-                    ):
-                        rec.update(recipe_changes)
-
-            if self.current_product is None:
-                self.current_product = {
-                    "name": p if p != "-1" else None,
-                    "parent_product_id": (
-                        self.current_parent.get("id", None)
-                        if self.current_parent
-                        else None
-                    ),
-                }
-                if self.current_recipe:
-                    # Defaults for recipe-produced products
-                    self.current_product["location_id"] = 5  # TODO: default Freezer
-                    self.current_product["default_consume_location_id"] = 2  # TODO: default Fridge
-                    self.current_product["default_best_before_days"] = 3
-                    self.current_product["default_best_before_days_after_open"] = 3
-                    self.current_product["default_best_before_days_after_freezing"] = 60
-                    self.current_product["default_best_before_days_after_thawing"] = 3
-        else:
-            errors["product_id"] = "Missing value"
-            if self._cached_form:
-                self._cached_form.errors = errors
-                return self._cached_form
-            return AbortResult(reason="Missing product_id")
-
-        # If product is new → create
+        # If product is new → create it
         if not self.current_product.get("id"):
             return await self._step_add_product(user_input=None)
 
@@ -587,160 +555,51 @@ class ScanSession:
 
     # ── add_product ──────────────────────────────────────────────────
 
-    async def _step_add_product(  # noqa: C901
+    async def _step_add_product(
         self, user_input: dict[str, Any] | None
     ) -> StepResult:
         """Create a new product in Grocy."""
 
-        errors: dict[str, str] = {}
-        self._cached_form = None
-        masterdata = self._masterdata
-        _LOGGER.info("form 'add_product' user_input: %s", user_input)
-
-        new_product: dict = (self.current_product or {}).copy()
-        if self.current_product.get("id"):
+        if self.current_product and self.current_product.get("id"):
             return AbortResult(
-                reason="Should not render Create product form, since a product already exists"
+                reason="Product already exists"
             )
 
-        code = self.current_barcode
-        first_render = user_input is None
+        new_product = (self.current_product or {}).copy()
+        
+        # First render - show form
         if user_input is None:
-            user_input = {}
-
-        # Merge: user_input takes precedence over current product state
-        suggested = self._merge_product_values(
-            user_input,
-            new_product,
-            [
-                "name",
-                "location_id",
-                "should_not_be_frozen",
-                "default_best_before_days",
-                "default_best_before_days_after_open",
-                "qu_id_stock",
-                "qu_id_purchase",
-                "qu_id_consume",
-                "qu_id_price",
-            ],
-        )
-
-        if first_render:
-            fields = self._build_create_product_fields(
-                suggested, creating_parent=False
-            )
-            aliases = self._get_aliases()
-            plc = {
-                "name": new_product.get("name"),
-                "barcode": code,
-                "product_aliases": "\n".join(
-                    [f"- {a.strip()}" for a in aliases if a]
-                ),
-                "lookup_output": (self.current_lookup or {}).get("lookup_output"),
-            }
-            self._cached_form = FormRequest(
-                step_id=Step.SCAN_ADD_PRODUCT,
-                fields=fields,
-                description_placeholders=plc,
-                errors=errors,
-            )
-            return self._cached_form
+            return self._show_add_product_form(new_product, {})
 
         # ── process submitted form ──────────────────────────────────
+        
+        # User selected existing product instead of creating new
         if user_input.get("product_id") and user_input["product_id"] != "-1":
-            _LOGGER.info("exist_products: %s", self.matching_products)
+            product_id = int(user_input["product_id"])
             self.current_product_stock_info = (
-                await self._api_grocy.get_stock_product_by_id(
-                    int(user_input["product_id"])
-                )
+                await self._api_grocy.get_stock_product_by_id(product_id)
             )
-        else:
-            new_product["name"] = user_input["name"]
-            new_product["location_id"] = user_input["location_id"]
-            new_product["should_not_be_frozen"] = (
-                1 if user_input.get("should_not_be_frozen", False) else 0
-            )
+            return await self._step_add_product_barcode(None)
 
-            loc = next(
-                (
-                    loc
-                    for loc in masterdata["locations"]
-                    if str(loc["id"]) == str(new_product["location_id"])
-                ),
-                None,
-            )
-            if not loc:
-                errors["location_id"] = "invalid_location"
-            elif new_product["should_not_be_frozen"] == 1 and loc["is_freezer"] == 1:
-                errors["location_id"] = "location_is_freezer"
+        # Build new product from input
+        new_product = self._build_product_from_input(user_input, new_product)
 
-            if val := user_input.get("default_consume_location_id"):
-                new_product["default_consume_location_id"] = int(val)
-            if val := user_input.get("default_best_before_days"):
-                new_product["default_best_before_days"] = int(val)
-            if val := user_input.get("default_best_before_days_after_open"):
-                new_product["default_best_before_days_after_open"] = int(val)
-            if val := user_input.get("default_best_before_days_after_freezing"):
-                new_product["default_best_before_days_after_freezing"] = int(val)
-            if val := user_input.get("default_best_before_days_after_thawing"):
-                new_product["default_best_before_days_after_thawing"] = int(val)
-            new_product["qu_id_stock"] = user_input.get(
-                "qu_id_stock", user_input.get("qu_id")
-            )
-            new_product["qu_id_purchase"] = user_input.get(
-                "qu_id_purchase", user_input.get("qu_id")
-            )
-            new_product["qu_id_consume"] = user_input.get(
-                "qu_id_consume", user_input.get("qu_id")
-            )
-            new_product["qu_id_price"] = user_input.get(
-                "qu_id_price", user_input.get("qu_id")
-            )
-            new_product["row_created_timestamp"] = dt.datetime.now().strftime(
-                "%Y-%m-%d %H:%M:%S"
-            )
-            new_product["description"] = user_input.get(
-                "description",
-                new_product.get("description"),
-            )
-            new_product["parent_product_id"] = user_input.get(
-                "parent_product_id", new_product.get("parent_product_id")
-            )
+        # Validate location
+        errors = self._validate_product_location(new_product)
+        if errors:
+            return self._show_add_product_form(new_product, errors)
 
-            _LOGGER.info("user_input: %s", user_input)
-            _LOGGER.info("new_product: %s", new_product)
-
-            if errors:
-                _LOGGER.warning("Input errors: %s", errors)
-                fields = self._build_create_product_fields(
-                    suggested, creating_parent=False
-                )
-                aliases = self._get_aliases()
-                plc = {
-                    "name": new_product.get("name"),
-                    "barcode": code,
-                    "product_aliases": "\n".join(
-                        [f"- {a.strip()}" for a in aliases if a]
-                    ),
-                    "lookup_output": (self.current_lookup or {}).get(
-                        "lookup_output"
-                    ),
-                }
-                return FormRequest(
-                    step_id=Step.SCAN_ADD_PRODUCT,
-                    fields=fields,
-                    description_placeholders=plc,
-                    errors=errors,
-                )
-
-            product = await self._api_grocy.add_product(new_product)
-            _LOGGER.info("created prod: %s", product)
-            self.current_product_stock_info = (
-                await self._api_grocy.get_stock_product_by_id(product["id"])
-            )
-            self.current_product = (
-                (self.current_product_stock_info or {}).get("product") or product
-            )
+        # Create product
+        _LOGGER.info("Creating product: %s", new_product)
+        product = await self._create_product(new_product)
+        _LOGGER.info("Created product: %s", product)
+        
+        # Load full product info
+        self.current_product_stock_info = (
+            await self._api_grocy.get_stock_product_by_id(product["id"])
+        )
+        self.current_product = (
+            self.current_product_stock_info or {}).get("product") or product
 
         return await self._step_add_product_barcode(None)
 
@@ -2071,3 +1930,229 @@ class ScanSession:
                 val = str(val) if val is not None else None
             suggested[k] = val
         return suggested
+
+    def _show_add_product_form(
+        self, product: dict[str, Any], errors: dict[str, str]
+    ) -> FormRequest:
+        """Build and return the add-product form."""
+        suggested = self._merge_product_values(
+            {},
+            product,
+            [
+                "name",
+                "location_id",
+                "should_not_be_frozen",
+                "default_best_before_days",
+                "default_best_before_days_after_open",
+                "qu_id_stock",
+                "qu_id_purchase",
+                "qu_id_consume",
+                "qu_id_price",
+            ],
+        )
+        fields = self._build_create_product_fields(suggested, creating_parent=False)
+        aliases = self._get_aliases()
+        return FormRequest(
+            step_id=Step.SCAN_ADD_PRODUCT,
+            fields=fields,
+            description_placeholders={
+                "name": product.get("name"),
+                "barcode": self.current_barcode,
+                "product_aliases": "\n".join([f"- {a.strip()}" for a in aliases if a]),
+                "lookup_output": (self.current_lookup or {}).get("lookup_output"),
+            },
+            errors=errors,
+        )
+
+    def _build_product_from_input(
+        self, user_input: dict[str, Any], base_product: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Build a new product dict from user input."""
+        product = base_product.copy()
+        product["name"] = user_input["name"]
+        product["location_id"] = user_input["location_id"]
+        product["should_not_be_frozen"] = (
+            1 if user_input.get("should_not_be_frozen", False) else 0
+        )
+        
+        # Optional fields
+        if val := user_input.get("default_consume_location_id"):
+            product["default_consume_location_id"] = int(val)
+        if val := user_input.get("default_best_before_days"):
+            product["default_best_before_days"] = int(val)
+        if val := user_input.get("default_best_before_days_after_open"):
+            product["default_best_before_days_after_open"] = int(val)
+        if val := user_input.get("default_best_before_days_after_freezing"):
+            product["default_best_before_days_after_freezing"] = int(val)
+        if val := user_input.get("default_best_before_days_after_thawing"):
+            product["default_best_before_days_after_thawing"] = int(val)
+        
+        # Quantity units
+        product["qu_id_stock"] = user_input.get(
+            "qu_id_stock", user_input.get("qu_id")
+        )
+        product["qu_id_purchase"] = user_input.get(
+            "qu_id_purchase", user_input.get("qu_id")
+        )
+        product["qu_id_consume"] = user_input.get(
+            "qu_id_consume", user_input.get("qu_id")
+        )
+        product["qu_id_price"] = user_input.get(
+            "qu_id_price", user_input.get("qu_id")
+        )
+        
+        product["description"] = user_input.get("description", product.get("description"))
+        product["parent_product_id"] = user_input.get(
+            "parent_product_id", product.get("parent_product_id")
+        )
+        
+        return product
+
+    def _validate_product_location(
+        self, product: dict[str, Any]
+    ) -> dict[str, str]:
+        """Validate product location constraints. Returns errors dict."""
+        errors: dict[str, str] = {}
+        
+        loc = next(
+            (
+                loc
+                for loc in self._masterdata["locations"]
+                if str(loc["id"]) == str(product["location_id"])
+            ),
+            None,
+        )
+        
+        if not loc:
+            errors["location_id"] = "invalid_location"
+        elif product.get("should_not_be_frozen") == 1 and loc.get("is_freezer") == 1:
+            errors["location_id"] = "location_is_freezer"
+        
+        return errors
+
+    def _show_match_product_form(self) -> FormRequest:
+        """Build and return the match-product form."""
+        _LOGGER.warning("Matching products: %s", self.matching_products)
+        aliases = self._get_aliases()
+        allow_parent = not self.current_recipe
+        fields = self._build_match_product_fields(
+            suggested_products=self.matching_products,
+            aliases=aliases,
+            allow_parent=allow_parent,
+        )
+        self._cached_form = FormRequest(
+            step_id=Step.SCAN_MATCH_PRODUCT,
+            fields=fields,
+            description_placeholders={
+                "barcode": self.current_barcode,
+                "recipe_info": (
+                    f"## Recipe\n#{self.current_recipe['id']} {self.current_recipe['name']}"
+                    if self.current_recipe
+                    else None
+                ),
+                "product_aliases": "\n ".join([f"- {a.strip()}" for a in aliases if a]),
+                "lookup_output": (self.current_lookup or {}).get("lookup_output"),
+                "product_matches": "\n".join(
+                    f"{p['name']}" for p in self.matching_products
+                ),
+            },
+            errors={},
+        )
+        return self._cached_form
+
+    async def _process_parent_selection(
+        self, user_input: dict[str, Any]
+    ) -> StepResult | None:
+        """Process the parent_product field. Returns error result or None."""
+        self.current_parent = None
+        
+        if not (p := user_input.get("parent_product")):
+            return None  # No parent specified
+        
+        # Recipe products cannot have parents
+        if self.current_recipe:
+            error = "Not allowed when creating a recipe product"
+            if self._cached_form:
+                self._cached_form.errors = {"parent_product": error}
+                return self._cached_form
+            return AbortResult(reason=error)
+        
+        # Try to parse as ID
+        (r, i) = try_parse_int(p)
+        if r and i > 0:
+            # TODO: Remove this WIP testing code
+            if i == 1337:
+                user_input["product_id"] = None
+            self.current_parent = await self._api_grocy.get_product_by_id(i)
+        
+        # If not found or was a string, treat as new parent product name
+        if self.current_parent is None:
+            self.current_parent = {"name": p if p != "-1" else None}
+        
+        return None
+
+    async def _process_product_selection(
+        self, user_input: dict[str, Any]
+    ) -> StepResult | None:
+        """Process the product_id field. Returns error result or None."""
+        self.current_product = None
+        
+        p = user_input.get("product_id")
+        if not p:
+            error = "Missing value"
+            if self._cached_form:
+                self._cached_form.errors = {"product_id": error}
+                return self._cached_form
+            return AbortResult(reason="Missing product_id")
+        
+        # Try to parse as ID
+        (r, i) = try_parse_int(p)
+        if r and i > 0:
+            # Load existing product
+            self.current_product_stock_info = (
+                await self._api_grocy.get_stock_product_by_id(i)
+            )
+            self.current_product = (self.current_product_stock_info or {}).get(
+                "product"
+            )
+            
+            # Link recipe to product if needed
+            if self.current_product and self.current_recipe:
+                await self._link_recipe_to_product()
+        
+        # If not found or was a string, create new product template
+        if self.current_product is None:
+            self.current_product = {
+                "name": p if p != "-1" else None,
+                "parent_product_id": (
+                    self.current_parent.get("id") if self.current_parent else None
+                ),
+            }
+            
+            # Add recipe defaults
+            if self.current_recipe:
+                self._apply_recipe_product_defaults()
+        
+        return None
+
+    async def _link_recipe_to_product(self) -> None:
+        """Link the current recipe to the current product."""
+        recipe_changes = {"product_id": self.current_product["id"]}
+        await self._update_recipe(self.current_recipe["id"], recipe_changes)
+        _LOGGER.info(
+            "Linked recipe #%s to product #%s",
+            self.current_recipe["id"],
+            self.current_product["id"],
+        )
+        self.current_recipe.update(recipe_changes)
+
+    def _apply_recipe_product_defaults(self) -> None:
+        """Apply default settings for recipe-produced products."""
+        self.current_product.update({
+            "location_id": 5,  # TODO: Configurable default Freezer location
+            "default_consume_location_id": 2,  # TODO: Configurable default Fridge
+            "default_best_before_days": 3,
+            "default_best_before_days_after_open": 3,
+            "default_best_before_days_after_freezing": 60,
+            "default_best_before_days_after_thawing": 3,
+        })
