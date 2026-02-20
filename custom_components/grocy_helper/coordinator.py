@@ -272,6 +272,12 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
         product = await self._api_grocy.add_product(new_product)
         # TODO: check for success!
         _LOGGER.info("created prod: %s", product)
+
+        # Add to local cache
+        if self.data and "products" in self.data:
+            _LOGGER.debug("Adding product #%s to cache: %s", product.get("id"), product.get("name"))
+            self.data["products"].append(product)
+
         return product
 
     async def update_product(
@@ -280,14 +286,14 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
         """Update an existing product in Grocy."""
         _LOGGER.info("Updating product #%s with changes: %s", product_id, changes)
         result = await self._api_grocy.update_product(product_id, changes)
-        
+
         # Update local cache if available
         if self.data and "products" in self.data:
             for product in self.data["products"]:
                 if product["id"] == product_id:
                     product.update(changes)
                     break
-        
+
         return result
 
     async def create_product_barcode(

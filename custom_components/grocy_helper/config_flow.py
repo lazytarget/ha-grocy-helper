@@ -181,19 +181,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         super().__init__()
         coordinator = config_entry.coordinator
         self._session = ScanSession(
-            api_grocy=coordinator._api_grocy,
+            coordinator=coordinator,
             api_bbuddy=coordinator._api_bbuddy,
-            masterdata=coordinator.data,
-            lookup_barcode=coordinator.lookup_barcode,
-            convert_quantity=coordinator.convert_quantity_for_product,
-            # Inject coordinator CRUD methods
-            create_product=coordinator.create_product,
-            update_product=coordinator.update_product,
-            create_barcode=coordinator.create_product_barcode,
-            create_qu_conversion=coordinator.create_quantity_unit_conversion,
-            transfer_stock=coordinator.transfer_stock_entry,
-            add_stock=coordinator.add_stock,
-            update_recipe=coordinator.update_recipe,
         )
 
     # ── HA entry point ──────────────────────────────────────────────

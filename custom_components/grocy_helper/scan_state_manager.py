@@ -14,7 +14,6 @@ if TYPE_CHECKING:
     from .grocytypes import (
         BarcodeLookup,
         ExtendedGrocyProductStockInfo,
-        GrocyMasterData,
         GrocyProduct,
         GrocyRecipe,
         GrocyStockEntry,
@@ -35,7 +34,6 @@ class ScanStateManager:
     def __init__(
         self,
         api_grocy: GrocyAPI,
-        masterdata: GrocyMasterData,
     ) -> None:
         """Initialize state manager.
         
@@ -43,11 +41,8 @@ class ScanStateManager:
         ----------
         api_grocy:
             Grocy API instance for loading products
-        masterdata:
-            Masterdata cache to keep updated
         """
         self._api_grocy = api_grocy
-        self._masterdata = masterdata
 
         # Primary product state - stock info contains full details
         self._current_stock_info: ExtendedGrocyProductStockInfo | None = None
@@ -104,10 +99,6 @@ class ScanStateManager:
         This is the preferred way to update product state for existing products.
         """
         self._current_stock_info = stock_info
-        
-        # Update masterdata cache if we have a product
-        if stock_info and (product := stock_info.get("product")):
-            self._update_product_cache(product)
 
     async def load_product_by_id(self, product_id: int) -> GrocyProduct | None:
         """Load product by ID and update state.
@@ -158,52 +149,16 @@ class ScanStateManager:
         return self._current_stock_info is not None
 
     def update_current_product(self, changes: dict) -> None:
-        """Update current product with changes.
+        """Update current product with changes (session state only).
         
-        Updates both the local state and the masterdata cache.
+        This only updates the local session state. For persistent changes,
+        call the coordinator's update_product() method.
         """
         if not self.current_product:
             _LOGGER.warning("Cannot update product - no current product set")
             return
             
         self.current_product.update(changes)
-        self._update_product_cache(self.current_product)
-
-    def add_product_to_cache(self, product: GrocyProduct) -> None:
-        """Add a newly created product to the masterdata cache.
-        
-        Call this after successfully creating a product via API.
-        """
-        self._update_product_cache(product, is_new=True)
-
-    def _update_product_cache(self, product: GrocyProduct, is_new: bool = False) -> None:
-        """Update or add product in masterdata cache.
-        
-        Parameters
-        ----------
-        product:
-            Product to update/add
-        is_new:
-            If True, adds to cache. If False, updates existing entry.
-        """
-        if not self._masterdata or "products" not in self._masterdata:
-            return
-            
-        product_id = product.get("id")
-        if not product_id:
-            return
-        
-        if is_new:
-            # Add new product to cache
-            _LOGGER.debug("Adding product #%s to cache: %s", product_id, product.get("name"))
-            self._masterdata["products"].append(product)
-        else:
-            # Update existing product in cache
-            for i, cached_product in enumerate(self._masterdata["products"]):
-                if cached_product.get("id") == product_id:
-                    _LOGGER.debug("Updating product #%s in cache: %s", product_id, product.get("name"))
-                    self._masterdata["products"][i] = product
-                    break
 
     def clear_all(self) -> None:
         """Clear all state (for new barcode processing)."""
