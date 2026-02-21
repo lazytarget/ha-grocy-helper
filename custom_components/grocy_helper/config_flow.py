@@ -5,7 +5,7 @@ flow framework and the framework-agnostic ``ScanSession`` business logic
 defined in ``scan_session.py``.
 
 If you need to change barcode scanning behaviour, edit ``scan_session.py``
-or ``scan_types.py`` – this file should only contain HA-specific glue.
+or ``scan_types.py`` - this file should only contain HA-specific glue.
 """
 
 import copy
@@ -186,6 +186,14 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             masterdata=coordinator.data,
             lookup_barcode=coordinator.lookup_barcode,
             convert_quantity=coordinator.convert_quantity_for_product,
+            # Inject coordinator CRUD methods
+            create_product=coordinator.create_product,
+            update_product=coordinator.update_product,
+            create_barcode=coordinator.create_product_barcode,
+            create_qu_conversion=coordinator.create_quantity_unit_conversion,
+            transfer_stock=coordinator.transfer_stock_entry,
+            add_stock=coordinator.add_stock,
+            update_recipe=coordinator.update_recipe,
         )
 
     # ── HA entry point ──────────────────────────────────────────────

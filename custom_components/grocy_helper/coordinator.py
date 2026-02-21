@@ -3,7 +3,7 @@
 import logging
 import traceback
 import datetime as dt
-from typing import Optional
+from typing import Any, Optional
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -273,6 +273,76 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
         # TODO: check for success!
         _LOGGER.info("created prod: %s", product)
         return product
+
+    async def update_product(
+        self, product_id: int, changes: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Update an existing product in Grocy."""
+        _LOGGER.info("Updating product #%s with changes: %s", product_id, changes)
+        result = await self._api_grocy.update_product(product_id, changes)
+        
+        # Update local cache if available
+        if self.data and "products" in self.data:
+            for product in self.data["products"]:
+                if product["id"] == product_id:
+                    product.update(changes)
+                    break
+        
+        return result
+
+    async def create_product_barcode(
+        self, barcode_data: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Create a barcode entry for a product."""
+        barcode_data["row_created_timestamp"] = dt.datetime.now().strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        _LOGGER.info("Creating product barcode: %s", barcode_data)
+        return await self._api_grocy.add_product_barcode(barcode_data)
+
+    async def create_quantity_unit_conversion(
+        self, conversion_data: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Create a quantity unit conversion for a product."""
+        conversion_data["row_created_timestamp"] = dt.datetime.now().strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        _LOGGER.info("Creating QU conversion: %s", conversion_data)
+        return await self._api_grocy.add_product_quantity_unit_conversion(
+            conversion_data
+        )
+
+    async def transfer_stock_entry(
+        self, product_id: int, transfer_data: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Transfer a stock entry between locations."""
+        _LOGGER.info(
+            "Transferring stock for product #%s: %s", product_id, transfer_data
+        )
+        return await self._api_grocy.transfer_stock_entry(product_id, transfer_data)
+
+    async def add_stock(
+        self, product_id: int, stock_data: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Add stock for a product (purchase transaction)."""
+        _LOGGER.info("Adding stock for product #%s: %s", product_id, stock_data)
+        return await self._api_grocy.add_stock_product(product_id, stock_data)
+
+    async def update_recipe(
+        self, recipe_id: int, changes: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Update a recipe in Grocy."""
+        _LOGGER.info("Updating recipe #%s with changes: %s", recipe_id, changes)
+        result = await self._api_grocy.update_recipe(recipe_id, changes)
+        
+        # Update local cache if available
+        if self.data and "recipes" in self.data:
+            for recipe in self.data["recipes"]:
+                if recipe["id"] == recipe_id:
+                    recipe.update(changes)
+                    break
+        
+        return result
 
     async def convert_quantity_for_product(
         self,
