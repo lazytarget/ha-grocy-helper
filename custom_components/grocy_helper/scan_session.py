@@ -330,33 +330,34 @@ class ScanSession:
         """Handle a ``grcy:r:<id>`` barcode.  Returns *None* to continue."""
 
         (r, i) = try_parse_int(code.replace("grcy:r:", ""))
-        if r and i > 0:
-            self.current_recipe_id = i
-            self._state.current_recipe = next(
-                (
-                    recipe
-                    for recipe in masterdata["recipes"]
-                    if recipe["id"] == self.current_recipe_id
-                ),
-                None,
-            )
-            if not self.current_recipe:
-                return AbortResult(
-                    reason=f"Recipe with id '{i}' was not found"
-                )
-
-            _LOGGER.debug("Found recipe: %s", self.current_recipe)
-            if product_id := self.current_recipe["product_id"]:
-                await self._state.load_product_by_id(product_id)
-                _LOGGER.info(
-                    "Recipe '%s' produces product: %s",
-                    self.current_recipe["id"],
-                    self.current_product,
-                )
-        else:
+        if not r or i <= 0:
             return AbortResult(
                 reason=f"Could not parse recipe barcode: {code}"
             )
+
+        self.current_recipe_id = i
+        self._state.current_recipe = next(
+            (
+                recipe
+                for recipe in masterdata["recipes"]
+                if recipe["id"] == self.current_recipe_id
+            ),
+            None,
+        )
+        if not self.current_recipe:
+            return AbortResult(
+                reason=f"Recipe with id '{i}' was not found"
+            )
+
+        _LOGGER.debug("Found recipe: %s", self.current_recipe)
+        if product_id := self.current_recipe["product_id"]:
+            await self._state.load_product_by_id(product_id)
+            _LOGGER.info(
+                "Recipe '%s' produces product: %s",
+                self.current_recipe["id"],
+                self.current_product,
+            )
+
         return None  # continue queue processing
 
     # ── match_to_product ─────────────────────────────────────────────
@@ -420,8 +421,7 @@ class ScanSession:
         new_product = self._product_builder.build_product_from_input(user_input, new_product)
 
         # Validate location
-        errors = self._product_builder.validate_product_location(new_product)
-        if errors:
+        if errors := self._product_builder.validate_product_location(new_product):
             return self._show_add_product_form(new_product, errors)
 
         # Create product
@@ -474,8 +474,7 @@ class ScanSession:
         )
 
         # Validate location
-        errors = self._product_builder.validate_product_location(new_product)
-        if errors:
+        if errors := self._product_builder.validate_product_location(new_product):
             suggested = self._product_builder.build_parent_product_suggested_values(
                 new_product, user_input, creating_parent, self.current_product
             )
@@ -511,8 +510,9 @@ class ScanSession:
         )
 
         if user_input is None:
-            suggested: dict[str, Any] = {}
-            suggested["note"] = new_product["name"] if new_product else ""
+            suggested: dict[str, Any] = {
+                "note": new_product["name"] if new_product else "",
+            }
             fields = self._form_builder.build_create_barcode_fields(suggested)
             aliases = self._get_aliases()
             plc = {
@@ -784,10 +784,9 @@ class ScanSession:
 
         # Show form if needed
         if user_input is None and in_purchase_mode:
-            form = self._show_scan_process_form(
+            if form := self._show_scan_process_form(
                 product, price, bestBeforeInDays, shopping_location_id, errors
-            )
-            if form:
+            ):
                 return form
 
         # Build request
@@ -801,7 +800,7 @@ class ScanSession:
         # Execute the action
         try:
             response = await self._execute_scan_action(request, in_purchase_mode)
-            return self._handle_scan_success(response)
+            return await self._handle_scan_success(response)
         except BaseException as be:
             return self._handle_scan_error(be, errors)
 
@@ -1154,7 +1153,6 @@ class ScanSession:
         product_quantity_unit_as_weight: bool,
     ) -> tuple[int | None, bool, bool, bool]:
         """Determine quantity unit and whether conversions are needed."""
-        masterdata = self._masterdata
         qu_id_product = user_input.get("qu_id_product", product_quantity_unit)
         skip_add_qu_conversions = False
         
@@ -1166,6 +1164,7 @@ class ScanSession:
             skip_add_qu_conversions = True
 
         if qu_id_product:
+            masterdata = self._masterdata
             for qq in filter(
                 lambda qu: qu.get("id") == qu_id_product,
                 masterdata["quantity_units"],
@@ -1206,8 +1205,7 @@ class ScanSession:
         kcal: float | None,
     ) -> dict:
         """Prepare defaults for form rendering."""
-        qu_id_product_val = user_input.get("qu_id_product", qu_id_product)
-        if qu_id_product_val:
+        if qu_id_product_val := user_input.get("qu_id_product", qu_id_product):
             user_input["qu_id_product"] = str(qu_id_product_val)
         user_input["product_quantity"] = user_input.get(
             "product_quantity", product_quantity
@@ -1254,7 +1252,7 @@ class ScanSession:
         masterdata = self._masterdata
         conv: GrocyAddProductQuantityUnitConversion = {
             "from_qu_id": product["qu_id_stock"],
-            "to_qu_id": int(qu_id_product),
+            "to_qu_id": qu_id_product,
             "product_id": product["id"],
             "row_created_timestamp": dt.datetime.now().strftime(
                 "%Y-%m-%d %H:%M:%S"
@@ -1291,7 +1289,7 @@ class ScanSession:
         if not gram_unit:
             return None
 
-        kcal_per_gram = float(kcal) / 100
+        kcal_per_gram = kcal / 100
         c: GrocyQuantityUnitConversionResult = (
             await self._convert_quantity(
                 product["id"],
@@ -1309,8 +1307,7 @@ class ScanSession:
             c["to_qu_name"],
         )
         grams_per_pack = c["to_amount"]
-        kcal_per_pack = kcal_per_gram * grams_per_pack
-        return kcal_per_pack
+        return kcal_per_gram * grams_per_pack
     # ── Helpers for _step_scan_process ────────────────────────────────
 
     async def _ensure_product_stock_loaded(self) -> None:
@@ -1354,7 +1351,7 @@ class ScanSession:
         errors: dict,
     ) -> FormRequest | None:
         """Show form for purchase mode if needed."""
-        fields = self._form_builder.build_scan_process_fields(
+        if fields := self._form_builder.build_scan_process_fields(
             product,
             price,
             bestBeforeInDays,
@@ -1363,8 +1360,7 @@ class ScanSession:
             self.current_recipe,
             self.current_product_stock_info,
             self.current_barcode,
-        )
-        if fields:
+        ):
             self._cached_process_fields = fields
             return FormRequest(
                 step_id=Step.SCAN_PROCESS,
