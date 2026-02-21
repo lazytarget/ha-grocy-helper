@@ -52,15 +52,13 @@ from .grocytypes import (
     GrocyStockEntry,
     OpenFoodFactsProduct,
 )
+from .scan_form_builders import ScanFormBuilder
+from .scan_product_builders import ProductDataBuilder
 from .scan_types import (
     AbortResult,
     CompletedResult,
-    FieldType,
     FormField,
     FormRequest,
-    NumberMode,
-    SelectMode,
-    SelectOption,
     Step,
     StepResult,
 )
@@ -133,6 +131,12 @@ class ScanSession:
         self._masterdata = masterdata
         self._lookup_barcode = lookup_barcode
         self._convert_quantity = convert_quantity
+        
+        # Form builder for UI fields
+        self._form_builder = ScanFormBuilder(masterdata)
+        
+        # Product data builder for transformations
+        self._product_builder = ProductDataBuilder(masterdata)
         
         # CRUD operations - fallback to direct API calls if not provided
         self._create_product = create_product or self._default_create_product
@@ -299,7 +303,7 @@ class ScanSession:
             _LOGGER.info("BBuddy mode is: %s (%s)", bb_mode, scan_mode_from_bbuddy)
             return FormRequest(
                 step_id=Step.SCAN_START,
-                fields=self._build_scan_start_fields(scan_mode_from_bbuddy),
+                fields=self._form_builder.build_scan_start_fields(scan_mode_from_bbuddy),
             )
 
         # ── user submitted the form ─────────────────────────────────
@@ -475,10 +479,10 @@ class ScanSession:
             return await self._step_add_product_barcode(None)
 
         # Build new product from input
-        new_product = self._build_product_from_input(user_input, new_product)
+        new_product = self._product_builder.build_product_from_input(user_input, new_product)
 
         # Validate location
-        errors = self._validate_product_location(new_product)
+        errors = self._product_builder.validate_product_location(new_product)
         if errors:
             return self._show_add_product_form(new_product, errors)
 
@@ -516,8 +520,8 @@ class ScanSession:
 
         # First render - show form
         if user_input is None:
-            suggested = self._build_parent_product_suggested_values(
-                new_product, {}, creating_parent
+            suggested = self._product_builder.build_parent_product_suggested_values(
+                new_product, {}, creating_parent, self.current_product
             )
             return self._show_add_product_parent_form(
                 new_product, suggested, creating_parent, {}
@@ -531,15 +535,15 @@ class ScanSession:
             return await self._step_scan_queue()
 
         # Build new parent product from input
-        new_product = self._build_parent_product_from_input(
-            user_input, new_product, creating_parent
+        new_product = self._product_builder.build_parent_product_from_input(
+            user_input, new_product, creating_parent, self.current_product
         )
 
         # Validate location
-        errors = self._validate_product_location(new_product)
+        errors = self._product_builder.validate_product_location(new_product)
         if errors:
-            suggested = self._build_parent_product_suggested_values(
-                new_product, user_input, creating_parent
+            suggested = self._product_builder.build_parent_product_suggested_values(
+                new_product, user_input, creating_parent, self.current_product
             )
             return self._show_add_product_parent_form(
                 new_product, suggested, creating_parent, errors
@@ -575,7 +579,7 @@ class ScanSession:
         if user_input is None:
             suggested: dict[str, Any] = {}
             suggested["note"] = new_product["name"] if new_product else ""
-            fields = self._build_create_barcode_fields(suggested)
+            fields = self._form_builder.build_create_barcode_fields(suggested)
             aliases = self._get_aliases()
             plc = {
                 "name": new_product.get("name") if new_product else None,
@@ -631,7 +635,9 @@ class ScanSession:
             user_input = {}
 
         # Initialize input with defaults from current product
-        user_input = self._initialize_product_details_input(user_input)
+        user_input = self._product_builder.initialize_product_details_input(
+            user_input, self.current_product
+        )
         _LOGGER.info("Updated input: %s", user_input)
 
         # Parse OpenFoodFacts data
@@ -641,7 +647,9 @@ class ScanSession:
             product_quantity_unit_as_liquid,
             product_quantity_unit_as_weight,
             kcal,
-        ) = self._parse_openfoodfacts_data(user_input)
+        ) = self._product_builder.parse_openfoodfacts_data(
+            user_input, self.current_product_openfoodfacts
+        )
 
         # Determine quantity unit and whether conversions are needed
         (
@@ -735,7 +743,10 @@ class ScanSession:
             _LOGGER.warning(
                 "Existing stock entries: %s", self.current_stock_entries
             )
-            fields = self._build_choose_stock_entry_fields()
+            product = self.current_product_stock_info["product"]
+            fields = self._form_builder.build_choose_stock_entry_fields(
+                product, self.current_stock_entries
+            )
             return FormRequest(
                 step_id=Step.SCAN_TRANSFER_START,
                 fields=fields,
@@ -777,7 +788,11 @@ class ScanSession:
             )
 
         if user_input is None:
-            fields = self._build_transfer_input_fields()
+            product = self.current_product_stock_info["product"]
+            stock_entry = self.current_stock_entries[0]
+            fields = self._form_builder.build_transfer_input_fields(
+                product, stock_entry
+            )
             return FormRequest(
                 step_id=Step.SCAN_TRANSFER_INPUT,
                 fields=fields,
@@ -842,7 +857,7 @@ class ScanSession:
                 return form
 
         # Build request
-        request = self._build_scan_request(
+        request = self._product_builder.build_scan_request(
             code, in_purchase_mode, price, bestBeforeInDays, shopping_location_id
         )
 
@@ -857,583 +872,9 @@ class ScanSession:
             return self._handle_scan_error(be, errors)
 
     # =================================================================
-    # Form-field builders
+    # Form-field builders - now in scan_form_builders.py
     # =================================================================
-
-    def _build_scan_start_fields(
-        self, scan_mode: SCAN_MODE | None
-    ) -> list[FormField]:
-        """Build fields for the scan-start form."""
-
-        bbuddy_mode_str = scan_mode.name if scan_mode is not None else "Unknown"
-
-        return [
-            FormField(
-                key="mode",
-                field_type=FieldType.SELECT,
-                required=False,
-                suggested_value=SCAN_MODE.SCAN_BBUDDY,
-                select_mode=SelectMode.LIST,
-                options=[
-                    SelectOption(
-                        value=SCAN_MODE.SCAN_BBUDDY,
-                        label=f"Barcode Buddy ({bbuddy_mode_str})",
-                    ),
-                    SelectOption(value=SCAN_MODE.CONSUME, label="Consume"),
-                    SelectOption(
-                        value=SCAN_MODE.CONSUME_SPOILED,
-                        label="Consume (Spoiled)",
-                    ),
-                    SelectOption(
-                        value=SCAN_MODE.CONSUME_ALL,
-                        label="Consume (All)",
-                    ),
-                    SelectOption(
-                        value=SCAN_MODE.PURCHASE,
-                        label="Purchase / Produce",
-                    ),
-                    SelectOption(value=SCAN_MODE.TRANSFER, label="Transfer"),
-                    SelectOption(value=SCAN_MODE.OPEN, label="Open"),
-                    SelectOption(value=SCAN_MODE.INVENTORY, label="Inventory"),
-                    SelectOption(
-                        value=SCAN_MODE.ADD_TO_SHOPPING_LIST,
-                        label="Add to Shopping list",
-                    ),
-                    SelectOption(
-                        value=SCAN_MODE.PROVISION,
-                        label="Provision barcode",
-                    ),
-                ],
-            ),
-            FormField(
-                key="barcodes",
-                field_type=FieldType.TEXT,
-                required=True,
-                multiline=True,
-                suggested_value="4011800420413",  # DEV default
-            ),
-        ]
-
-    def _build_match_product_fields(
-        self,
-        suggested_products: list[GrocyProduct],
-        aliases: list[str],
-        allow_parent: bool,
-        suggested_values: dict[str, str] | None = None,
-    ) -> list[FormField]:
-        """Build fields for the match-to-product form."""
-
-        masterdata = self._masterdata
-        suggested_values = suggested_values or {}
-        lookup = self.current_lookup
-
-        child_products = [
-            p for p in masterdata["products"] if p["parent_product_id"]
-        ]
-        parent_product_ids = [
-            p["parent_product_id"] for p in child_products
-        ]
-        parent_products = [
-            p for p in masterdata["products"] if p["id"] in parent_product_ids
-        ]
-
-        suggested_product_ids = [p["id"] for p in suggested_products]
-        non_suggested = [
-            p
-            for p in masterdata["products"]
-            if p["id"] not in suggested_product_ids
-            and p["id"] not in parent_product_ids
-        ]
-        non_suggested.sort(key=lambda p: p["name"])
-
-        product_options = list(suggested_products) + non_suggested
-        prods = [
-            SelectOption(value=str(p["id"]), label=p["name"])
-            for p in product_options
-            if p["active"] == 1
-        ]
-
-        selected_product_id = ""
-        resolved_aliases = aliases or (lookup or {}).get("product_aliases", [])
-        if len(suggested_products) == 0 and len(resolved_aliases) > 0:
-            selected_product_id = resolved_aliases[0]
-        elif len(suggested_products) > 0:
-            prods.insert(
-                len(suggested_products),
-                SelectOption(
-                    value="-1",
-                    label=f"\t[{len(suggested_products)} SUGGESTIONS ABOVE]",
-                ),
-            )
-            if len(suggested_products) == 1:
-                selected_product_id = str(
-                    suggested_values.get(
-                        "product_id", suggested_products[0]["id"]
-                    )
-                )
-            else:
-                selected_product_id = "-1"
-
-        fields: list[FormField] = [
-            FormField(
-                key="product_id",
-                field_type=FieldType.SELECT,
-                required=True,
-                suggested_value=selected_product_id,
-                options=prods,
-                custom_value=True,
-                select_mode=SelectMode.DROPDOWN,
-            ),
-        ]
-
-        if allow_parent:
-            fields.append(
-                FormField(
-                    key="parent_product",
-                    field_type=FieldType.SELECT,
-                    required=False,
-                    suggested_value=suggested_values.get("parent_product"),
-                    options=[
-                        SelectOption(value=str(p["id"]), label=p["name"])
-                        for p in parent_products
-                        if p["active"] == 1
-                    ],
-                    custom_value=True,
-                    select_mode=SelectMode.DROPDOWN,
-                ),
-            )
-
-        return fields
-
-    def _build_create_product_fields(
-        self,
-        suggested: dict[str, Any],
-        creating_parent: bool = False,
-    ) -> list[FormField]:
-        """Build fields for the create-product form."""
-
-        loc_options = self._location_options()
-        qu_options = self._qu_options()
-
-        fields: list[FormField] = [
-            FormField(
-                key="name",
-                field_type=FieldType.TEXT,
-                required=True,
-                suggested_value=suggested.get("name"),
-            ),
-        ]
-
-        if not creating_parent:
-            fields.extend([
-                FormField(
-                    key="location_id",
-                    field_type=FieldType.SELECT,
-                    required=True,
-                    suggested_value=self._str_val(suggested.get("location_id")),
-                    options=loc_options,
-                    select_mode=SelectMode.DROPDOWN,
-                ),
-                FormField(
-                    key="should_not_be_frozen",
-                    field_type=FieldType.BOOLEAN,
-                    required=True,
-                    default=suggested.get("should_not_be_frozen", False),
-                ),
-                FormField(
-                    key="default_best_before_days",
-                    field_type=FieldType.NUMBER,
-                    required=False,
-                    suggested_value=suggested.get("default_best_before_days"),
-                    step=1,
-                ),
-                FormField(
-                    key="default_best_before_days_after_open",
-                    field_type=FieldType.NUMBER,
-                    required=False,
-                    suggested_value=suggested.get(
-                        "default_best_before_days_after_open"
-                    ),
-                    step=1,
-                ),
-            ])
-
-        fields.append(
-            FormField(
-                key="qu_id_stock",
-                field_type=FieldType.SELECT,
-                required=True,
-                suggested_value=self._str_val(
-                    suggested.get("qu_id_stock", suggested.get("qu_id"))
-                ),
-                options=qu_options,
-                select_mode=SelectMode.DROPDOWN,
-            ),
-        )
-
-        if not creating_parent:
-            fields.extend([
-                FormField(
-                    key="qu_id_purchase",
-                    field_type=FieldType.SELECT,
-                    required=True,
-                    suggested_value=self._str_val(
-                        suggested.get(
-                            "qu_id_purchase", suggested.get("qu_id")
-                        )
-                    ),
-                    options=qu_options,
-                    select_mode=SelectMode.DROPDOWN,
-                ),
-                FormField(
-                    key="qu_id_consume",
-                    field_type=FieldType.SELECT,
-                    required=True,
-                    suggested_value=self._str_val(
-                        suggested.get(
-                            "qu_id_consume", suggested.get("qu_id")
-                        )
-                    ),
-                    options=qu_options,
-                    select_mode=SelectMode.DROPDOWN,
-                ),
-            ])
-
-        fields.append(
-            FormField(
-                key="qu_id_price",
-                field_type=FieldType.SELECT,
-                required=True,
-                suggested_value=self._str_val(
-                    suggested.get("qu_id_price", suggested.get("qu_id"))
-                ),
-                options=qu_options,
-                select_mode=SelectMode.DROPDOWN,
-            ),
-        )
-
-        return fields
-
-    def _build_create_barcode_fields(
-        self, suggested: dict[str, Any]
-    ) -> list[FormField]:
-        """Build fields for the create-barcode form."""
-
-        masterdata = self._masterdata
-        shopping_locations = sorted(
-            masterdata["shopping_locations"], key=lambda loc: loc["name"]
-        )
-        shop_options = [
-            SelectOption(value=str(s["id"]), label=s["name"])
-            for s in shopping_locations
-        ]
-        qu_options = self._qu_options()
-
-        return [
-            FormField(
-                key="note",
-                field_type=FieldType.TEXT,
-                required=False,
-                suggested_value=suggested.get("note"),
-            ),
-            FormField(
-                key="shopping_location_id",
-                field_type=FieldType.SELECT,
-                required=False,
-                options=shop_options,
-                select_mode=SelectMode.DROPDOWN,
-            ),
-            FormField(
-                key="qu_id",
-                field_type=FieldType.SELECT,
-                required=False,
-                suggested_value=self._str_val(
-                    suggested.get("qu_id", suggested.get("qu_id_purchase"))
-                ),
-                options=qu_options,
-                select_mode=SelectMode.DROPDOWN,
-            ),
-            FormField(
-                key="amount",
-                field_type=FieldType.NUMBER,
-                required=False,
-                suggested_value=suggested.get("amount"),
-            ),
-        ]
-
-    def _build_update_product_details_fields(
-        self,
-        suggested: dict[str, Any],
-        product: GrocyProduct,
-    ) -> list[FormField]:
-        """Build fields for the update-product-details form."""
-
-        masterdata = self._masterdata
-        locations = [
-            loc
-            for loc in masterdata["locations"]
-            if product["should_not_be_frozen"] == 0 or loc["is_freezer"] == 0
-        ]
-        locations.sort(key=lambda loc: loc["name"])
-        loc_options = [
-            SelectOption(value=str(loc["id"]), label=loc["name"])
-            for loc in locations
-        ]
-
-        qu_options = self._qu_options(include_blank=True)
-
-        fields: list[FormField] = [
-            FormField(
-                key="default_consume_location_id",
-                field_type=FieldType.SELECT,
-                required=False,
-                suggested_value=self._str_val(
-                    suggested.get("default_consume_location_id")
-                ),
-                options=loc_options,
-                select_mode=SelectMode.DROPDOWN,
-            ),
-            FormField(
-                key="product_quantity",
-                field_type=FieldType.NUMBER,
-                required=False,
-                suggested_value=suggested.get("product_quantity"),
-                step=1,
-            ),
-            FormField(
-                key="qu_id_product",
-                field_type=FieldType.SELECT,
-                required=False,
-                suggested_value=self._str_val(
-                    suggested.get("qu_id_product")
-                ),
-                description="What quantity unit does the product package have?",
-                options=qu_options,
-                select_mode=SelectMode.DROPDOWN,
-            ),
-            FormField(
-                key="calories_per_100",
-                field_type=FieldType.NUMBER,
-                required=False,
-                suggested_value=suggested.get("calories_per_100"),
-                step=1,
-            ),
-        ]
-
-        if not product.get("should_not_be_frozen", 0):
-            fields.extend([
-                FormField(
-                    key="default_best_before_days_after_freezing",
-                    field_type=FieldType.NUMBER,
-                    required=False,
-                    suggested_value=suggested.get(
-                        "default_best_before_days_after_freezing"
-                    ),
-                    step=1,
-                ),
-                FormField(
-                    key="default_best_before_days_after_thawing",
-                    field_type=FieldType.NUMBER,
-                    required=False,
-                    suggested_value=suggested.get(
-                        "default_best_before_days_after_thawing"
-                    ),
-                    step=1,
-                ),
-            ])
-
-        return fields
-
-    def _build_choose_stock_entry_fields(self) -> list[FormField]:
-        """Build fields for choosing a stock entry to transfer."""
-
-        masterdata = self._masterdata
-        product = self.current_product_stock_info["product"]
-
-        qu = None
-        for qq in filter(
-            lambda p: p["id"] == product["qu_id_stock"],
-            masterdata["quantity_units"],
-        ):
-            qu = qq
-            break
-
-        options = [
-            SelectOption(
-                value=str(e["id"]),
-                label=(
-                    f"{product['name']} {e['amount']} "
-                    f"{qu['name_plural'] if e['amount'] > 1 else qu['name']}, "
-                    f"due: {e['best_before_date']}"
-                ),
-            )
-            for e in self.current_stock_entries
-        ]
-
-        selected = (
-            str(self.current_stock_entries[0]["id"])
-            if self.current_stock_entries
-            else None
-        )
-
-        return [
-            FormField(
-                key="stock_entry_id",
-                field_type=FieldType.SELECT,
-                required=True,
-                suggested_value=selected,
-                default=selected,
-                options=options,
-                select_mode=SelectMode.DROPDOWN,
-            ),
-        ]
-
-    def _build_transfer_input_fields(self) -> list[FormField]:
-        """Build fields for specifying transfer details."""
-
-        masterdata = self._masterdata
-        product = self.current_product_stock_info["product"]
-        stock_entry = self.current_stock_entries[0]
-
-        locations = [
-            loc
-            for loc in masterdata["locations"]
-            if loc["id"] != stock_entry["location_id"]
-            and (product["should_not_be_frozen"] == 0 or loc["is_freezer"] == 0)
-        ]
-        locations.sort(key=lambda loc: loc["name"])
-
-        default_location = (
-            str(locations[0]["id"]) if len(locations) > 0 else None
-        )
-
-        fields: list[FormField] = []
-
-        if stock_entry["amount"] > 1:
-            fields.append(
-                FormField(
-                    key="amount",
-                    field_type=FieldType.NUMBER,
-                    required=True,
-                    suggested_value=stock_entry["amount"],
-                    default=stock_entry["amount"],
-                    number_mode=NumberMode.SLIDER,
-                    step=product.get("quick_consume_amount", 1) or 1,
-                    min_value=product.get("quick_consume_amount", 1) or 1,
-                    max_value=stock_entry["amount"],
-                ),
-            )
-
-        fields.append(
-            FormField(
-                key="location_to_id",
-                field_type=FieldType.SELECT,
-                required=True,
-                suggested_value=default_location,
-                default=default_location,
-                options=[
-                    SelectOption(value=str(loc["id"]), label=loc["name"])
-                    for loc in locations
-                ],
-                select_mode=SelectMode.DROPDOWN,
-            ),
-        )
-
-        return fields
-
-    def _build_scan_process_fields(
-        self,
-        product: dict,
-        price: Any,
-        bestBeforeInDays: Any,
-        shopping_location_id: Any,
-    ) -> list[FormField]:
-        """Build extra input fields for purchase mode.
-
-        Returns an empty list when no extra input is required.
-        """
-
-        masterdata = self._masterdata
-        fields: list[FormField] = []
-
-        if (
-            price is None
-            and self.scan_options.get("input_price")
-            and not self.current_recipe
-        ):
-            fields.append(
-                FormField(
-                    key="price",
-                    field_type=FieldType.TEXT,
-                    required=False,
-                    suggested_value=price,
-                ),
-            )
-
-        if self.scan_options.get("input_bestBeforeInDays"):
-            fields.append(
-                FormField(
-                    key="bestBeforeInDays",
-                    field_type=FieldType.TEXT,
-                    required=False,
-                    suggested_value=(
-                        str(bestBeforeInDays) if bestBeforeInDays is not None else None
-                    ),
-                ),
-            )
-
-        if (
-            shopping_location_id is None
-            and self.scan_options.get("input_shoppingLocationId")
-            and not self.current_recipe
-        ):
-            shopping_locations = sorted(
-                masterdata.get("shopping_locations", []),
-                key=lambda loc: loc["name"],
-            )
-
-            # Check default store on product barcode
-            if self.current_product_stock_info and self.current_product_stock_info.get(
-                "product_barcodes"
-            ):
-                for barcode in self.current_product_stock_info["product_barcodes"]:
-                    if (
-                        barcode.get("barcode", "").casefold()
-                        == (self.current_barcode or "").casefold()
-                    ):
-                        shopping_location_id = barcode.get(
-                            "shopping_location_id"
-                        )
-                        if shopping_location_id:
-                            break
-
-            if self.current_product_stock_info and not shopping_location_id:
-                shopping_location_id = self.current_product_stock_info.get(
-                    "default_shopping_location_id",
-                    self.current_product_stock_info.get("product", {}).get(
-                        "default_shopping_location_id"
-                    ),
-                )
-
-            fields.append(
-                FormField(
-                    key="shopping_location_id",
-                    field_type=FieldType.SELECT,
-                    required=False,
-                    suggested_value=(
-                        str(shopping_location_id)
-                        if shopping_location_id
-                        else None
-                    ),
-                    options=[
-                        SelectOption(value=str(loc["id"]), label=loc["name"])
-                        for loc in shopping_locations
-                    ],
-                    select_mode=SelectMode.DROPDOWN,
-                ),
-            )
-
-        return fields
+    # All form building logic has been moved to ScanFormBuilder class
 
     # =================================================================
     # Private helpers
@@ -1448,51 +889,11 @@ class ScanSession:
             return [f"Matlåda: {self.current_recipe['name']}"]
         return []
 
-    def _location_options(self) -> list[SelectOption]:
-        return [
-            SelectOption(value=str(loc["id"]), label=loc["name"])
-            for loc in self._masterdata["locations"]
-        ]
-
-    def _qu_options(self, include_blank: bool = False) -> list[SelectOption]:
-        options = [
-            SelectOption(value=str(qu["id"]), label=qu["name"])
-            for qu in self._masterdata["quantity_units"]
-        ]
-        if include_blank:
-            options.insert(0, SelectOption(value="", label=""))
-        return options
-
-    @staticmethod
-    def _str_val(val: Any) -> str | None:
-        """Convert a value to ``str`` for select field suggested values."""
-        return str(val) if val is not None else None
-
-    @staticmethod
-    def _merge_product_values(
-        user_input: dict[str, Any],
-        product: dict[str, Any],
-        keys: list[str],
-    ) -> dict[str, Any]:
-        """Merge user input with product state for form suggested values.
-
-        User input takes precedence.  Non-numeric values are converted
-        to ``str`` (required for select-field suggested values).
-        """
-
-        suggested: dict[str, Any] = {}
-        for k in keys:
-            val = user_input.get(k, product.get(k))
-            if k not in _NUMERIC_FIELDS:
-                val = str(val) if val is not None else None
-            suggested[k] = val
-        return suggested
-
     def _show_add_product_form(
         self, product: dict[str, Any], errors: dict[str, str]
     ) -> FormRequest:
         """Build and return the add-product form."""
-        suggested = self._merge_product_values(
+        suggested = self._product_builder.merge_product_values(
             {},
             product,
             [
@@ -1507,7 +908,7 @@ class ScanSession:
                 "qu_id_price",
             ],
         )
-        fields = self._build_create_product_fields(suggested, creating_parent=False)
+        fields = self._form_builder.build_create_product_fields(suggested, creating_parent=False)
         aliases = self._get_aliases()
         return FormRequest(
             step_id=Step.SCAN_ADD_PRODUCT,
@@ -1521,81 +922,16 @@ class ScanSession:
             errors=errors,
         )
 
-    def _build_product_from_input(
-        self, user_input: dict[str, Any], base_product: dict[str, Any]
-    ) -> dict[str, Any]:
-        """Build a new product dict from user input."""
-        product = base_product.copy()
-        product["name"] = user_input["name"]
-        product["location_id"] = user_input["location_id"]
-        product["should_not_be_frozen"] = (
-            1 if user_input.get("should_not_be_frozen", False) else 0
-        )
-        
-        # Optional fields
-        if val := user_input.get("default_consume_location_id"):
-            product["default_consume_location_id"] = int(val)
-        if val := user_input.get("default_best_before_days"):
-            product["default_best_before_days"] = int(val)
-        if val := user_input.get("default_best_before_days_after_open"):
-            product["default_best_before_days_after_open"] = int(val)
-        if val := user_input.get("default_best_before_days_after_freezing"):
-            product["default_best_before_days_after_freezing"] = int(val)
-        if val := user_input.get("default_best_before_days_after_thawing"):
-            product["default_best_before_days_after_thawing"] = int(val)
-        
-        # Quantity units
-        product["qu_id_stock"] = user_input.get(
-            "qu_id_stock", user_input.get("qu_id")
-        )
-        product["qu_id_purchase"] = user_input.get(
-            "qu_id_purchase", user_input.get("qu_id")
-        )
-        product["qu_id_consume"] = user_input.get(
-            "qu_id_consume", user_input.get("qu_id")
-        )
-        product["qu_id_price"] = user_input.get(
-            "qu_id_price", user_input.get("qu_id")
-        )
-        
-        product["description"] = user_input.get("description", product.get("description"))
-        product["parent_product_id"] = user_input.get(
-            "parent_product_id", product.get("parent_product_id")
-        )
-        
-        return product
-
-    def _validate_product_location(
-        self, product: dict[str, Any]
-    ) -> dict[str, str]:
-        """Validate product location constraints. Returns errors dict."""
-        errors: dict[str, str] = {}
-        
-        loc = next(
-            (
-                loc
-                for loc in self._masterdata["locations"]
-                if str(loc["id"]) == str(product["location_id"])
-            ),
-            None,
-        )
-        
-        if not loc:
-            errors["location_id"] = "invalid_location"
-        elif product.get("should_not_be_frozen") == 1 and loc.get("is_freezer") == 1:
-            errors["location_id"] = "location_is_freezer"
-        
-        return errors
-
     def _show_match_product_form(self) -> FormRequest:
         """Build and return the match-product form."""
         _LOGGER.warning("Matching products: %s", self.matching_products)
         aliases = self._get_aliases()
         allow_parent = not self.current_recipe
-        fields = self._build_match_product_fields(
+        fields = self._form_builder.build_match_product_fields(
             suggested_products=self.matching_products,
             aliases=aliases,
             allow_parent=allow_parent,
+            current_lookup=self.current_lookup,
         )
         self._cached_form = FormRequest(
             step_id=Step.SCAN_MATCH_PRODUCT,
@@ -1841,68 +1177,12 @@ class ScanSession:
             return await self._step_scan_process(user_input=None)
         return None
 
-    def _build_parent_product_suggested_values(
-        self, new_product: dict, user_input: dict, creating_parent: bool
-    ) -> dict[str, Any]:
-        """Build suggested values for parent product form."""
-        masterdata = self._masterdata
-        
-        # Keys for parent product form
-        parent_keys = ["name", "qu_id_stock", "qu_id_price"]
-        if not creating_parent:
-            parent_keys.extend([
-                "location_id", "should_not_be_frozen",
-                "default_best_before_days", "default_best_before_days_after_open",
-                "qu_id_purchase", "qu_id_consume",
-            ])
-
-        # Merge values - copy from child product when creating parent
-        suggested: dict[str, Any] = {}
-        for k in parent_keys:
-            val = user_input.get(k, new_product.get(k))
-            if not val and creating_parent and self.current_product:
-                if k not in ("id", "name", "description"):
-                    _LOGGER.warning(
-                        "COPY prop to parent: %s=%s", k, self.current_product.get(k)
-                    )
-                    val = self.current_product.get(k)
-            if k not in _NUMERIC_FIELDS:
-                val = str(val) if val is not None else None
-            suggested[k] = val
-
-        # Adjust QU for parent - prefer price QU over piece/pack
-        piece_qu = masterdata["known_qu"].get("Piece")
-        pack_qu = masterdata["known_qu"].get("Pack")
-        piece_id = (
-            piece_qu.get("id")
-            if isinstance(piece_qu, dict)
-            else getattr(piece_qu, "id", None)
-        )
-        pack_id = (
-            pack_qu.get("id")
-            if isinstance(pack_qu, dict)
-            else getattr(pack_qu, "id", None)
-        )
-        if (
-            int(suggested.get("qu_id_stock") or -99) in [piece_id, pack_id]
-        ) and (
-            int(suggested.get("qu_id_price") or -99) not in [piece_id, pack_id]
-        ):
-            _LOGGER.warning(
-                "Copying qu_id_price into qu_id_stock: %s. Known: %s",
-                suggested,
-                masterdata["known_qu"],
-            )
-            suggested["qu_id_stock"] = suggested["qu_id_price"]
-
-        return suggested
-
     def _show_add_product_parent_form(
         self, new_product: dict, suggested: dict, creating_parent: bool, errors: dict
     ) -> FormRequest:
         """Show form for creating parent product."""
         code = self.current_barcode
-        fields = self._build_create_product_fields(
+        fields = self._form_builder.build_create_product_fields(
             suggested, creating_parent=creating_parent
         )
         aliases = self._get_aliases()
@@ -1928,67 +1208,6 @@ class ScanSession:
             int(user_input["product_id"])
         )
 
-    def _build_parent_product_from_input(
-        self, user_input: dict, new_product: dict, creating_parent: bool
-    ) -> dict:
-        """Build parent product data from user input."""
-        new_product["name"] = user_input["name"]
-        new_product["location_id"] = user_input.get(
-            "location_id",
-            self.current_product["location_id"] if self.current_product else None,
-        )
-        new_product["should_not_be_frozen"] = (
-            1
-            if user_input.get(
-                "should_not_be_frozen",
-                (self.current_product or {}).get("should_not_be_frozen", False),
-            )
-            else 0
-        )
-
-        if val := user_input.get("default_best_before_days"):
-            new_product["default_best_before_days"] = int(val)
-        if val := user_input.get("default_best_before_days_after_open"):
-            new_product["default_best_before_days_after_open"] = int(val)
-
-        new_product["qu_id_stock"] = user_input.get(
-            "qu_id_stock", user_input.get("qu_id")
-        )
-        new_product["qu_id_purchase"] = user_input.get(
-            "qu_id_purchase", new_product.get("qu_id_stock")
-        )
-        new_product["qu_id_consume"] = user_input.get(
-            "qu_id_consume", new_product.get("qu_id_stock")
-        )
-        new_product["qu_id_price"] = user_input.get(
-            "qu_id_price", user_input.get("qu_id")
-        )
-        new_product["row_created_timestamp"] = dt.datetime.now().strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
-
-        if creating_parent:
-            new_product["description"] = user_input.get(
-                "description", new_product.get("description")
-            )
-            new_product["no_own_stock"] = 1
-            new_product["hide_on_stock_overview"] = 1
-            new_product["disable_open"] = 1
-            new_product["cumulate_min_stock_amount_of_sub_products"] = 1
-            new_product["parent_product_id"] = None
-        else:
-            new_product["description"] = user_input.get(
-                "description", new_product.get("description")
-            )
-            new_product["parent_product_id"] = user_input.get(
-                "parent_product_id", new_product.get("parent_product_id")
-            )
-
-        _LOGGER.info("user_input: %s", user_input)
-        _LOGGER.info("new_product: %s", new_product)
-        
-        return new_product
-
     async def _link_child_to_parent(self) -> None:
         """Link child product to parent if needed."""
         if self.current_product and not self.current_product.get("parent_product_id"):
@@ -2006,67 +1225,6 @@ class ScanSession:
             self.current_product.update(product_updates)
 
     # ── Helpers for _step_update_product_details ──────────────────────
-
-    def _initialize_product_details_input(self, user_input: dict) -> dict:
-        """Initialize input with defaults from current product."""
-        for key in (
-            "should_not_be_frozen",
-            "default_consume_location_id",
-            "default_best_before_days_after_freezing",
-            "default_best_before_days_after_thawing",
-        ):
-            val = user_input.get(key, (self.current_product or {}).get(key))
-            if key not in _NUMERIC_FIELDS:
-                val = str(val) if val is not None else None
-            user_input[key] = val
-        return user_input
-
-    def _parse_openfoodfacts_data(
-        self, user_input: dict
-    ) -> tuple[float | None, int | None, bool, bool, float | None]:
-        """Parse OpenFoodFacts data for quantity, unit, and calories."""
-        masterdata = self._masterdata
-        product_quantity = None
-        product_quantity_unit: int | None = None
-        product_quantity_unit_as_liquid = False
-        product_quantity_unit_as_weight = False
-
-        if self.current_product_openfoodfacts is not None:
-            product_quantity = user_input.get(
-                "product_quantity",
-                self.current_product_openfoodfacts.get("product_quantity"),
-            )
-            unit = self.current_product_openfoodfacts.get("product_quantity_unit")
-            if unit:
-                for qq in filter(
-                    lambda qu: qu.get("name") == unit,
-                    masterdata["quantity_units"],
-                ):
-                    product_quantity_unit = qq["id"]
-                    _LOGGER.warning("Unit: %s, QQ: %s", unit, qq)
-                    product_quantity_unit_as_liquid = qq["name"] in [
-                        "ml", "cl", "dl", "l", "L",
-                    ]
-                    product_quantity_unit_as_weight = qq["name"] in [
-                        "g", "hg", "kg",
-                    ]
-
-        # TODO: fill in info from ICA
-
-        kcal = user_input.get("calories_per_100") or (
-            self.current_product_openfoodfacts or {}
-        ).get("nutriments", {}).get("energy_kcal_100g")
-        user_input["calories_per_100"] = kcal
-        if kcal:
-            kcal = float(kcal)
-
-        return (
-            product_quantity,
-            product_quantity_unit,
-            product_quantity_unit_as_liquid,
-            product_quantity_unit_as_weight,
-            kcal,
-        )
 
     async def _determine_quantity_unit(
         self,
@@ -2144,7 +1302,7 @@ class ScanSession:
         self, user_input: dict, product: dict, errors: dict
     ) -> FormRequest:
         """Show form for updating product details."""
-        fields = self._build_update_product_details_fields(
+        fields = self._form_builder.build_update_product_details_fields(
             user_input, product
         )
         aliases = self._get_aliases()
@@ -2285,8 +1443,15 @@ class ScanSession:
         errors: dict,
     ) -> FormRequest | None:
         """Show form for purchase mode if needed."""
-        fields = self._build_scan_process_fields(
-            product, price, bestBeforeInDays, shopping_location_id
+        fields = self._form_builder.build_scan_process_fields(
+            product,
+            price,
+            bestBeforeInDays,
+            shopping_location_id,
+            self.scan_options,
+            self.current_recipe,
+            self.current_product_stock_info,
+            self.current_barcode,
         )
         if fields:
             self._cached_process_fields = fields
@@ -2296,27 +1461,6 @@ class ScanSession:
                 errors=errors,
             )
         return None
-
-    def _build_scan_request(
-        self,
-        code: str,
-        in_purchase_mode: bool,
-        price: str | None,
-        bestBeforeInDays: int | None,
-        shopping_location_id: str | None,
-    ) -> dict[str, Any]:
-        """Build request dict for scan action."""
-        request: dict[str, Any] = {"barcode": str(code)}
-
-        if in_purchase_mode:
-            if price is not None and len(str(price)) > 0:
-                request["price"] = float(price)
-            if bestBeforeInDays is not None and len(str(bestBeforeInDays)) > 0:
-                request["bestBeforeInDays"] = int(bestBeforeInDays)
-            if shopping_location_id is not None and int(shopping_location_id) > 0:
-                request["shopping_location_id"] = int(shopping_location_id)
-
-        return request
 
     async def _set_bbuddy_mode(self) -> None:
         """Set BarcodeBuddy mode."""
