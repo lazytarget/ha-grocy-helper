@@ -10,12 +10,10 @@ pytest suite.
 
 Usage example::
 
+    coordinator = GrocyHelperCoordinator(...)
     session = ScanSession(
-        api_grocy=grocy_api,
+        coordinator=coordinator,
         api_bbuddy=bbuddy_api,
-        masterdata=masterdata,
-        lookup_barcode=my_lookup_fn,
-        convert_quantity=my_convert_fn,
     )
 
     # 1. get the initial "scan start" form
@@ -35,13 +33,11 @@ from __future__ import annotations
 import datetime as dt
 import json
 import logging
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 from .barcodebuddyapi import BarcodeBuddyAPI
 from .const import SCAN_MODE
-from .grocyapi import GrocyAPI
 from .grocytypes import (
-    BarcodeLookup,
     ExtendedGrocyProductStockInfo,
     GrocyAddProductQuantityUnitConversion,
     GrocyMasterData,
@@ -50,10 +46,10 @@ from .grocytypes import (
     GrocyQuantityUnitConversionResult,
     GrocyRecipe,
     GrocyStockEntry,
-    OpenFoodFactsProduct,
 )
 from .scan_form_builders import ScanFormBuilder
 from .scan_product_builders import ProductDataBuilder
+from .scan_state_manager import ScanStateManager
 from .scan_types import (
     AbortResult,
     CompletedResult,
@@ -90,20 +86,11 @@ class ScanSession:
 
     Parameters
     ----------
-    api_grocy:
-        A ``GrocyAPI`` instance (or compatible) for Grocy REST calls.
+    coordinator:
+        A ``GrocyHelperCoordinator`` instance that handles persistence
+        and masterdata cache updates.
     api_bbuddy:
         A ``BarcodeBuddyAPI`` instance (or compatible).
-    masterdata:
-        A ``GrocyMasterData`` dict with locations, products, etc.
-        The session may **mutate** this dict (local cache updates).
-    lookup_barcode:
-        Async callable ``(code: str) -> BarcodeLookup``.
-        Performs barcode lookups against external providers
-        (OpenFoodFacts, ICA, …).
-    convert_quantity:
-        Async callable with signature
-        ``(product_id, from_qu_id, to_qu_id, amount) -> result | None``.
     scan_options:
         Dict controlling which extra input fields appear during a
         "Purchase" scan.  Defaults to all enabled.
@@ -111,41 +98,25 @@ class ScanSession:
 
     def __init__(
         self,
-        api_grocy: GrocyAPI,
+        coordinator: Any,  # GrocyHelperCoordinator
         api_bbuddy: BarcodeBuddyAPI,
-        masterdata: GrocyMasterData,
-        lookup_barcode: Callable[[str], Awaitable[BarcodeLookup]],
-        convert_quantity: Callable[..., Awaitable[GrocyQuantityUnitConversionResult | None]],
         scan_options: dict[str, bool] | None = None,
-        # CRUD operations (injected from coordinator)
-        create_product: Callable[[dict], Awaitable[GrocyProduct]] | None = None,
-        update_product: Callable[[int, dict], Awaitable[dict]] | None = None,
-        create_barcode: Callable[[dict], Awaitable[dict]] | None = None,
-        create_qu_conversion: Callable[[dict], Awaitable[dict]] | None = None,
-        transfer_stock: Callable[[int, dict], Awaitable[dict]] | None = None,
-        add_stock: Callable[[int, dict], Awaitable[dict]] | None = None,
-        update_recipe: Callable[[int, dict], Awaitable[dict]] | None = None,
     ) -> None:
-        self._api_grocy = api_grocy
+        self._coordinator = coordinator
+        self._api_grocy = coordinator._api_grocy
         self._api_bbuddy = api_bbuddy
-        self._masterdata = masterdata
-        self._lookup_barcode = lookup_barcode
-        self._convert_quantity = convert_quantity
+        self._masterdata = coordinator.data
+        self._lookup_barcode = coordinator.lookup_barcode
+        self._convert_quantity = coordinator.convert_quantity_for_product
         
         # Form builder for UI fields
-        self._form_builder = ScanFormBuilder(masterdata)
+        self._form_builder = ScanFormBuilder(self._masterdata)
         
         # Product data builder for transformations
-        self._product_builder = ProductDataBuilder(masterdata)
+        self._product_builder = ProductDataBuilder(self._masterdata)
         
-        # CRUD operations - fallback to direct API calls if not provided
-        self._create_product = create_product or self._default_create_product
-        self._update_product = update_product or self._default_update_product
-        self._create_barcode = create_barcode or self._default_create_barcode
-        self._create_qu_conversion = create_qu_conversion or self._default_create_qu_conversion
-        self._transfer_stock = transfer_stock or self._default_transfer_stock
-        self._add_stock = add_stock or self._default_add_stock
-        self._update_recipe = update_recipe or self._default_update_recipe
+        # State manager for product/stock tracking
+        self._state = ScanStateManager(self._api_grocy)
 
         self.scan_options: dict[str, bool] = scan_options or {
             "input_price": True,
@@ -159,85 +130,59 @@ class ScanSession:
         self.barcode_scan_mode: str | None = None
         self.barcode_queue: list[str] = []
         self.barcode_results: list[str] = []
-
         self.current_barcode: str | None = None
-        self.current_product_stock_info: ExtendedGrocyProductStockInfo | None = None
-        self.current_product_openfoodfacts: OpenFoodFactsProduct | None = None
-        self.current_product_ica: dict | None = None
-        self.current_lookup: BarcodeLookup | None = None
-
-        self.matching_products: list[GrocyProduct] = []
-        self.current_stock_entries: list[GrocyStockEntry] = []
-
-        self.current_product: GrocyProduct | None = None
-        self.current_parent: GrocyProduct | None = None
-        self.current_recipe: GrocyRecipe | None = None
+        
+        # Additional workflow state (not managed by state manager)
+        # TODO: These should be removed (or fully moved to state manager)
         self.current_recipe_id: int | None = None
+        self.current_product_openfoodfacts: dict | None = None
+        self.current_product_ica: dict | None = None
 
         # Cached form for error re-display
         self._cached_form: FormRequest | None = None
         # Cached process-step schema fields (for error re-display)
         self._cached_process_fields: list[FormField] | None = None
 
-    # ── default CRUD operations (fallback to direct API calls) ──────
-
-    async def _default_create_product(self, product_data: dict) -> GrocyProduct:
-        """Default: create product via direct API call."""
-        product_data["row_created_timestamp"] = dt.datetime.now().strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
-        return await self._api_grocy.add_product(product_data)
-
-    async def _default_update_product(self, product_id: int, changes: dict) -> dict:
-        """Default: update product via direct API call."""
-        result = await self._api_grocy.update_product(product_id, changes)
-        # Update local cache
-        if self.current_product and self.current_product.get("id") == product_id:
-            self.current_product.update(changes)
-        return result
-
-    async def _default_create_barcode(self, barcode_data: dict) -> dict:
-        """Default: create barcode via direct API call."""
-        barcode_data["row_created_timestamp"] = dt.datetime.now().strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
-        return await self._api_grocy.add_product_barcode(barcode_data)
-
-    async def _default_create_qu_conversion(self, conversion_data: dict) -> dict:
-        """Default: create QU conversion via direct API call."""
-        conversion_data["row_created_timestamp"] = dt.datetime.now().strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
-        return await self._api_grocy.add_product_quantity_unit_conversion(
-            conversion_data
-        )
-
-    async def _default_transfer_stock(
-        self, product_id: int, transfer_data: dict
-    ) -> dict:
-        """Default: transfer stock via direct API call."""
-        return await self._api_grocy.transfer_stock_entry(product_id, transfer_data)
-
-    async def _default_add_stock(self, product_id: int, stock_data: dict) -> dict:
-        """Default: add stock via direct API call."""
-        return await self._api_grocy.add_stock_product(product_id, stock_data)
-
-    async def _default_update_recipe(self, recipe_id: int, changes: dict) -> dict:
-        """Default: update recipe via direct API call."""
-        result = await self._api_grocy.update_recipe(recipe_id, changes)
-        # Update local cache
-        if self._masterdata and "recipes" in self._masterdata:
-            for recipe in self._masterdata["recipes"]:
-                if recipe["id"] == recipe_id:
-                    recipe.update(changes)
-                    break
-        return result
-
     # ── public helpers ───────────────────────────────────────────────
 
     @property
     def masterdata(self) -> GrocyMasterData:
         return self._masterdata
+
+    @property
+    def current_product(self) -> GrocyProduct | None:
+        """Current product being worked on (derived from stock info)."""
+        return self._state.current_product
+
+    @property
+    def current_product_stock_info(self) -> ExtendedGrocyProductStockInfo | None:
+        """Extended product information including stock details."""
+        return self._state.current_stock_info
+
+    @property
+    def current_lookup(self) -> GrocyProduct | None:
+        """Product found during lookup phase."""
+        return self._state.current_lookup
+
+    @property
+    def matching_products(self) -> list[GrocyProduct]:
+        """List of products matching a search."""
+        return self._state.matching_products
+
+    @property
+    def current_parent(self) -> GrocyProduct | None:
+        """Parent product in parent-child relationship."""
+        return self._state.current_parent
+
+    @property
+    def current_recipe(self) -> GrocyRecipe | None:
+        """Recipe associated with current product."""
+        return self._state.current_recipe
+
+    @property
+    def current_stock_entries(self) -> list[GrocyStockEntry]:
+        """Stock entries for current product."""
+        return self._state.current_stock_entries
 
     # =================================================================
     # Public API
@@ -385,38 +330,34 @@ class ScanSession:
         """Handle a ``grcy:r:<id>`` barcode.  Returns *None* to continue."""
 
         (r, i) = try_parse_int(code.replace("grcy:r:", ""))
-        if r and i > 0:
-            self.current_recipe_id = i
-            self.current_recipe = next(
-                (
-                    recipe
-                    for recipe in masterdata["recipes"]
-                    if recipe["id"] == self.current_recipe_id
-                ),
-                None,
-            )
-            if not self.current_recipe:
-                return AbortResult(
-                    reason=f"Recipe with id '{i}' was not found"
-                )
-
-            _LOGGER.debug("Found recipe: %s", self.current_recipe)
-            if product_id := self.current_recipe["product_id"]:
-                self.current_product_stock_info = (
-                    await self._api_grocy.get_stock_product_by_id(product_id)
-                )
-                self.current_product = (
-                    self.current_product_stock_info or {}
-                ).get("product")
-                _LOGGER.info(
-                    "Recipe '%s' produces product: %s",
-                    self.current_recipe["id"],
-                    self.current_product,
-                )
-        else:
+        if not r or i <= 0:
             return AbortResult(
                 reason=f"Could not parse recipe barcode: {code}"
             )
+
+        self.current_recipe_id = i
+        self._state.current_recipe = next(
+            (
+                recipe
+                for recipe in masterdata["recipes"]
+                if recipe["id"] == self.current_recipe_id
+            ),
+            None,
+        )
+        if not self.current_recipe:
+            return AbortResult(
+                reason=f"Recipe with id '{i}' was not found"
+            )
+
+        _LOGGER.debug("Found recipe: %s", self.current_recipe)
+        if product_id := self.current_recipe["product_id"]:
+            await self._state.load_product_by_id(product_id)
+            _LOGGER.info(
+                "Recipe '%s' produces product: %s",
+                self.current_recipe["id"],
+                self.current_product,
+            )
+
         return None  # continue queue processing
 
     # ── match_to_product ─────────────────────────────────────────────
@@ -473,30 +414,23 @@ class ScanSession:
         # User selected existing product instead of creating new
         if user_input.get("product_id") and user_input["product_id"] != "-1":
             product_id = int(user_input["product_id"])
-            self.current_product_stock_info = (
-                await self._api_grocy.get_stock_product_by_id(product_id)
-            )
+            await self._state.load_product_by_id(product_id)
             return await self._step_add_product_barcode(None)
 
         # Build new product from input
         new_product = self._product_builder.build_product_from_input(user_input, new_product)
 
         # Validate location
-        errors = self._product_builder.validate_product_location(new_product)
-        if errors:
+        if errors := self._product_builder.validate_product_location(new_product):
             return self._show_add_product_form(new_product, errors)
 
         # Create product
         _LOGGER.info("Creating product: %s", new_product)
-        product = await self._create_product(new_product)
+        product = await self._coordinator.create_product(new_product)
         _LOGGER.info("Created product: %s", product)
         
-        # Load full product info
-        self.current_product_stock_info = (
-            await self._api_grocy.get_stock_product_by_id(product["id"])
-        )
-        self.current_product = (
-            self.current_product_stock_info or {}).get("product") or product
+        # Load full product info via state manager
+        await self._state.load_product_by_id(product["id"])
 
         return await self._step_add_product_barcode(None)
 
@@ -540,8 +474,7 @@ class ScanSession:
         )
 
         # Validate location
-        errors = self._product_builder.validate_product_location(new_product)
-        if errors:
+        if errors := self._product_builder.validate_product_location(new_product):
             suggested = self._product_builder.build_parent_product_suggested_values(
                 new_product, user_input, creating_parent, self.current_product
             )
@@ -553,7 +486,7 @@ class ScanSession:
         _LOGGER.info("Creating parent product: %s", new_product)
         product = await self._api_grocy.add_product(new_product)
         _LOGGER.info("Created parent product: %s", product)
-        self.current_parent = product
+        self._state.current_parent = product
 
         # Link child product to parent if needed
         await self._link_child_to_parent()
@@ -577,8 +510,9 @@ class ScanSession:
         )
 
         if user_input is None:
-            suggested: dict[str, Any] = {}
-            suggested["note"] = new_product["name"] if new_product else ""
+            suggested: dict[str, Any] = {
+                "note": new_product["name"] if new_product else "",
+            }
             fields = self._form_builder.build_create_barcode_fields(suggested)
             aliases = self._get_aliases()
             plc = {
@@ -716,9 +650,9 @@ class ScanSession:
             _LOGGER.info(
                 "Will update product: #%s %s", product["id"], product_updates
             )
-            await self._update_product(product["id"], product_updates)
+            await self._coordinator.update_product(product["id"], product_updates)
             if self.current_product:
-                self.current_product.update(product_updates)
+                self._state.update_current_product(product_updates)
 
         return await self._step_add_product_parent(user_input=None)
 
@@ -763,7 +697,7 @@ class ScanSession:
             lambda p: p["id"] == stock_entry_id,
             self.current_stock_entries,
         ):
-            self.current_stock_entries = [stock_entry]
+            self._state.current_stock_entries = [stock_entry]
             _LOGGER.warning("CURRENT se: %s", self.current_stock_entries)
 
         return await self._step_transfer_input(user_input=None)
@@ -850,10 +784,9 @@ class ScanSession:
 
         # Show form if needed
         if user_input is None and in_purchase_mode:
-            form = self._show_scan_process_form(
+            if form := self._show_scan_process_form(
                 product, price, bestBeforeInDays, shopping_location_id, errors
-            )
-            if form:
+            ):
                 return form
 
         # Build request
@@ -867,7 +800,7 @@ class ScanSession:
         # Execute the action
         try:
             response = await self._execute_scan_action(request, in_purchase_mode)
-            return self._handle_scan_success(response)
+            return await self._handle_scan_success(response)
         except BaseException as be:
             return self._handle_scan_error(be, errors)
 
@@ -957,7 +890,7 @@ class ScanSession:
         self, user_input: dict[str, Any]
     ) -> StepResult | None:
         """Process the parent_product field. Returns error result or None."""
-        self.current_parent = None
+        self._state.current_parent = None
         
         if not (p := user_input.get("parent_product")):
             return None  # No parent specified
@@ -976,11 +909,11 @@ class ScanSession:
             # TODO: Remove this WIP testing code
             if i == 1337:
                 user_input["product_id"] = None
-            self.current_parent = await self._api_grocy.get_product_by_id(i)
+            self._state.current_parent = await self._api_grocy.get_product_by_id(i)
         
         # If not found or was a string, treat as new parent product name
         if self.current_parent is None:
-            self.current_parent = {"name": p if p != "-1" else None}
+            self._state.current_parent = {"name": p if p != "-1" else None}
         
         return None
 
@@ -988,7 +921,7 @@ class ScanSession:
         self, user_input: dict[str, Any]
     ) -> StepResult | None:
         """Process the product_id field. Returns error result or None."""
-        self.current_product = None
+        self._state.current_product = None
         
         p = user_input.get("product_id")
         if not p:
@@ -1001,13 +934,8 @@ class ScanSession:
         # Try to parse as ID
         (r, i) = try_parse_int(p)
         if r and i > 0:
-            # Load existing product
-            self.current_product_stock_info = (
-                await self._api_grocy.get_stock_product_by_id(i)
-            )
-            self.current_product = (self.current_product_stock_info or {}).get(
-                "product"
-            )
+            # Load existing product via state manager
+            await self._state.load_product_by_id(i)
             
             # Link recipe to product if needed
             if self.current_product and self.current_recipe:
@@ -1015,7 +943,7 @@ class ScanSession:
         
         # If not found or was a string, create new product template
         if self.current_product is None:
-            self.current_product = {
+            self._state.current_product = {
                 "name": p if p != "-1" else None,
                 "parent_product_id": (
                     self.current_parent.get("id") if self.current_parent else None
@@ -1031,7 +959,7 @@ class ScanSession:
     async def _link_recipe_to_product(self) -> None:
         """Link the current recipe to the current product."""
         recipe_changes = {"product_id": self.current_product["id"]}
-        await self._update_recipe(self.current_recipe["id"], recipe_changes)
+        await self._coordinator.update_recipe(self.current_recipe["id"], recipe_changes)
         _LOGGER.info(
             "Linked recipe #%s to product #%s",
             self.current_recipe["id"],
@@ -1066,15 +994,10 @@ class ScanSession:
 
     def _clear_barcode_state(self) -> None:
         """Clear state when processing a new barcode."""
-        self.current_product_stock_info = None
+        self._state.clear_barcode_state()
         self.current_product_openfoodfacts = None
         self.current_product_ica = None
-        self.current_product = None
-        self.current_parent = None
-        self.current_recipe = None
         self.current_recipe_id = None
-        self.current_lookup = None
-        self.matching_products = []
 
     async def _update_bbuddy_mode_if_needed(self) -> None:
         """Update BarcodeBuddy mode based on scan mode."""
@@ -1097,12 +1020,7 @@ class ScanSession:
         """Ensure current product info is loaded from barcode."""
         if not self.current_product and not self.current_recipe:
             try:
-                self.current_product_stock_info = (
-                    await self._api_grocy.get_stock_product_by_barcode(code)
-                )
-                self.current_product = (
-                    self.current_product_stock_info or {}
-                ).get("product")
+                await self._state.load_product_by_barcode(code)
                 _LOGGER.info("Product lookup: %s", self.current_product_stock_info)
             except Exception as ex:
                 _LOGGER.error("Get product exception: %s", ex)
@@ -1118,7 +1036,7 @@ class ScanSession:
             stock_entries = await self._api_grocy.get_stock_entries_by_product_id(
                 self.current_product["id"]
             )
-            self.current_stock_entries = stock_entries
+            self._state.current_stock_entries = stock_entries
             return True
         return False
 
@@ -1132,7 +1050,7 @@ class ScanSession:
         if not self.current_recipe and (
             not self.current_lookup or self.current_lookup["barcode"] != code
         ):
-            self.current_lookup = await self._lookup_barcode(code)
+            self._state.current_lookup = await self._lookup_barcode(code)
             self.current_product_openfoodfacts = self.current_lookup.get("off")
             self.current_product_ica = self.current_lookup.get("ica")
 
@@ -1204,7 +1122,7 @@ class ScanSession:
 
     async def _process_parent_product_selection(self, user_input: dict) -> None:
         """Process user selection of existing parent product."""
-        self.current_parent = await self._api_grocy.get_product_by_id(
+        self._state.current_parent = await self._api_grocy.get_product_by_id(
             int(user_input["product_id"])
         )
 
@@ -1219,10 +1137,10 @@ class ScanSession:
                 self.current_product["id"],
                 product_updates,
             )
-            await self._update_product(
+            await self._coordinator.update_product(
                 self.current_product["id"], product_updates
             )
-            self.current_product.update(product_updates)
+            self._state.update_current_product(product_updates)
 
     # ── Helpers for _step_update_product_details ──────────────────────
 
@@ -1235,7 +1153,6 @@ class ScanSession:
         product_quantity_unit_as_weight: bool,
     ) -> tuple[int | None, bool, bool, bool]:
         """Determine quantity unit and whether conversions are needed."""
-        masterdata = self._masterdata
         qu_id_product = user_input.get("qu_id_product", product_quantity_unit)
         skip_add_qu_conversions = False
         
@@ -1247,6 +1164,7 @@ class ScanSession:
             skip_add_qu_conversions = True
 
         if qu_id_product:
+            masterdata = self._masterdata
             for qq in filter(
                 lambda qu: qu.get("id") == qu_id_product,
                 masterdata["quantity_units"],
@@ -1287,8 +1205,7 @@ class ScanSession:
         kcal: float | None,
     ) -> dict:
         """Prepare defaults for form rendering."""
-        qu_id_product_val = user_input.get("qu_id_product", qu_id_product)
-        if qu_id_product_val:
+        if qu_id_product_val := user_input.get("qu_id_product", qu_id_product):
             user_input["qu_id_product"] = str(qu_id_product_val)
         user_input["product_quantity"] = user_input.get(
             "product_quantity", product_quantity
@@ -1335,14 +1252,14 @@ class ScanSession:
         masterdata = self._masterdata
         conv: GrocyAddProductQuantityUnitConversion = {
             "from_qu_id": product["qu_id_stock"],
-            "to_qu_id": int(qu_id_product),
+            "to_qu_id": qu_id_product,
             "product_id": product["id"],
             "row_created_timestamp": dt.datetime.now().strftime(
                 "%Y-%m-%d %H:%M:%S"
             ),
             "factor": float(product_quantity),
         }
-        await self._create_qu_conversion(conv)
+        await self._coordinator.create_quantity_unit_conversion(conv)
 
         if product_quantity_unit_as_liquid:
             product_updates["qu_id_price"] = (
@@ -1372,7 +1289,7 @@ class ScanSession:
         if not gram_unit:
             return None
 
-        kcal_per_gram = float(kcal) / 100
+        kcal_per_gram = kcal / 100
         c: GrocyQuantityUnitConversionResult = (
             await self._convert_quantity(
                 product["id"],
@@ -1390,22 +1307,13 @@ class ScanSession:
             c["to_qu_name"],
         )
         grams_per_pack = c["to_amount"]
-        kcal_per_pack = kcal_per_gram * grams_per_pack
-        return kcal_per_pack
+        return kcal_per_gram * grams_per_pack
     # ── Helpers for _step_scan_process ────────────────────────────────
 
     async def _ensure_product_stock_loaded(self) -> None:
         """Ensure product stock info is loaded."""
-        if self.current_product and not self.current_product_stock_info:
-            _LOGGER.warning("Product stock was not loaded, loading it now!")
-            self.current_product_stock_info = (
-                await self._api_grocy.get_stock_product_by_id(
-                    self.current_product["id"]
-                )
-            )
-            self.current_product = (
-                self.current_product_stock_info or {}
-            ).get("product")
+        if self.current_product:
+            await self._state.ensure_stock_info_loaded()
 
     def _extract_scan_process_input(
         self, user_input: dict | None, product: dict
@@ -1443,7 +1351,7 @@ class ScanSession:
         errors: dict,
     ) -> FormRequest | None:
         """Show form for purchase mode if needed."""
-        fields = self._form_builder.build_scan_process_fields(
+        if fields := self._form_builder.build_scan_process_fields(
             product,
             price,
             bestBeforeInDays,
@@ -1452,8 +1360,7 @@ class ScanSession:
             self.current_recipe,
             self.current_product_stock_info,
             self.current_barcode,
-        )
-        if fields:
+        ):
             self._cached_process_fields = fields
             return FormRequest(
                 step_id=Step.SCAN_PROCESS,
@@ -1492,7 +1399,7 @@ class ScanSession:
             request["amount"] = 1  # TODO: configurable amount
             product_id = self.current_product_stock_info["product"]["id"]
             request.pop("barcode", None)
-            response = await self._add_stock(product_id, request)
+            response = await self._coordinator.add_stock(product_id, request)
         else:
             response = await self._api_bbuddy.post_scan(request)
         
