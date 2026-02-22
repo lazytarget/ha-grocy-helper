@@ -1,9 +1,11 @@
 """DataUpdateCoordinator for the Grocy-helper component."""
 
+from __future__ import annotations
+
+import datetime as dt
 import logging
 import traceback
-import datetime as dt
-from typing import Optional
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -55,8 +57,7 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
     async def _async_update_data(self) -> GrocyMasterData:
         """Fetch data from Grocy."""
         _LOGGER.info("Update data")
-        data = await self.fetch_data()
-        return data
+        return await self.fetch_data()
 
     async def fetch_data(self) -> GrocyMasterData:
         """Fetch masterdata from Grocy."""
@@ -83,9 +84,12 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
                 "products": products,
                 "recipes": recipes,
                 "known_qu": {
-                    "Piece": next((qu for qu in quantity_units if qu["name"] == "Piece"), None),
-                    "Pack": next((qu for qu in quantity_units if qu["name"] == "Pack"), None),
-
+                    "Piece": next(
+                        (qu for qu in quantity_units if qu["name"] == "Piece"), None
+                    ),
+                    "Pack": next(
+                        (qu for qu in quantity_units if qu["name"] == "Pack"), None
+                    ),
                     "g": next((qu for qu in quantity_units if qu["name"] == "g"), None),
                     "kg": next(
                         (qu for qu in quantity_units if qu["name"] == "kg"), None
@@ -214,13 +218,14 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
     async def create_product(self, user_input) -> GrocyProduct:
         # argument 'user_input' should instead be 'new_product'?
         # ..let validation and fallback values be a part of Config flow not coordinator?
-        new_product: GrocyProduct = {}
-        new_product["name"] = user_input["name"]
-        new_product["description"] = user_input.get("description")
-        new_product["location_id"] = user_input["location_id"]
-        new_product["should_not_be_frozen"] = (
-            1 if user_input.get("should_not_be_frozen", False) else 0
-        )
+        new_product: GrocyProduct = {
+            "name": user_input["name"],
+            "description": user_input.get("description"),
+            "location_id": user_input["location_id"],
+            "should_not_be_frozen": (
+                1 if user_input.get("should_not_be_frozen", False) else 0
+            ),
+        }
         # TODO: Remove obsolete validation, that is done in config_flow right now
         # loc = next(
         #     (
@@ -272,7 +277,89 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
         product = await self._api_grocy.add_product(new_product)
         # TODO: check for success!
         _LOGGER.info("created prod: %s", product)
+
+        # Add to local cache
+        if self.data and "products" in self.data:
+            _LOGGER.debug(
+                "Adding product #%s to cache: %s",
+                product.get("id"),
+                product.get("name"),
+            )
+            self.data["products"].append(product)
+
         return product
+
+    async def update_product(
+        self, product_id: int, changes: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Update an existing product in Grocy."""
+        _LOGGER.info("Updating product #%s with changes: %s", product_id, changes)
+        result = await self._api_grocy.update_product(product_id, changes)
+
+        # Update local cache if available
+        if self.data and "products" in self.data:
+            for product in self.data["products"]:
+                if product["id"] == product_id:
+                    product.update(changes)
+                    break
+
+        return result
+
+    async def create_product_barcode(
+        self, barcode_data: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Create a barcode entry for a product."""
+        barcode_data["row_created_timestamp"] = dt.datetime.now().strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        _LOGGER.info("Creating product barcode: %s", barcode_data)
+        return await self._api_grocy.add_product_barcode(barcode_data)
+
+    async def create_quantity_unit_conversion(
+        self, conversion_data: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Create a quantity unit conversion for a product."""
+        conversion_data["row_created_timestamp"] = dt.datetime.now().strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        _LOGGER.info("Creating QU conversion: %s", conversion_data)
+        # TODO: create explicit product quantity unit conversion
+        # Example Pack -> g
+        return await self._api_grocy.add_product_quantity_unit_conversion(
+            conversion_data
+        )
+
+    async def transfer_stock_entry(
+        self, product_id: int, transfer_data: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Transfer a stock entry between locations."""
+        _LOGGER.info(
+            "Transferring stock for product #%s: %s", product_id, transfer_data
+        )
+        return await self._api_grocy.transfer_stock_entry(product_id, transfer_data)
+
+    async def add_stock(
+        self, product_id: int, stock_data: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Add stock for a product (purchase transaction)."""
+        _LOGGER.info("Adding stock for product #%s: %s", product_id, stock_data)
+        return await self._api_grocy.add_stock_product(product_id, stock_data)
+
+    async def update_recipe(
+        self, recipe_id: int, changes: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Update a recipe in Grocy."""
+        _LOGGER.info("Updating recipe #%s with changes: %s", recipe_id, changes)
+        result = await self._api_grocy.update_recipe(recipe_id, changes)
+
+        # Update local cache if available
+        if self.data and "recipes" in self.data:
+            for recipe in self.data["recipes"]:
+                if recipe["id"] == recipe_id:
+                    recipe.update(changes)
+                    break
+
+        return result
 
     async def convert_quantity_for_product(
         self,
@@ -301,7 +388,7 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
             )
             return None
 
-        c: Optional[GrocyQuantityUnitConversionResolved] = next(
+        c: GrocyQuantityUnitConversionResolved | None = next(
             (
                 conv
                 for conv in conversions
@@ -334,9 +421,9 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
     async def get_product_from_open_food_facts(
         self,
         code: str,
-        fields: Optional[list[str]] = None,
+        fields: list[str] | None = None,
         raise_if_invalid: bool = False,
-    ) -> Optional[OpenFoodFactsProduct]:
+    ) -> OpenFoodFactsProduct | None:
         """Return a product.
 
         If the product does not exist, None is returned.
@@ -382,9 +469,7 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
                 return None
             if resp.get("status", None) is None:
                 raise ValueError(
-                    "Seems like the API call to OpenFoodFacts failed. HTTP [GET] Resp: %s -> %s",
-                    response.status,
-                    response.text,
+                    f"Seems like the API call to OpenFoodFacts failed. HTTP [GET] Resp: {response.status} -> {response.text}"
                 )
             if resp["status"] == 0:
                 # invalid barcode
