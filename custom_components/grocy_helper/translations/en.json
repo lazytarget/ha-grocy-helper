@@ -105,7 +105,11 @@
                 "title": "Add parent {name}",
                 "description": "{lookup_output}\n\n## Name suggestions\n{product_aliases}",
                 "data": {
-                    "name": "Product name"
+                    "name": "Product name",
+                    "qu_id_stock": "Stock unit",
+                    "qu_id_purchase": "Purchase unit",
+                    "qu_id_consume": "Consume unit",
+                    "qu_id_price": "Price unit"
                 },
                 "data_description": {
                     "qu_id_stock": "How do you want to measure the total amount? Often best with 'kg'/'L'\n**Avoid Piece/Pack!**",
@@ -117,6 +121,12 @@
             "scan_update_product_details": {
                 "title": "Update product {name}",
                 "description": "{lookup_output}\n\n## Name suggestions\n{product_aliases}",
+                "data": {
+                    "default_consume_location_id": "Default consume location",
+                    "product_quantity": "Product quantity",
+                    "qu_id_product": "Product quantity unit",
+                    "calories_per_100": "Calories per 100 (g/ml)"
+                },
                 "data_description": {
                     "default_consume_location_id": "Where are usually opened products placed? These will be consumed first",
                     "product_quantity": "The quantity of the actual physical Piece/Pack",
@@ -127,6 +137,12 @@
             "scan_add_product_barcode": {
                 "title": "Add barcode to {name}",
                 "description": "{lookup_output}\n\n## Name suggestions\n{product_aliases}",
+                "data": {
+                    "note": "Barcode note",
+                    "shopping_location_id": "Default shopping location",
+                    "amount": "Default amount",
+                    "qu_id": "Unit of the default amount"
+                },
                 "data_description": {
                     "note": "A fully descriptive name of the specific product with barcode {barcode}",
                     "shopping_location_id": "The default store when purchasing this specific barcode",
