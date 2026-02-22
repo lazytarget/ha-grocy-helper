@@ -87,3 +87,9 @@ class OpenFoodFacts:
         "nutriments",
         "nutriments_estimated",
     ]
+
+# TODO: Conditional check if development env
+DEV_CONST = {
+    "default_scan_mode": SCAN_MODE.PURCHASE,
+    "default_barcode": "4011800420413",
+}

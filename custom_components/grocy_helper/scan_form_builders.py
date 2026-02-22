@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .const import SCAN_MODE
+from .const import DEV_CONST, SCAN_MODE
 from .grocytypes import GrocyMasterData, GrocyProduct
 from .scan_types import FieldType, FormField, NumberMode, SelectMode, SelectOption
 
@@ -37,7 +37,7 @@ class ScanFormBuilder:
                 key="mode",
                 field_type=FieldType.SELECT,
                 required=False,
-                suggested_value=SCAN_MODE.SCAN_BBUDDY,  # During DEV....
+                suggested_value=DEV_CONST.get("default_scan_mode", SCAN_MODE.SCAN_BBUDDY),
                 select_mode=SelectMode.LIST,
                 # translation_key="scan_mode",
                 options=[
@@ -80,7 +80,7 @@ class ScanFormBuilder:
                 field_type=FieldType.TEXT,
                 required=True,
                 multiline=True,
-                suggested_value="4011800420413",  # DEV default
+                suggested_value=DEV_CONST.get("default_barcode", ""),
             ),
         ]
 

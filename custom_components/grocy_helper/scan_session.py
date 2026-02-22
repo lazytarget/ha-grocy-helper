@@ -39,6 +39,7 @@ from .barcodebuddyapi import BarcodeBuddyAPI
 from .coordinator import GrocyHelperCoordinator
 from .const import SCAN_MODE
 from .grocytypes import (
+    BarcodeLookup,
     ExtendedGrocyProductStockInfo,
     GrocyAddProductQuantityUnitConversion,
     GrocyMasterData,
@@ -147,7 +148,7 @@ class ScanSession:
         return self._state.current_stock_info
 
     @property
-    def current_lookup(self) -> GrocyProduct | None:
+    def current_lookup(self) -> BarcodeLookup | None:
         """Product found during lookup phase."""
         return self._state.current_lookup
 
@@ -493,7 +494,7 @@ class ScanSession:
 
         # Create parent product
         _LOGGER.info("Creating parent product: %s", new_product)
-        product = await self._api_grocy.add_product(new_product)
+        product = await self._coordinator.create_product(new_product)
         _LOGGER.info("Created parent product: %s", product)
         self._state.current_parent = product
 
@@ -913,10 +914,7 @@ class ScanSession:
         # Try to parse as ID
         (r, i) = try_parse_int(p)
         if r and i > 0:
-            # TODO: Remove this WIP testing code
-            if i == 1337:
-                user_input["product_id"] = None
-            self._state.current_parent = await self._api_grocy.get_product_by_id(i)
+            self._state.current_parent = await self._api_grocy.get_product_by_id(i)     # TODO: Get from coordinator masterdata
 
         # If not found or was a string, treat as new parent product name
         if self.current_parent is None:
@@ -956,6 +954,7 @@ class ScanSession:
                     self.current_parent.get("id") if self.current_parent else None
                 ),
             }
+            # TODO: Simplify
 
             # Add recipe defaults
             if self.current_recipe:
