@@ -775,7 +775,7 @@ class ScanSession:
         )
 
         # Extract input values
-        price, bestBeforeInDays, shopping_location_id = (
+        price, best_before_in_days, shopping_location_id = (
             self._extract_scan_process_input(user_input, product)
         )
 
@@ -785,13 +785,13 @@ class ScanSession:
         # Show form if needed
         if user_input is None and in_purchase_mode:
             if form := self._show_scan_process_form(
-                product, price, bestBeforeInDays, shopping_location_id, errors
+                product, price, best_before_in_days, shopping_location_id, errors
             ):
                 return form
 
         # Build request
         request = self._product_builder.build_scan_request(
-            code, in_purchase_mode, price, bestBeforeInDays, shopping_location_id
+            code, in_purchase_mode, price, best_before_in_days, shopping_location_id
         )
 
         # Set BarcodeBuddy mode
@@ -1320,9 +1320,9 @@ class ScanSession:
     ) -> tuple[str | None, int | None, str | None]:
         """Extract input values for scan process."""
         price = user_input.get("price") if user_input else None
-        bestBeforeInDays = (
+        best_before_in_days = (
             user_input.get(
-                "bestBeforeInDays", product.get("default_best_before_days")
+                "best_before_in_days", product.get("default_best_before_days")
             )
             if user_input
             else product.get("default_best_before_days")
@@ -1330,7 +1330,7 @@ class ScanSession:
         shopping_location_id = (
             user_input.get("shopping_location_id") if user_input else None
         )
-        return price, bestBeforeInDays, shopping_location_id
+        return price, best_before_in_days, shopping_location_id
 
     def _is_in_purchase_mode(self) -> bool:
         """Check if in purchase mode."""
@@ -1346,7 +1346,7 @@ class ScanSession:
         self,
         product: dict,
         price: str | None,
-        bestBeforeInDays: int | None,
+        best_before_in_days: int | None,
         shopping_location_id: str | None,
         errors: dict,
     ) -> FormRequest | None:
@@ -1354,7 +1354,7 @@ class ScanSession:
         if fields := self._form_builder.build_scan_process_fields(
             product,
             price,
-            bestBeforeInDays,
+            best_before_in_days,
             shopping_location_id,
             self.scan_options,
             self.current_recipe,

@@ -518,7 +518,7 @@ class ScanFormBuilder:
         self,
         _product: dict,
         price: Any,
-        bestBeforeInDays: Any,
+        best_before_in_days: Any,
         shopping_location_id: Any,
         scan_options: dict[str, bool],
         current_recipe: dict | None,
@@ -550,11 +550,11 @@ class ScanFormBuilder:
         if scan_options.get("input_bestBeforeInDays"):
             fields.append(
                 FormField(
-                    key="bestBeforeInDays",
+                    key="best_before_in_days",
                     field_type=FieldType.TEXT,
                     required=False,
                     suggested_value=(
-                        str(bestBeforeInDays) if bestBeforeInDays is not None else None
+                        str(best_before_in_days) if best_before_in_days is not None else None
                     ),
                 ),
             )

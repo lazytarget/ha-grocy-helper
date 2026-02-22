@@ -411,7 +411,7 @@ class ProductDataBuilder:
         code: str,
         in_purchase_mode: bool,
         price: str | None,
-        bestBeforeInDays: int | None,
+        best_before_in_days: int | None,
         shopping_location_id: str | None,
     ) -> dict[str, Any]:
         """Build request dict for scan action.
@@ -424,7 +424,7 @@ class ProductDataBuilder:
             Whether in purchase mode
         price:
             Price value (if any)
-        bestBeforeInDays:
+        best_before_in_days:
             Best before days (if any)
         shopping_location_id:
             Shopping location ID (if any)
@@ -438,8 +438,8 @@ class ProductDataBuilder:
         if in_purchase_mode:
             if price is not None and len(str(price)) > 0:
                 request["price"] = float(price)
-            if bestBeforeInDays is not None and len(str(bestBeforeInDays)) > 0:
-                request["bestBeforeInDays"] = int(bestBeforeInDays)
+            if best_before_in_days is not None and len(str(best_before_in_days)) > 0:
+                request["bestBeforeInDays"] = int(best_before_in_days)
             if shopping_location_id is not None and int(shopping_location_id) > 0:
                 request["shopping_location_id"] = int(shopping_location_id)
 
