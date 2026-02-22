@@ -154,7 +154,7 @@
             }
         }
     },
-    "selector": {
+    "selector_DISABLE": {
         "scan_mode_DISABLE": {
             "options": {
                 "BBUDDY-P": "Purchase / Produce"
