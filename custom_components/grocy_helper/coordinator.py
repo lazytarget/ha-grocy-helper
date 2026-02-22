@@ -84,9 +84,12 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
                 "products": products,
                 "recipes": recipes,
                 "known_qu": {
-                    "Piece": next((qu for qu in quantity_units if qu["name"] == "Piece"), None),
-                    "Pack": next((qu for qu in quantity_units if qu["name"] == "Pack"), None),
-
+                    "Piece": next(
+                        (qu for qu in quantity_units if qu["name"] == "Piece"), None
+                    ),
+                    "Pack": next(
+                        (qu for qu in quantity_units if qu["name"] == "Pack"), None
+                    ),
                     "g": next((qu for qu in quantity_units if qu["name"] == "g"), None),
                     "kg": next(
                         (qu for qu in quantity_units if qu["name"] == "kg"), None
@@ -277,7 +280,11 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
 
         # Add to local cache
         if self.data and "products" in self.data:
-            _LOGGER.debug("Adding product #%s to cache: %s", product.get("id"), product.get("name"))
+            _LOGGER.debug(
+                "Adding product #%s to cache: %s",
+                product.get("id"),
+                product.get("name"),
+            )
             self.data["products"].append(product)
 
         return product
@@ -342,14 +349,14 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
         """Update a recipe in Grocy."""
         _LOGGER.info("Updating recipe #%s with changes: %s", recipe_id, changes)
         result = await self._api_grocy.update_recipe(recipe_id, changes)
-        
+
         # Update local cache if available
         if self.data and "recipes" in self.data:
             for recipe in self.data["recipes"]:
                 if recipe["id"] == recipe_id:
                     recipe.update(changes)
                     break
-        
+
         return result
 
     async def convert_quantity_for_product(

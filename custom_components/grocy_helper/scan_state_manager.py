@@ -25,7 +25,7 @@ _LOGGER = logging.getLogger(__name__)
 
 class ScanStateManager:
     """Manages workflow state for a scan session.
-    
+
     This class ensures that product and stock information stays in sync,
     handles product loading, and updates the masterdata cache when products
     are created or modified.
@@ -36,7 +36,7 @@ class ScanStateManager:
         api_grocy: GrocyAPI,
     ) -> None:
         """Initialize state manager.
-        
+
         Parameters
         ----------
         api_grocy:
@@ -46,29 +46,29 @@ class ScanStateManager:
 
         # Primary product state - stock info contains full details
         self._current_stock_info: ExtendedGrocyProductStockInfo | None = None
-        
+
         # External lookup data
         self.current_lookup: BarcodeLookup | None = None
         self.current_product_openfoodfacts: OpenFoodFactsProduct | None = None
         self.current_product_ica: dict | None = None
-        
+
         # Product matching
         self.matching_products: list[GrocyProduct] = []
-        
+
         # Parent product (when creating hierarchies)
         self.current_parent: GrocyProduct | None = None
-        
+
         # Recipe integration
         self.current_recipe: GrocyRecipe | None = None
         self.current_recipe_id: int | None = None
-        
+
         # Transfer workflow
         self.current_stock_entries: list[GrocyStockEntry] = []
 
     @property
     def current_product(self) -> GrocyProduct | None:
         """Get current product.
-        
+
         This always returns the product from stock_info if available,
         ensuring consistency.
         """
@@ -83,7 +83,7 @@ class ScanStateManager:
 
     def set_product(self, product: GrocyProduct | None) -> None:
         """Set current product without stock info.
-        
+
         Use this when you only have basic product data (e.g., during creation).
         For existing products, prefer load_product_by_id() or load_product_by_barcode().
         """
@@ -95,14 +95,14 @@ class ScanStateManager:
 
     def set_stock_info(self, stock_info: ExtendedGrocyProductStockInfo | None) -> None:
         """Set current stock info (which includes product).
-        
+
         This is the preferred way to update product state for existing products.
         """
         self._current_stock_info = stock_info
 
     async def load_product_by_id(self, product_id: int) -> GrocyProduct | None:
         """Load product by ID and update state.
-        
+
         Returns the product and updates current_stock_info.
         """
         try:
@@ -115,7 +115,7 @@ class ScanStateManager:
 
     async def load_product_by_barcode(self, barcode: str) -> GrocyProduct | None:
         """Load product by barcode and update state.
-        
+
         Returns the product, or None if not found.
         """
         try:
@@ -128,36 +128,36 @@ class ScanStateManager:
 
     async def ensure_stock_info_loaded(self) -> bool:
         """Ensure full stock info is loaded for current product.
-        
+
         If we only have basic product data, this loads the full stock info.
         Returns True if stock info is available after the operation.
         """
         if not self.current_product:
             return False
-            
+
         # If we already have extended info, we're good
         if self._current_stock_info and len(self._current_stock_info) > 1:
             return True
-        
+
         # Need to load full info
         product_id = self.current_product.get("id")
         if not product_id:
             return False
-            
+
         _LOGGER.debug("Loading full stock info for product #%s", product_id)
         await self.load_product_by_id(product_id)
         return self._current_stock_info is not None
 
     def update_current_product(self, changes: dict) -> None:
         """Update current product with changes (session state only).
-        
+
         This only updates the local session state. For persistent changes,
         call the coordinator's update_product() method.
         """
         if not self.current_product:
             _LOGGER.warning("Cannot update product - no current product set")
             return
-            
+
         self.current_product.update(changes)
 
     def clear_all(self) -> None:
@@ -174,7 +174,7 @@ class ScanStateManager:
 
     def clear_barcode_state(self) -> None:
         """Clear state when moving to a new barcode.
-        
+
         Keeps recipe info if set, clears everything else.
         """
         self._current_stock_info = None
@@ -182,10 +182,10 @@ class ScanStateManager:
         self.current_product_openfoodfacts = None
         self.current_product_ica = None
         self.current_parent = None
-        
+
         # Don't clear recipe state - it may apply to next product
         # self.current_recipe = None
         # self.current_recipe_id = None
-        
+
         self.matching_products = []
         self.current_stock_entries = []

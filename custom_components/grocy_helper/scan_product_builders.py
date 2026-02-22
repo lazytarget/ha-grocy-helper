@@ -111,29 +111,25 @@ class ProductDataBuilder:
             product["default_best_before_days_after_thawing"] = int(val)
 
         # Quantity units
-        product["qu_id_stock"] = user_input.get(
-            "qu_id_stock", user_input.get("qu_id")
-        )
+        product["qu_id_stock"] = user_input.get("qu_id_stock", user_input.get("qu_id"))
         product["qu_id_purchase"] = user_input.get(
             "qu_id_purchase", user_input.get("qu_id")
         )
         product["qu_id_consume"] = user_input.get(
             "qu_id_consume", user_input.get("qu_id")
         )
-        product["qu_id_price"] = user_input.get(
-            "qu_id_price", user_input.get("qu_id")
-        )
+        product["qu_id_price"] = user_input.get("qu_id_price", user_input.get("qu_id"))
 
-        product["description"] = user_input.get("description", product.get("description"))
+        product["description"] = user_input.get(
+            "description", product.get("description")
+        )
         product["parent_product_id"] = user_input.get(
             "parent_product_id", product.get("parent_product_id")
         )
 
         return product
 
-    def validate_product_location(
-        self, product: dict[str, Any]
-    ) -> dict[str, str]:
+    def validate_product_location(self, product: dict[str, Any]) -> dict[str, str]:
         """Validate product location constraints.
 
         Parameters
@@ -164,8 +160,11 @@ class ProductDataBuilder:
         return errors
 
     def build_parent_product_suggested_values(
-        self, new_product: dict, user_input: dict, creating_parent: bool,
-        current_product: dict | None = None
+        self,
+        new_product: dict,
+        user_input: dict,
+        creating_parent: bool,
+        current_product: dict | None = None,
     ) -> dict[str, Any]:
         """Build suggested values for parent product form.
 
@@ -189,11 +188,16 @@ class ProductDataBuilder:
         # Keys for parent product form
         parent_keys = ["name", "qu_id_stock", "qu_id_price"]
         if not creating_parent:
-            parent_keys.extend([
-                "location_id", "should_not_be_frozen",
-                "default_best_before_days", "default_best_before_days_after_open",
-                "qu_id_purchase", "qu_id_consume",
-            ])
+            parent_keys.extend(
+                [
+                    "location_id",
+                    "should_not_be_frozen",
+                    "default_best_before_days",
+                    "default_best_before_days_after_open",
+                    "qu_id_purchase",
+                    "qu_id_consume",
+                ]
+            )
 
         # Merge values - copy from child product when creating parent
         suggested: dict[str, Any] = {}
@@ -222,9 +226,7 @@ class ProductDataBuilder:
             if isinstance(pack_qu, dict)
             else getattr(pack_qu, "id", None)
         )
-        if (
-            int(suggested.get("qu_id_stock") or -99) in [piece_id, pack_id]
-        ) and (
+        if (int(suggested.get("qu_id_stock") or -99) in [piece_id, pack_id]) and (
             int(suggested.get("qu_id_price") or -99) not in [piece_id, pack_id]
         ):
             _LOGGER.warning(
@@ -238,8 +240,10 @@ class ProductDataBuilder:
 
     @staticmethod
     def build_parent_product_from_input(
-        user_input: dict, new_product: dict, creating_parent: bool,
-        current_product: dict | None = None
+        user_input: dict,
+        new_product: dict,
+        creating_parent: bool,
+        current_product: dict | None = None,
     ) -> dict:
         """Build parent product data from user input.
 
@@ -383,10 +387,16 @@ class ProductDataBuilder:
                     product_quantity_unit = qq["id"]
                     _LOGGER.warning("Unit: %s, QQ: %s", unit, qq)
                     product_quantity_unit_as_liquid = qq["name"] in [
-                        "ml", "cl", "dl", "l", "L",
+                        "ml",
+                        "cl",
+                        "dl",
+                        "l",
+                        "L",
                     ]
                     product_quantity_unit_as_weight = qq["name"] in [
-                        "g", "hg", "kg",
+                        "g",
+                        "hg",
+                        "kg",
                     ]
 
         # TODO: fill in info from ICA
@@ -411,7 +421,7 @@ class ProductDataBuilder:
         code: str,
         in_purchase_mode: bool,
         price: str | None,
-        bestBeforeInDays: int | None,
+        best_before_in_days: int | None,
         shopping_location_id: str | None,
     ) -> dict[str, Any]:
         """Build request dict for scan action.
@@ -424,7 +434,7 @@ class ProductDataBuilder:
             Whether in purchase mode
         price:
             Price value (if any)
-        bestBeforeInDays:
+        best_before_in_days:
             Best before days (if any)
         shopping_location_id:
             Shopping location ID (if any)
@@ -438,8 +448,8 @@ class ProductDataBuilder:
         if in_purchase_mode:
             if price is not None and len(str(price)) > 0:
                 request["price"] = float(price)
-            if bestBeforeInDays is not None and len(str(bestBeforeInDays)) > 0:
-                request["bestBeforeInDays"] = int(bestBeforeInDays)
+            if best_before_in_days is not None and len(str(best_before_in_days)) > 0:
+                request["bestBeforeInDays"] = int(best_before_in_days)
             if shopping_location_id is not None and int(shopping_location_id) > 0:
                 request["shopping_location_id"] = int(shopping_location_id)
 
