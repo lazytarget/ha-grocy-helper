@@ -93,10 +93,11 @@ class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             bbuddy_url = user_input[CONF_BBUDDY_API_URL]
             bbuddy_api_key = user_input[CONF_BBUDDY_API_KEY]
 
-            # Assign unique id based on Host/Port
-            # WIP: use api_key to indicate uniqueness, as host might change during dev, in future should make this non-reversable
+            # Assign unique id based on ApiKey, as host/port setup might change overtime...
+            # TODO: Make a non-reversable hash of the ApiKey
             await self.async_set_unique_id(f"{DOMAIN}__{grocy_api_key}")
-            # Abort flow if a config entry with same Host and Port exists
+
+            # Abort flow if a config entry with same unique_id exists
             self._abort_if_unique_id_configured()
 
             config_entry_data = {
@@ -132,13 +133,11 @@ class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             bbuddy_url = user_input[CONF_BBUDDY_API_URL]
             bbuddy_api_key = user_input[CONF_BBUDDY_API_KEY]
 
-            # Assign unique id based on Host/Port
-            # WIP: use api_key to indicate uniqueness, as host might change during dev, in future should make this non-reversable
+            # Assign unique id based on ApiKey, as host/port setup might change overtime...
+            # TODO: Make a non-reversable hash of the ApiKey
             await self.async_set_unique_id(f"{DOMAIN}__{grocy_api_key}")
 
-            # # Abort flow if a config entry with same Host and Port exists
-            # self._abort_if_unique_id_configured()
-
+            # Abort flow if a unique_id is not a match with existing config entry
             self._abort_if_unique_id_mismatch()
 
             config_entry_data = {
@@ -232,47 +231,67 @@ class GrocyOptionsFlowHandler(OptionsFlow):
     # Each ``async_step_<name>`` simply delegates to ``ScanSession``
     # and converts the result.
 
-    async def async_step_scan_start(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_scan_start(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
         return self._to_flow_result(
             await self._session.handle_step(Step.SCAN_START, user_input)
         )
 
-    async def async_step_scan_match_to_product(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_scan_match_to_product(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
         return self._to_flow_result(
             await self._session.handle_step(Step.SCAN_MATCH_PRODUCT, user_input)
         )
 
-    async def async_step_scan_add_product(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_scan_add_product(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
         return self._to_flow_result(
             await self._session.handle_step(Step.SCAN_ADD_PRODUCT, user_input)
         )
 
-    async def async_step_scan_add_product_parent(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_scan_add_product_parent(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
         return self._to_flow_result(
             await self._session.handle_step(Step.SCAN_ADD_PRODUCT_PARENT, user_input)
         )
 
-    async def async_step_scan_add_product_barcode(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_scan_add_product_barcode(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
         return self._to_flow_result(
             await self._session.handle_step(Step.SCAN_ADD_PRODUCT_BARCODE, user_input)
         )
 
-    async def async_step_scan_update_product_details(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_scan_update_product_details(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
         return self._to_flow_result(
-            await self._session.handle_step(Step.SCAN_UPDATE_PRODUCT_DETAILS, user_input)
+            await self._session.handle_step(
+                Step.SCAN_UPDATE_PRODUCT_DETAILS, user_input
+            )
         )
 
-    async def async_step_scan_transfer_start(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_scan_transfer_start(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
         return self._to_flow_result(
             await self._session.handle_step(Step.SCAN_TRANSFER_START, user_input)
         )
 
-    async def async_step_scan_transfer_input(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_scan_transfer_input(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
         return self._to_flow_result(
             await self._session.handle_step(Step.SCAN_TRANSFER_INPUT, user_input)
         )
 
-    async def async_step_scan_process(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_scan_process(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
         return self._to_flow_result(
             await self._session.handle_step(Step.SCAN_PROCESS, user_input)
         )
@@ -357,9 +376,7 @@ def _field_to_vol(field: FormField):
             cfg["min"] = field.min_value
         if field.max_value is not None:
             cfg["max"] = field.max_value
-        validator = selector.NumberSelector(
-            selector.NumberSelectorConfig(**cfg)
-        )
+        validator = selector.NumberSelector(selector.NumberSelectorConfig(**cfg))
 
     elif field.field_type == FieldType.SELECT:
         options = [
@@ -412,4 +429,3 @@ def _form_request_to_schema(form: FormRequest) -> vol.Schema:
         k, v = _field_to_vol(f)
         schema[k] = v
     return vol.Schema(schema)
-

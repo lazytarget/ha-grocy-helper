@@ -17,6 +17,7 @@ from typing import Any
 # Workflow steps
 # ---------------------------------------------------------------------------
 
+
 class Step(StrEnum):
     """Identifiers for each step in the scanning workflow."""
 
@@ -38,6 +39,7 @@ class Step(StrEnum):
 # ---------------------------------------------------------------------------
 # Form‑field primitives
 # ---------------------------------------------------------------------------
+
 
 class FieldType(StrEnum):
     """Supported form field types."""
@@ -100,6 +102,7 @@ class FormField:
 # ---------------------------------------------------------------------------
 # Step results
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class FormRequest:

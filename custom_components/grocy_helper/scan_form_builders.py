@@ -19,7 +19,7 @@ class ScanFormBuilder:
 
     def __init__(self, masterdata: GrocyMasterData):
         """Initialize the form builder.
-        
+
         Parameters
         ----------
         masterdata:
@@ -27,9 +27,7 @@ class ScanFormBuilder:
         """
         self._masterdata = masterdata
 
-    def build_scan_start_fields(
-        self, scan_mode: SCAN_MODE | None
-    ) -> list[FormField]:
+    def build_scan_start_fields(self, scan_mode: SCAN_MODE | None) -> list[FormField]:
         """Build fields for the scan-start form."""
 
         bbuddy_mode_str = scan_mode.name if scan_mode is not None else "Unknown"
@@ -95,12 +93,8 @@ class ScanFormBuilder:
         suggested_values = suggested_values or {}
         lookup = current_lookup
 
-        child_products = [
-            p for p in masterdata["products"] if p["parent_product_id"]
-        ]
-        parent_product_ids = [
-            p["parent_product_id"] for p in child_products
-        ]
+        child_products = [p for p in masterdata["products"] if p["parent_product_id"]]
+        parent_product_ids = [p["parent_product_id"] for p in child_products]
         parent_products = [
             p for p in masterdata["products"] if p["id"] in parent_product_ids
         ]
@@ -135,9 +129,7 @@ class ScanFormBuilder:
             )
             if len(suggested_products) == 1:
                 selected_product_id = str(
-                    suggested_values.get(
-                        "product_id", suggested_products[0]["id"]
-                    )
+                    suggested_values.get("product_id", suggested_products[0]["id"])
                 )
             else:
                 selected_product_id = "-1"
@@ -193,38 +185,40 @@ class ScanFormBuilder:
         ]
 
         if not creating_parent:
-            fields.extend([
-                FormField(
-                    key="location_id",
-                    field_type=FieldType.SELECT,
-                    required=True,
-                    suggested_value=self._str_val(suggested.get("location_id")),
-                    options=loc_options,
-                    select_mode=SelectMode.DROPDOWN,
-                ),
-                FormField(
-                    key="should_not_be_frozen",
-                    field_type=FieldType.BOOLEAN,
-                    required=True,
-                    default=suggested.get("should_not_be_frozen", False),
-                ),
-                FormField(
-                    key="default_best_before_days",
-                    field_type=FieldType.NUMBER,
-                    required=False,
-                    suggested_value=suggested.get("default_best_before_days"),
-                    step=1,
-                ),
-                FormField(
-                    key="default_best_before_days_after_open",
-                    field_type=FieldType.NUMBER,
-                    required=False,
-                    suggested_value=suggested.get(
-                        "default_best_before_days_after_open"
+            fields.extend(
+                [
+                    FormField(
+                        key="location_id",
+                        field_type=FieldType.SELECT,
+                        required=True,
+                        suggested_value=self._str_val(suggested.get("location_id")),
+                        options=loc_options,
+                        select_mode=SelectMode.DROPDOWN,
                     ),
-                    step=1,
-                ),
-            ])
+                    FormField(
+                        key="should_not_be_frozen",
+                        field_type=FieldType.BOOLEAN,
+                        required=True,
+                        default=suggested.get("should_not_be_frozen", False),
+                    ),
+                    FormField(
+                        key="default_best_before_days",
+                        field_type=FieldType.NUMBER,
+                        required=False,
+                        suggested_value=suggested.get("default_best_before_days"),
+                        step=1,
+                    ),
+                    FormField(
+                        key="default_best_before_days_after_open",
+                        field_type=FieldType.NUMBER,
+                        required=False,
+                        suggested_value=suggested.get(
+                            "default_best_before_days_after_open"
+                        ),
+                        step=1,
+                    ),
+                ]
+            )
 
         fields.append(
             FormField(
@@ -240,32 +234,30 @@ class ScanFormBuilder:
         )
 
         if not creating_parent:
-            fields.extend([
-                FormField(
-                    key="qu_id_purchase",
-                    field_type=FieldType.SELECT,
-                    required=True,
-                    suggested_value=self._str_val(
-                        suggested.get(
-                            "qu_id_purchase", suggested.get("qu_id")
-                        )
+            fields.extend(
+                [
+                    FormField(
+                        key="qu_id_purchase",
+                        field_type=FieldType.SELECT,
+                        required=True,
+                        suggested_value=self._str_val(
+                            suggested.get("qu_id_purchase", suggested.get("qu_id"))
+                        ),
+                        options=qu_options,
+                        select_mode=SelectMode.DROPDOWN,
                     ),
-                    options=qu_options,
-                    select_mode=SelectMode.DROPDOWN,
-                ),
-                FormField(
-                    key="qu_id_consume",
-                    field_type=FieldType.SELECT,
-                    required=True,
-                    suggested_value=self._str_val(
-                        suggested.get(
-                            "qu_id_consume", suggested.get("qu_id")
-                        )
+                    FormField(
+                        key="qu_id_consume",
+                        field_type=FieldType.SELECT,
+                        required=True,
+                        suggested_value=self._str_val(
+                            suggested.get("qu_id_consume", suggested.get("qu_id"))
+                        ),
+                        options=qu_options,
+                        select_mode=SelectMode.DROPDOWN,
                     ),
-                    options=qu_options,
-                    select_mode=SelectMode.DROPDOWN,
-                ),
-            ])
+                ]
+            )
 
         fields.append(
             FormField(
@@ -282,9 +274,7 @@ class ScanFormBuilder:
 
         return fields
 
-    def build_create_barcode_fields(
-        self, suggested: dict[str, Any]
-    ) -> list[FormField]:
+    def build_create_barcode_fields(self, suggested: dict[str, Any]) -> list[FormField]:
         """Build fields for the create-barcode form."""
 
         masterdata = self._masterdata
@@ -344,8 +334,7 @@ class ScanFormBuilder:
         ]
         locations.sort(key=lambda loc: loc["name"])
         loc_options = [
-            SelectOption(value=str(loc["id"]), label=loc["name"])
-            for loc in locations
+            SelectOption(value=str(loc["id"]), label=loc["name"]) for loc in locations
         ]
 
         qu_options = self._qu_options(include_blank=True)
@@ -372,9 +361,7 @@ class ScanFormBuilder:
                 key="qu_id_product",
                 field_type=FieldType.SELECT,
                 required=False,
-                suggested_value=self._str_val(
-                    suggested.get("qu_id_product")
-                ),
+                suggested_value=self._str_val(suggested.get("qu_id_product")),
                 description="What quantity unit does the product package have?",
                 options=qu_options,
                 select_mode=SelectMode.DROPDOWN,
@@ -389,26 +376,28 @@ class ScanFormBuilder:
         ]
 
         if not product.get("should_not_be_frozen", 0):
-            fields.extend([
-                FormField(
-                    key="default_best_before_days_after_freezing",
-                    field_type=FieldType.NUMBER,
-                    required=False,
-                    suggested_value=suggested.get(
-                        "default_best_before_days_after_freezing"
+            fields.extend(
+                [
+                    FormField(
+                        key="default_best_before_days_after_freezing",
+                        field_type=FieldType.NUMBER,
+                        required=False,
+                        suggested_value=suggested.get(
+                            "default_best_before_days_after_freezing"
+                        ),
+                        step=1,
                     ),
-                    step=1,
-                ),
-                FormField(
-                    key="default_best_before_days_after_thawing",
-                    field_type=FieldType.NUMBER,
-                    required=False,
-                    suggested_value=suggested.get(
-                        "default_best_before_days_after_thawing"
+                    FormField(
+                        key="default_best_before_days_after_thawing",
+                        field_type=FieldType.NUMBER,
+                        required=False,
+                        suggested_value=suggested.get(
+                            "default_best_before_days_after_thawing"
+                        ),
+                        step=1,
                     ),
-                    step=1,
-                ),
-            ])
+                ]
+            )
 
         return fields
 
@@ -441,11 +430,7 @@ class ScanFormBuilder:
             for e in stock_entries
         ]
 
-        selected = (
-            str(stock_entries[0]["id"])
-            if stock_entries
-            else None
-        )
+        selected = str(stock_entries[0]["id"]) if stock_entries else None
 
         return [
             FormField(
@@ -476,9 +461,7 @@ class ScanFormBuilder:
         ]
         locations.sort(key=lambda loc: loc["name"])
 
-        default_location = (
-            str(locations[0]["id"]) if len(locations) > 0 else None
-        )
+        default_location = str(locations[0]["id"]) if len(locations) > 0 else None
 
         fields: list[FormField] = []
 
@@ -533,11 +516,7 @@ class ScanFormBuilder:
         masterdata = self._masterdata
         fields: list[FormField] = []
 
-        if (
-            price is None
-            and scan_options.get("input_price")
-            and not current_recipe
-        ):
+        if price is None and scan_options.get("input_price") and not current_recipe:
             fields.append(
                 FormField(
                     key="price",
@@ -554,7 +533,9 @@ class ScanFormBuilder:
                     field_type=FieldType.TEXT,
                     required=False,
                     suggested_value=(
-                        str(best_before_in_days) if best_before_in_days is not None else None
+                        str(best_before_in_days)
+                        if best_before_in_days is not None
+                        else None
                     ),
                 ),
             )
@@ -578,9 +559,7 @@ class ScanFormBuilder:
                         barcode.get("barcode", "").casefold()
                         == (current_barcode or "").casefold()
                     ):
-                        shopping_location_id = barcode.get(
-                            "shopping_location_id"
-                        )
+                        shopping_location_id = barcode.get("shopping_location_id")
                         if shopping_location_id:
                             break
 
@@ -598,9 +577,7 @@ class ScanFormBuilder:
                     field_type=FieldType.SELECT,
                     required=False,
                     suggested_value=(
-                        str(shopping_location_id)
-                        if shopping_location_id
-                        else None
+                        str(shopping_location_id) if shopping_location_id else None
                     ),
                     options=[
                         SelectOption(value=str(loc["id"]), label=loc["name"])
