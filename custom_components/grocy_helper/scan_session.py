@@ -51,6 +51,7 @@ from .grocytypes import (
 )
 from .scan_form_builders import ScanFormBuilder
 from .scan_product_builders import ProductDataBuilder
+from .scan_recipe_builders import RecipeDataBuilder
 from .scan_state_manager import ScanStateManager
 from .scan_types import (
     AbortResult,
@@ -102,6 +103,7 @@ class ScanSession:
 
         # Product data builder for transformations
         self._product_builder = ProductDataBuilder(self._masterdata)
+        self._recipe_builder = RecipeDataBuilder(self._masterdata)
 
         # State manager for product/stock tracking
         self._state = ScanStateManager(self._api_grocy)
