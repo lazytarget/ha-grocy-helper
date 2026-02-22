@@ -323,6 +323,8 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
             "%Y-%m-%d %H:%M:%S"
         )
         _LOGGER.info("Creating QU conversion: %s", conversion_data)
+        # TODO: create explicit product quantity unit conversion
+        # Example Pack -> g
         return await self._api_grocy.add_product_quantity_unit_conversion(
             conversion_data
         )

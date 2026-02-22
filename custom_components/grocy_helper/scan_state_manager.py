@@ -60,7 +60,6 @@ class ScanStateManager:
 
         # Recipe integration
         self.current_recipe: GrocyRecipe | None = None
-        self.current_recipe_id: int | None = None
 
         # Transfer workflow
         self.current_stock_entries: list[GrocyStockEntry] = []
@@ -168,7 +167,6 @@ class ScanStateManager:
         self.current_product_ica = None
         self.current_parent = None
         self.current_recipe = None
-        self.current_recipe_id = None
         self.matching_products = []
         self.current_stock_entries = []
 
@@ -185,7 +183,6 @@ class ScanStateManager:
 
         # Don't clear recipe state - it may apply to next product
         # self.current_recipe = None
-        # self.current_recipe_id = None
 
         self.matching_products = []
         self.current_stock_entries = []

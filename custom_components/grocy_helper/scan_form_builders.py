@@ -37,8 +37,9 @@ class ScanFormBuilder:
                 key="mode",
                 field_type=FieldType.SELECT,
                 required=False,
-                suggested_value=SCAN_MODE.SCAN_BBUDDY,
+                suggested_value=SCAN_MODE.SCAN_BBUDDY,  # During DEV....
                 select_mode=SelectMode.LIST,
+                # translation_key="scan_mode",
                 options=[
                     SelectOption(
                         value=SCAN_MODE.SCAN_BBUDDY,
@@ -57,9 +58,13 @@ class ScanFormBuilder:
                         value=SCAN_MODE.PURCHASE,
                         label="Purchase / Produce",
                     ),
-                    SelectOption(value=SCAN_MODE.TRANSFER, label="Transfer"),
+                    SelectOption(value=SCAN_MODE.TRANSFER, label="Transfer"),  # TODO: only add option if has more than 1 locations setup
                     SelectOption(value=SCAN_MODE.OPEN, label="Open"),
                     SelectOption(value=SCAN_MODE.INVENTORY, label="Inventory"),
+                    # selector.SelectOptionDict(    # merge with Inventory-action
+                    #     value="lookup-barcode",
+                    #     label="Lookup"
+                    # ),
                     SelectOption(
                         value=SCAN_MODE.ADD_TO_SHOPPING_LIST,
                         label="Add to Shopping list",
@@ -95,6 +100,7 @@ class ScanFormBuilder:
 
         child_products = [p for p in masterdata["products"] if p["parent_product_id"]]
         parent_product_ids = [p["parent_product_id"] for p in child_products]
+        # TODO: NOTE CURRENT FLAW/FEATURE: If a product is not already a Parent, then cannot be chosen to be come a parent (actually logical to prevent children from becoming ones). Not an issue if ALL parents are provisioned via this flow...
         parent_products = [
             p for p in masterdata["products"] if p["id"] in parent_product_ids
         ]
@@ -153,6 +159,7 @@ class ScanFormBuilder:
                     field_type=FieldType.SELECT,
                     required=False,
                     suggested_value=suggested_values.get("parent_product"),
+                    # TODO: ...or if product_alias matches another product WHICH has a parent, then suggest that parent
                     options=[
                         SelectOption(value=str(p["id"]), label=p["name"])
                         for p in parent_products
@@ -181,6 +188,8 @@ class ScanFormBuilder:
                 field_type=FieldType.TEXT,
                 required=True,
                 suggested_value=suggested.get("name"),
+                # TODO: render as listbox with suggested values, but allow for custom text?
+                # Example: Mango / Mango Fryst 250g ICA / Fryst mango
             ),
         ]
 
@@ -426,6 +435,7 @@ class ScanFormBuilder:
                     f"{qu['name_plural'] if e['amount'] > 1 else qu['name']}, "
                     f"due: {e['best_before_date']}"
                 ),
+                # TODO: append current location name
             )
             for e in stock_entries
         ]
@@ -474,9 +484,9 @@ class ScanFormBuilder:
                     suggested_value=stock_entry["amount"],
                     default=stock_entry["amount"],
                     number_mode=NumberMode.SLIDER,
-                    step=product.get("quick_consume_amount", 1) or 1,
-                    min_value=product.get("quick_consume_amount", 1) or 1,
-                    max_value=stock_entry["amount"],
+                    step=product.get("quick_consume_amount", 1) or 1,   # follow consume amount for how many quantities can be transfered
+                    min_value=product.get("quick_consume_amount", 1) or 1,  # transfer at least 1
+                    max_value=stock_entry["amount"],    # maxium allowed to move all
                 ),
             )
 
@@ -582,6 +592,7 @@ class ScanFormBuilder:
                     options=[
                         SelectOption(value=str(loc["id"]), label=loc["name"])
                         for loc in shopping_locations
+                        # TODO: Able to create new store? via ´custom_value=True,´
                     ],
                     select_mode=SelectMode.DROPDOWN,
                 ),

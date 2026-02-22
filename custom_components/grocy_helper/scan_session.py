@@ -36,6 +36,7 @@ import logging
 from typing import Any
 
 from .barcodebuddyapi import BarcodeBuddyAPI
+from .coordinator import GrocyHelperCoordinator
 from .const import SCAN_MODE
 from .grocytypes import (
     ExtendedGrocyProductStockInfo,
@@ -62,20 +63,6 @@ from .utils import try_parse_int
 
 _LOGGER = logging.getLogger(__name__)
 
-# Fields whose suggested values should NOT be converted to ``str``
-# (they are numeric / boolean and the UI must receive them as-is).
-_NUMERIC_FIELDS = frozenset(
-    {
-        "should_not_be_frozen",
-        "calories_per_100",
-        "default_best_before_days",
-        "default_best_before_days_after_open",
-        "default_best_before_days_after_freezing",
-        "default_best_before_days_after_thawing",
-    }
-)
-# TODO: This is a lazy hack. Improve!
-
 
 class ScanSession:
     """Framework-agnostic barcode scanning workflow session.
@@ -98,7 +85,7 @@ class ScanSession:
 
     def __init__(
         self,
-        coordinator: Any,  # GrocyHelperCoordinator
+        coordinator: GrocyHelperCoordinator,
         api_bbuddy: BarcodeBuddyAPI,
         scan_options: dict[str, bool] | None = None,
     ) -> None:
@@ -123,6 +110,7 @@ class ScanSession:
             "input_bestBeforeInDays": True,
             "input_shoppingLocationId": True,
             "input_product_details_during_provision": True,
+            # TODO: Enable detailed Barcode details; defaults for: [shopping_location_id, qu_id, amount] for specific Barcode
         }
 
         # ── workflow state ──────────────────────────────────────────
@@ -134,7 +122,6 @@ class ScanSession:
 
         # Additional workflow state (not managed by state manager)
         # TODO: These should be removed (or fully moved to state manager)
-        self.current_recipe_id: int | None = None
         self.current_product_openfoodfacts: dict | None = None
         self.current_product_ica: dict | None = None
 
@@ -281,6 +268,7 @@ class ScanSession:
         # Prepare current barcode
         code = self._normalize_barcode(self.barcode_queue[0])
         if self.current_barcode != code:
+            # Different barcode since last time. Clear all info
             self._clear_barcode_state()
         self.current_barcode = code
 
@@ -333,26 +321,49 @@ class ScanSession:
         if not r or i <= 0:
             return AbortResult(reason=f"Could not parse recipe barcode: {code}")
 
-        self.current_recipe_id = i
         self._state.current_recipe = next(
             (
                 recipe
                 for recipe in masterdata["recipes"]
-                if recipe["id"] == self.current_recipe_id
+                if recipe["id"] == i
             ),
             None,
         )
         if not self.current_recipe:
+            # TODO: Flow for creating new recipe??
             return AbortResult(reason=f"Recipe with id '{i}' was not found")
 
         _LOGGER.debug("Found recipe: %s", self.current_recipe)
         if product_id := self.current_recipe["product_id"]:
+            # Recipe has a producing product, then fetch info and continue flow with product state
             await self._state.load_product_by_id(product_id)
             _LOGGER.info(
                 "Recipe '%s' produces product: %s",
                 self.current_recipe["id"],
                 self.current_product,
             )
+            
+            # TODO: Handle "Purchase"/Consume/Inventory/Provision, /Transfer etc. on a recipe barcode. That would be super useful for meal planning, and for tracking the cost and spoilage of cooked meals.
+            # TODO: "Purchase" on a recipe, without product, should start the provision product flow... (With Parent-mapping disabled, with recipe barcode, no options for shopping_location)
+            # TODO: Investigate possibilty with using Recipe products, with a barcode of "grcy:r:" to help with Purchase/Consume flows?
+            # TODO: Recipe produced product: Able to provision automatically:
+            #           Unit?? 
+            #           Location: Freezer
+            #           Consume: Fridge
+            #           Due days,   (helps prevent Freezer burn)
+            #           ProductGroup: Matlåda/Färdiglagat
+            #           Calories/serving  (helps with kcal per day in Meal plan)
+            #           Barcode: add "grcy:r:<id>"
+            #   stock entry/journal or Product overview will tell info like: Spoil rate, last purchased (is when cooked last)
+
+            # TODO: During "Purchase"/Produce: Omit fields for ´shopping_location_id´
+            # TODO: During "Purchase"/Produce: Gather the cost of the used stock entries used for this batch. And input as price for the Recipe product. That way you could track the cost historically per recipe (per serving)
+            # TODO: (During "Purchase"/Produce: Pre-fill bestBeforeInDays from the Produce Product)
+            # TODO: During "Purchase"/Produce: Allow to choose the outcome per serving: Eaten/Fridge/Freezer        (mark as "Open", if left in Fridge)
+        else:
+            # Recipe doesn't produce a product
+            # Continue flow without a `self.current_product` set, to provision it (and attach to recipe)
+            pass
 
         return None  # continue queue processing
 
@@ -383,6 +394,10 @@ class ScanSession:
         # If product is new → create it
         if not self.current_product.get("id"):
             return await self._step_add_product(user_input=None)
+
+        # TODO: Validate that the product doesn't already belong to a (different) parent!!
+        # TODO: Validate that the product doesn't already have a different barcode. Which could cause differences in quantities. (Submit again to add anyway?)
+        # Allow for "" or "id" value of the actual parent
 
         # Existing product (or parent needs creation)
         return await self._step_add_product_parent(user_input=None)
@@ -563,6 +578,12 @@ class ScanSession:
             user_input, self.current_product
         )
         _LOGGER.info("Updated input: %s", user_input)
+
+        if self.current_product_ica is not None:
+            # TODO: fill in info from ICA...
+            pass
+
+        # TODO: fill in guess of QuantityUnit...
 
         # Parse OpenFoodFacts data
         (
@@ -759,6 +780,7 @@ class ScanSession:
 
         # Show form if needed
         if user_input is None and in_purchase_mode:
+            # TODO: If in Purchase context AND self.current_recipe, then add field for target to place "Matlådor", and how many portions that where produced...
             if form := self._show_scan_process_form(
                 product, price, best_before_in_days, shopping_location_id, errors
             ):
@@ -769,12 +791,17 @@ class ScanSession:
             code, in_purchase_mode, price, best_before_in_days, shopping_location_id
         )
 
+        # Once product has been ensured to exist in Grocy, we can continue with BBuddy call
+        # TODO: ignore BBuddy call if scan-mode is "lookup-barcode" or "provision-barcode"
+
         # Set BarcodeBuddy mode
         await self._set_bbuddy_mode()
 
         # Execute the action
         try:
+            # TODO: make Barcode Buddy obsolete? Instead do everything via Grocy API?. Gives more control, and cuts of middlehand. But looses the BBuddy UI and it's contextual settings.
             response = await self._execute_scan_action(request, in_purchase_mode)
+            # TODO: handle responses with HTML-tags (warning/error messages)
             return await self._handle_scan_success(response)
         except BaseException as be:
             return self._handle_scan_error(be, errors)
@@ -795,6 +822,9 @@ class ScanSession:
             return self.current_lookup.get("product_aliases") or []
         if self.current_recipe:
             return [f"Matlåda: {self.current_recipe['name']}"]
+        # TODO: also loop through ProductBarcode notes
+        # TODO: ICA offer name
+        # TODO: skip Active==0 products
         return []
 
     def _show_add_product_form(
@@ -959,6 +989,7 @@ class ScanSession:
 
     def _complete_scan_queue(self) -> CompletedResult:
         """Return completed result when queue is empty."""
+        # TODO: Add result info to message...
         msg = (
             "\r\n".join(self.barcode_results)
             if self.barcode_results
@@ -976,7 +1007,6 @@ class ScanSession:
         self._state.clear_barcode_state()
         self.current_product_openfoodfacts = None
         self.current_product_ica = None
-        self.current_recipe_id = None
 
     async def _update_bbuddy_mode_if_needed(self) -> None:
         """Update BarcodeBuddy mode based on scan mode."""
@@ -1054,6 +1084,8 @@ class ScanSession:
 
     async def _process_provision_mode(self, code: str) -> StepResult:
         """Handle provision mode - just confirm product exists and continue."""
+        # Mode is to simply ensure product/barcode exists
+        # remove from queue, and then restart the queue...
         self.barcode_queue.pop(0)
         _LOGGER.info("Provisioned: %s", self.current_product)
         self.barcode_results.append(f"{code} maps to {self.current_product['name']}")
@@ -1169,6 +1201,8 @@ class ScanSession:
                     product["id"]
                 )
                 _LOGGER.warning("Convers: %s", conversions)
+                # TODO: check if there already is a resolved conversion for those qu_id
+                # TODO: if already exists then set ´skip_add_qu_conversions = True´
 
         return (
             qu_id_product,
@@ -1290,6 +1324,7 @@ class ScanSession:
         self, user_input: dict | None, product: dict
     ) -> tuple[str | None, int | None, str | None]:
         """Extract input values for scan process."""
+        # TODO: Input default price from Recipe (cost of ingredients)
         price = user_input.get("price") if user_input else None
         best_before_in_days = (
             user_input.get(
@@ -1364,11 +1399,17 @@ class ScanSession:
                 del request["bestBeforeInDays"]
             request["transaction_type"] = "purchase"
             request["amount"] = 1  # TODO: configurable amount
+            # TODO: check barcode buddy current quantity context
+            # TODO: introduce a field for manual input during scan (default to Barcode amount, then to 1). If not able to fetch override from BBuddy
             product_id = self.current_product_stock_info["product"]["id"]
-            request.pop("barcode", None)
+            request.pop("barcode", None)  # Instead go by ´product_id´
             response = await self._coordinator.add_stock(product_id, request)
+            # response = ""   # TODO: set based on response from Grocy
         else:
+            # Call Barcode Buddy scan
+            # TODO: make Barcode Buddy obsolete? Instead do everything via Grocy API?. Gives more control, and cuts of middlehand. But looses the BBuddy UI and it's contextual settings.
             response = await self._api_bbuddy.post_scan(request)
+            # TODO: handle responses with HTML-tags (warning/error messages)
 
         _LOGGER.info("SCAN-RESP: %s", response)
         return response
@@ -1376,7 +1417,9 @@ class ScanSession:
     async def _handle_scan_success(self, response: dict) -> StepResult:
         """Handle successful scan."""
         self.barcode_queue.pop(0)
+        # TODO: handle responses with HTML-tags (warning/error messages)
         self.barcode_results.append(str(response))
+        # Re-run process method until queue is empty...
         return await self._step_scan_queue()
 
     def _handle_scan_error(self, be: BaseException, errors: dict) -> FormRequest:

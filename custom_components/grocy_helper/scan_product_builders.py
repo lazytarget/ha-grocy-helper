@@ -27,6 +27,7 @@ _NUMERIC_FIELDS = frozenset(
         "default_best_before_days_after_thawing",
     }
 )
+# TODO: This is a lazy hack. Improve!
 
 
 class ProductDataBuilder:
@@ -263,6 +264,7 @@ class ProductDataBuilder:
             Parent product dictionary ready for API submission
         """
         new_product["name"] = user_input["name"]
+        # TODO: Location not super relevant for Parent products, perhaps set value as per child. But don't render field for it?
         new_product["location_id"] = user_input.get(
             "location_id",
             current_product["location_id"] if current_product else None,
@@ -276,6 +278,7 @@ class ProductDataBuilder:
             else 0
         )
 
+        # TODO: Since not handling any physical products with the Parent product, perhaps the due date-fields are irrelevant? (Set value as per child). Don't render field for it, to simplify?
         if val := user_input.get("default_best_before_days"):
             new_product["default_best_before_days"] = int(val)
         if val := user_input.get("default_best_before_days_after_open"):
@@ -286,12 +289,15 @@ class ProductDataBuilder:
         )
         new_product["qu_id_purchase"] = user_input.get(
             "qu_id_purchase", new_product.get("qu_id_stock")
+            # ...this unit is not really for parents, but will set as field is required
         )
         new_product["qu_id_consume"] = user_input.get(
             "qu_id_consume", new_product.get("qu_id_stock")
+            # ...this unit is not really for parents, but will set as field is required
         )
         new_product["qu_id_price"] = user_input.get(
             "qu_id_price", user_input.get("qu_id")
+            # TODO: clear this value if is Piece/Pack, since it is best with a unit for Liquid / Weight
         )
         new_product["row_created_timestamp"] = dt.datetime.now().strftime(
             "%Y-%m-%d %H:%M:%S"
@@ -378,6 +384,9 @@ class ProductDataBuilder:
                 "product_quantity",
                 current_product_openfoodfacts.get("product_quantity"),
             )
+
+            #         # TODO: compare qu, against the defaulted "qu_id_purchase" or "qui_id_stock"
+            #         # TODO: make conversion, if necessary...
             unit = current_product_openfoodfacts.get("product_quantity_unit")
             if unit:
                 for qq in filter(
