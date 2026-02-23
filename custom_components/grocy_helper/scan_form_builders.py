@@ -495,10 +495,10 @@ class ScanFormBuilder:
                     default=stock_entry["amount"],
                     number_mode=NumberMode.SLIDER,
                     step=product.get("quick_consume_amount", 1)
-                    or 1,  # follow consume amount for how many quantities can be transfered
+                    or 1,  # follow consume amount for how many quantities can be transferred
                     min_value=product.get("quick_consume_amount", 1)
                     or 1,  # transfer at least 1
-                    max_value=stock_entry["amount"],  # maxium allowed to move all
+                    max_value=stock_entry["amount"],  # maximum allowed to move all
                 ),
             )
 

@@ -954,7 +954,7 @@ class ScanSession:
         return self._cached_form
 
     def _show_create_recipe_form(
-        self, product: dict[str, Any], errors: dict[str, str]
+        self, recipe: dict[str, Any], errors: dict[str, str]
     ) -> FormRequest:
         """Build and return the add-recipe form."""
         fields = self._form_builder.build_create_recipe_fields()
@@ -963,7 +963,7 @@ class ScanSession:
             step_id=Step.SCAN_CREATE_RECIPE,
             fields=fields,
             description_placeholders={
-                "name": product.get("name"),
+                "name": recipe.get("name"),
                 "barcode": self.current_barcode,
                 "product_aliases": "\n".join([f"- {a.strip()}" for a in aliases if a]),
                 "lookup_output": (self.current_lookup or {}).get("lookup_output"),
