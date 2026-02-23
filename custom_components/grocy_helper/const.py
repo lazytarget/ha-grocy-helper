@@ -91,6 +91,6 @@ class OpenFoodFacts:
 
 # TODO: Conditional check if development env
 DEV_CONST = {
-    "default_scan_mode": SCAN_MODE.PURCHASE,
+    "default_scan_mode": SCAN_MODE.SCAN_BBUDDY,
     "default_barcode": "4011800420413",
 }
