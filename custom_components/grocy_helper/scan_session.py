@@ -1097,7 +1097,7 @@ class ScanSession:
         if self.barcode_scan_mode == SCAN_MODE.SCAN_BBUDDY:
             bb_mode = await self._api_bbuddy.get_mode()
             if bb_mode is not None and bb_mode >= 0:
-                _LOGGER.info("BBuddy mode is: %s", bb_mode)
+                _LOGGER.info("BBuddy mode has been fetched and is: %s", bb_mode)
                 self.current_bb_mode = bb_mode
         else:
             self.current_bb_mode = None

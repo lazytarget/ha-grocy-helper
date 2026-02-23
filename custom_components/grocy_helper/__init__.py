@@ -11,7 +11,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .services import setup_global_services
 from .coordinator import GrocyHelperCoordinator
 from .grocyapi import GrocyAPI
-from .barcodebuddyapi import BarcodeBuddyAPI
+from .barcodebuddyapi import BarcodeBuddyAPI, BarcodeBuddyAPI_Fake
 
 from .const import (
     DEFAULT_SCAN_INTERVAL,
@@ -52,11 +52,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         ["GROCY-API-KEY", entry.data[CONF_GROCY_API_KEY]],
         websession,
     )
-    bbuddy = BarcodeBuddyAPI(
-        entry.data[CONF_BBUDDY_API_URL],
-        ["BBUDDY-API-KEY", entry.data[CONF_BBUDDY_API_KEY]],
-        websession,
-    )
+    bbuddy_api_url = entry.data[CONF_BBUDDY_API_URL]
+    if bbuddy_api_url and entry.data[CONF_BBUDDY_API_KEY]:
+        bbuddy = BarcodeBuddyAPI(
+                bbuddy_api_url,
+                ["BBUDDY-API-KEY", entry.data[CONF_BBUDDY_API_KEY]],
+                websession,
+        )
+    else:
+        bbuddy = BarcodeBuddyAPI_Fake()
 
     coordinator = GrocyHelperCoordinator(
         hass,
