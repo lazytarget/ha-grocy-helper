@@ -209,7 +209,7 @@ class ScanSession:
             Step.SCAN_UPDATE_PRODUCT_DETAILS: self._step_update_product_details,
             Step.SCAN_TRANSFER_START: self._step_transfer_start,
             Step.SCAN_TRANSFER_INPUT: self._step_transfer_input,
-            Step.SCAN_ADD_RECIPE: self._step_add_recipe,
+            Step.SCAN_CREATE_RECIPE: self._step_create_recipe,
             Step.SCAN_PROCESS: self._step_scan_process,
         }
         handler = handlers.get(step_id)
@@ -284,7 +284,7 @@ class ScanSession:
 
             if code == "grcy:r":
                 # Create recipe
-                result = await self._step_add_recipe(user_input=None)
+                result = await self._step_create_recipe(user_input=None)
                 if result is not None:
                     return result
 
@@ -765,9 +765,11 @@ class ScanSession:
         )
         return await self._step_scan_queue()
 
-    # ── add_recipe ──────────────────────────────────────────────────
+    # ── create_recipe ──────────────────────────────────────────────────
 
-    async def _step_add_recipe(self, user_input: dict[str, Any] | None) -> StepResult:
+    async def _step_create_recipe(
+        self, user_input: dict[str, Any] | None
+    ) -> StepResult:
         """Create a new recipe in Grocy."""
 
         if self.current_recipe and self.current_recipe.get("id"):
@@ -777,7 +779,7 @@ class ScanSession:
 
         # First render - show form
         if user_input is None:
-            return self._show_add_recipe_form(new_recipe, {})
+            return self._show_create_recipe_form(new_recipe, {})
 
         # ── process submitted form ──────────────────────────────────
 
@@ -951,14 +953,14 @@ class ScanSession:
         )
         return self._cached_form
 
-    def _show_add_recipe_form(
+    def _show_create_recipe_form(
         self, product: dict[str, Any], errors: dict[str, str]
     ) -> FormRequest:
         """Build and return the add-recipe form."""
         fields = self._form_builder.build_create_recipe_fields()
         aliases = self._get_aliases()
         return FormRequest(
-            step_id=Step.SCAN_ADD_RECIPE,
+            step_id=Step.SCAN_CREATE_RECIPE,
             fields=fields,
             description_placeholders={
                 "name": product.get("name"),
