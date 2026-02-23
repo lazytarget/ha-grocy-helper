@@ -51,14 +51,18 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(
             CONF_GROCY_API_URL,
-            description={"description": "Grocy API url"},
-            default="http://localhost:4010",
+            description={
+                "description": "Grocy API url",
+                "suggested_value": "http://localhost:4010",
+            },
         ): cv.string,
         vol.Required(CONF_GROCY_API_KEY, {"description": "Grocy API Key"}): cv.string,
         vol.Optional(
             CONF_BBUDDY_API_URL,
-            description={"description": "Barcode Buddy API url"},
-            default="http://localhost:4011",
+            description={
+                "description": "Barcode Buddy API url",
+                "suggested_value": "http://localhost:4011",
+            },
         ): cv.string,
         vol.Optional(
             CONF_BBUDDY_API_KEY, description={"description": "Barcode Buddy API Key"}
