@@ -20,9 +20,11 @@ from .grocytypes import (
     GrocyProduct,
     GrocyQuantityUnitConversionResolved,
     GrocyQuantityUnitConversionResult,
+    GrocyRecipe,
     OpenFoodFactsProduct,
 )
 from .const import OpenFoodFacts
+from .utils import try_parse_int
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -56,7 +58,7 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
 
     async def _async_update_data(self) -> GrocyMasterData:
         """Fetch data from Grocy."""
-        _LOGGER.info("Update data")
+        _LOGGER.info("Updating coordinator data...")
         return await self.fetch_data()
 
     async def fetch_data(self) -> GrocyMasterData:
@@ -345,6 +347,33 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
         _LOGGER.info("Adding stock for product #%s: %s", product_id, stock_data)
         return await self._api_grocy.add_stock_product(product_id, stock_data)
 
+    async def create_recipe(self, data: GrocyRecipe) -> dict[str, Any]:
+        """Create a recipe in Grocy."""
+        result = await self._api_grocy.create_recipe(data)
+        if not isinstance(result, dict) or "created_object_id" not in result:
+            # Invalid response
+            raise ValueError(f"Unexpected response from create_recipe API: {result}")
+
+        (r, i) = try_parse_int(result["created_object_id"])
+        if not r or i <= 0:
+            # Invalid object id / response
+            raise ValueError(f"Unexpected response from create_recipe API: {result}")
+        # TODO: Extract validation to helper function inside of GrocyApi
+
+        data["id"] = int(result["created_object_id"])
+        _LOGGER.info("created recipe: %s", data)
+
+        # Add to local cache
+        if self.data and "recipes" in self.data:
+            _LOGGER.debug(
+                "Adding recipe #%s to cache: %s",
+                data.get("id"),
+                data.get("name"),
+            )
+            self.data["recipes"].append(data)
+        _LOGGER.debug("Current recipes in cache: %s", self.data.get("recipes"))
+        return data
+
     async def update_recipe(
         self, recipe_id: int, changes: dict[str, Any]
     ) -> dict[str, Any]:
@@ -358,7 +387,6 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
                 if recipe["id"] == recipe_id:
                     recipe.update(changes)
                     break
-
         return result
 
     async def convert_quantity_for_product(

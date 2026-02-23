@@ -22,7 +22,6 @@ class Step(StrEnum):
     """Identifiers for each step in the scanning workflow."""
 
     MAIN_MENU = "main_menu"
-    ADD_RECIPE = "add_recipe"
 
     SCAN_START = "scan_start"
     SCAN_QUEUE = "scan_queue"
@@ -30,6 +29,7 @@ class Step(StrEnum):
     SCAN_ADD_PRODUCT = "scan_add_product"
     SCAN_ADD_PRODUCT_PARENT = "scan_add_product_parent"
     SCAN_ADD_PRODUCT_BARCODE = "scan_add_product_barcode"
+    SCAN_CREATE_RECIPE = "scan_create_recipe"
     SCAN_UPDATE_PRODUCT_DETAILS = "scan_update_product_details"
     SCAN_TRANSFER_START = "scan_transfer_start"
     SCAN_TRANSFER_INPUT = "scan_transfer_input"

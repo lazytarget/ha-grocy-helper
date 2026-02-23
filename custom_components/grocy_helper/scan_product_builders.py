@@ -11,6 +11,7 @@ import datetime as dt
 import logging
 from typing import Any
 
+from .coordinator import GrocyHelperCoordinator
 from .grocytypes import GrocyMasterData
 
 _LOGGER = logging.getLogger(__name__)
@@ -33,15 +34,19 @@ _NUMERIC_FIELDS = frozenset(
 class ProductDataBuilder:
     """Builds and transforms product data structures."""
 
-    def __init__(self, masterdata: GrocyMasterData):
+    def __init__(self, coordinator: GrocyHelperCoordinator):
         """Initialize with Grocy masterdata.
 
         Parameters
         ----------
-        masterdata:
-            Grocy masterdata containing locations, quantity units, etc.
+        coordinator:
+            GrocyHelperCoordinator instance containing masterdata
         """
-        self._masterdata = masterdata
+        self._coordinator = coordinator
+
+    @property
+    def _masterdata(self) -> GrocyMasterData:
+        return self._coordinator.data
 
     @staticmethod
     def merge_product_values(
@@ -288,15 +293,18 @@ class ProductDataBuilder:
             "qu_id_stock", user_input.get("qu_id")
         )
         new_product["qu_id_purchase"] = user_input.get(
-            "qu_id_purchase", new_product.get("qu_id_stock")
+            "qu_id_purchase",
+            new_product.get("qu_id_stock"),
             # ...this unit is not really for parents, but will set as field is required
         )
         new_product["qu_id_consume"] = user_input.get(
-            "qu_id_consume", new_product.get("qu_id_stock")
+            "qu_id_consume",
+            new_product.get("qu_id_stock"),
             # ...this unit is not really for parents, but will set as field is required
         )
         new_product["qu_id_price"] = user_input.get(
-            "qu_id_price", user_input.get("qu_id")
+            "qu_id_price",
+            user_input.get("qu_id"),
             # TODO: clear this value if is Piece/Pack, since it is best with a unit for Liquid / Weight
         )
         new_product["row_created_timestamp"] = dt.datetime.now().strftime(

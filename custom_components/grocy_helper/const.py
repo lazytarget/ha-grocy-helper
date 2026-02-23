@@ -63,6 +63,7 @@ class API:
         UPDATE_PRODUCT: Final = "api/objects/products/%s"
         ADD_PRODUCT_QUANTITY_UNIT_CONVERSION: Final = "api/objects/quantity_unit_conversions"
         GET_RECIPES: Final = "api/objects/recipes"
+        CREATE_RECIPE: Final = "api/objects/recipes"
         UPDATE_RECIPE: Final = "api/objects/recipes/%s"
 
         BBUDDY_SCAN: Final = "api/action/scan"
@@ -90,6 +91,6 @@ class OpenFoodFacts:
 
 # TODO: Conditional check if development env
 DEV_CONST = {
-    "default_scan_mode": SCAN_MODE.PURCHASE,
+    "default_scan_mode": SCAN_MODE.SCAN_BBUDDY,
     "default_barcode": "4011800420413",
 }
