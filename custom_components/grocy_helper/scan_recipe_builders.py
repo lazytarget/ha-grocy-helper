@@ -49,7 +49,7 @@ class RecipeDataBuilder:
             Complete recipe dictionary ready for API submission
         """
         base_recipe = base_recipe or {}
-        recipe = GrocyRecipe(base_recipe.copy())
+        recipe: GrocyRecipe = base_recipe.copy()
         recipe["name"] = user_input["name"]
         recipe["base_servings"] = user_input.get("base_servings", 4)
         recipe["desired_servings"] = user_input.get("desired_servings", 1)

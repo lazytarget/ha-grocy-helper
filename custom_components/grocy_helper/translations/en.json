@@ -161,6 +161,16 @@
                     "name": "The name of the product"
                 }
             },
+            "scan_create_recipe": {
+                "title": "Create recipe",
+                "description": "{lookup_output}\n\n## Name suggestions\n{product_aliases}",
+                "data": {
+                    "name": "Recipe name"
+                },
+                "data_description": {
+                    "name": "Can be prefixed with 'Matlåda: ' for better identification of cooked products"
+                }
+            },
             "scan": {
                 "title": "Scan barcodes",
                 "data": {
