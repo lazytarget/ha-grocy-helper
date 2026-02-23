@@ -10,21 +10,26 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any
 
+from .coordinator import GrocyHelperCoordinator
 from .grocytypes import GrocyMasterData, GrocyRecipe
 
 
 class RecipeDataBuilder:
     """Builds and transforms product data structures."""
 
-    def __init__(self, masterdata: GrocyMasterData):
+    def __init__(self, coordinator: GrocyHelperCoordinator):
         """Initialize with Grocy masterdata.
 
         Parameters
         ----------
-        masterdata:
-            Grocy masterdata containing locations, quantity units, etc.
+        coordinator:
+            GrocyHelperCoordinator instance containing masterdata
         """
-        self._masterdata = masterdata
+        self._coordinator = coordinator
+
+    @property
+    def _masterdata(self) -> GrocyMasterData:
+        return self._coordinator.data
 
     @staticmethod
     def build_recipe_from_input(

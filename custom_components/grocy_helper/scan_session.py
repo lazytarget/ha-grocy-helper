@@ -98,11 +98,11 @@ class ScanSession:
         self._convert_quantity = coordinator.convert_quantity_for_product
 
         # Form builder for UI fields
-        self._form_builder = ScanFormBuilder(self._coordinator.data)
+        self._form_builder = ScanFormBuilder(self._coordinator)
 
         # Product data builder for transformations
-        self._product_builder = ProductDataBuilder(self._coordinator.data)
-        self._recipe_builder = RecipeDataBuilder(self._coordinator.data)
+        self._product_builder = ProductDataBuilder(self._coordinator)
+        self._recipe_builder = RecipeDataBuilder(self._coordinator)
 
         # State manager for product/stock tracking
         self._state = ScanStateManager(self._api_grocy)
@@ -332,7 +332,7 @@ class ScanSession:
             return AbortResult(reason=f"Recipe with id '{i}' was not found")
 
         _LOGGER.debug("Found recipe: %s", self.current_recipe)
-        if product_id := self.current_recipe["product_id"]:
+        if product_id := self.current_recipe.get("product_id"):
             # Recipe has a producing product, then fetch info and continue flow with product state
             await self._state.load_product_by_id(product_id)
             _LOGGER.info(

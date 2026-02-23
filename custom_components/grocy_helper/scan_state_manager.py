@@ -105,6 +105,7 @@ class ScanStateManager:
         Returns the product and updates current_stock_info.
         """
         try:
+            # TODO: Consider caching loaded products in coordinator to avoid redundant API calls
             stock_info = await self._api_grocy.get_stock_product_by_id(product_id)
             self.set_stock_info(stock_info)
             return self.current_product
@@ -118,6 +119,7 @@ class ScanStateManager:
         Returns the product, or None if not found.
         """
         try:
+            # TODO: Consider caching loaded products in coordinator to avoid redundant API calls
             stock_info = await self._api_grocy.get_stock_product_by_barcode(barcode)
             self.set_stock_info(stock_info)
             return self.current_product
