@@ -125,7 +125,9 @@
                     "default_consume_location_id": "Default consume location",
                     "product_quantity": "Product quantity",
                     "qu_id_product": "Product quantity unit",
-                    "calories_per_100": "Calories per 100 (g/ml)"
+                    "calories_per_100": "Calories per 100 (g/ml)",
+                    "default_best_before_days_after_freezing": "Default best before days after freezing",
+                    "default_best_before_days_after_thawing": "Default best before days after thawing"
                 },
                 "data_description": {
                     "default_consume_location_id": "Where are usually opened products placed? These will be consumed first",

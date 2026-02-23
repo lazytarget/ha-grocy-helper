@@ -280,9 +280,13 @@ class ScanSession:
 
         # Process barcode based on mode
         if self._should_process_product_lookup():
+            _LOGGER.info("Looking up barcode '%s' in Grocy...", code)
+
             if code == "grcy:r":
                 # Create recipe
-                return await self._step_add_recipe(user_input=None)
+                result = await self._step_add_recipe(user_input=None)
+                if result is not None:
+                    return result
 
             # Handle recipe barcodes
             if "grcy:r:" in code:
@@ -438,6 +442,14 @@ class ScanSession:
 
         # Load full product info via state manager
         await self._state.load_product_by_id(product["id"])
+
+        # Link recipe to product if needed
+        if (
+            self.current_product
+            and self.current_recipe
+            and not self.current_recipe.get("product_id")
+        ):
+            await self._link_recipe_to_product()
 
         return await self._step_add_product_barcode(None)
 
@@ -775,16 +787,31 @@ class ScanSession:
         )
 
         # Create recipe
-        _LOGGER.info("Creating recipe: %s", new_recipe)
         recipe = await self._coordinator.create_recipe(new_recipe)
         _LOGGER.info("Created recipe: %s", recipe)
 
-        # Done with recipe → continue with queue
-        return await self._handle_scan_success(
-            response={
-                "message": f"Recipe '{recipe['name']}' with id {recipe['id']} created successfully!"
-            }
+        self._state.current_recipe = recipe
+
+        self.barcode_queue.pop(0)
+        self.barcode_results.append(
+            f"Created recipe {self.current_recipe['name']} with id {recipe['id']}"
         )
+
+        _LOGGER.info(
+            "Inserting barcode for created recipe into queue: %s",
+            f"grcy:r:{self.current_recipe['id']}",
+        )
+        self.barcode_queue.insert(0, f"grcy:r:{self.current_recipe['id']}")
+        return await self._step_scan_queue()
+
+        # # Done with recipe creation → finish flow
+        # return await self._handle_scan_success(
+        #     response={
+        #         "message": f"Recipe '{recipe['name']}' with id {recipe['id']} created successfully!"
+        #     }
+        # )
+
+        # return None  # continue queue processing
 
     # ── scan_process ─────────────────────────────────────────────────
 
@@ -976,7 +1003,7 @@ class ScanSession:
         self, user_input: dict[str, Any]
     ) -> StepResult | None:
         """Process the product_id field. Returns error result or None."""
-        self._state.current_product = None
+        # self._state.current_product = None
 
         p = user_input.get("product_id")
         if not p:
@@ -993,17 +1020,23 @@ class ScanSession:
             await self._state.load_product_by_id(i)
 
             # Link recipe to product if needed
-            if self.current_product and self.current_recipe:
+            if (
+                self.current_product
+                and self.current_recipe
+                and not self.current_recipe.get("product_id")
+            ):
                 await self._link_recipe_to_product()
 
         # If not found or was a string, create new product template
         if self.current_product is None:
-            self._state.current_product = {
-                "name": p if p != "-1" else None,
-                "parent_product_id": (
-                    self.current_parent.get("id") if self.current_parent else None
-                ),
-            }
+            self._state.set_product(
+                {
+                    "name": p if p != "-1" else None,
+                    "parent_product_id": (
+                        self.current_parent.get("id") if self.current_parent else None
+                    ),
+                }
+            )
             # TODO: Simplify
 
             # Add recipe defaults
