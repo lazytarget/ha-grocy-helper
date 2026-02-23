@@ -1005,7 +1005,7 @@ class ScanSession:
         self, user_input: dict[str, Any]
     ) -> StepResult | None:
         """Process the product_id field. Returns error result or None."""
-        # self._state.current_product = None
+        self._state.set_product(None)
 
         p = user_input.get("product_id")
         if not p:

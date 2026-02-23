@@ -15,7 +15,7 @@ from .grocytypes import GrocyMasterData, GrocyRecipe
 
 
 class RecipeDataBuilder:
-    """Builds and transforms product data structures."""
+    """Builds and transforms recipe data structures."""
 
     def __init__(self, coordinator: GrocyHelperCoordinator):
         """Initialize with Grocy masterdata.
