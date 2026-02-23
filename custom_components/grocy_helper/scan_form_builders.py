@@ -512,8 +512,16 @@ class ScanFormBuilder:
         base_recipe: dict | None = None,
     ) -> list[FormField]:
         """Build fields for the create-recipe form."""
-        
-        pass
+        base_recipe = base_recipe or {}
+        fields: list[FormField] = [
+            FormField(
+                key="name",
+                field_type=FieldType.TEXT,
+                required=True,
+                suggested_value=base_recipe.get("name"),
+            )
+        ]
+        return fields
 
     def build_scan_process_fields(
         self,

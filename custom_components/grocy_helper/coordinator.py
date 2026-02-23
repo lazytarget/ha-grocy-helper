@@ -20,6 +20,7 @@ from .grocytypes import (
     GrocyProduct,
     GrocyQuantityUnitConversionResolved,
     GrocyQuantityUnitConversionResult,
+    GrocyRecipe,
     OpenFoodFactsProduct,
 )
 from .const import OpenFoodFacts
@@ -344,6 +345,29 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
         """Add stock for a product (purchase transaction)."""
         _LOGGER.info("Adding stock for product #%s: %s", product_id, stock_data)
         return await self._api_grocy.add_stock_product(product_id, stock_data)
+
+    async def create_recipe(
+        self, data: GrocyRecipe
+    ) -> dict[str, Any]:
+        """Create a recipe in Grocy."""
+        _LOGGER.info("Creating recipe: %s", data)
+        result = await self._api_grocy.create_recipe(data)
+        if not(isinstance(result, dict) and "created_object_id" in result):
+            # Error?
+            pass
+
+        data["id"] = result["created_object_id"]
+        _LOGGER.info("created recipe: %s", data)
+
+        # Add to local cache
+        if self.data and "recipes" in self.data:
+            _LOGGER.debug(
+                "Adding recipe #%s to cache: %s",
+                data.get("id"),
+                data.get("name"),
+            )
+            self.data["recipes"].append(data)
+        return result
 
     async def update_recipe(
         self, recipe_id: int, changes: dict[str, Any]

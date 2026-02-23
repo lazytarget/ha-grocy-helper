@@ -210,6 +210,7 @@ class ScanSession:
             Step.SCAN_UPDATE_PRODUCT_DETAILS: self._step_update_product_details,
             Step.SCAN_TRANSFER_START: self._step_transfer_start,
             Step.SCAN_TRANSFER_INPUT: self._step_transfer_input,
+            Step.SCAN_ADD_RECIPE: self._step_add_recipe,
             Step.SCAN_PROCESS: self._step_scan_process,
         }
         handler = handlers.get(step_id)
@@ -283,6 +284,10 @@ class ScanSession:
 
         # Process barcode based on mode
         if self._should_process_product_lookup():
+            if code == 'grcy:r':
+                # Create recipe
+                return await self._step_add_recipe(user_input=None)
+
             # Handle recipe barcodes
             if "grcy:r:" in code:
                 result = await self._handle_recipe_barcode(code, masterdata)
@@ -758,6 +763,35 @@ class ScanSession:
         )
         return await self._step_scan_queue()
 
+    # ── add_recipe ──────────────────────────────────────────────────
+
+    async def _step_add_recipe(self, user_input: dict[str, Any] | None) -> StepResult:
+        """Create a new recipe in Grocy."""
+
+        if self.current_recipe and self.current_recipe.get("id"):
+            return AbortResult(reason="Recipe already exists")
+
+        new_recipe: GrocyRecipe = {}
+
+        # First render - show form
+        if user_input is None:
+            return self._show_add_recipe_form(new_recipe, {})
+
+        # ── process submitted form ──────────────────────────────────
+
+        # Build new recipe from input
+        new_recipe = self._recipe_builder.build_recipe_from_input(
+            user_input, new_recipe
+        )
+
+        # Create recipe
+        _LOGGER.info("Creating recipe: %s", new_recipe)
+        recipe = await self._coordinator.create_recipe(new_recipe)
+        _LOGGER.info("Created recipe: %s", recipe)
+
+        # Done with recipe → continue with queue
+        return await self._handle_scan_success()
+
     # ── scan_process ─────────────────────────────────────────────────
 
     async def _step_scan_process(self, user_input: dict[str, Any] | None) -> StepResult:
@@ -895,6 +929,24 @@ class ScanSession:
             errors={},
         )
         return self._cached_form
+
+    def _show_add_recipe_form(
+        self, product: dict[str, Any], errors: dict[str, str]
+    ) -> FormRequest:
+        """Build and return the add-recipe form."""
+        fields = self._form_builder.build_create_recipe_fields()
+        aliases = self._get_aliases()
+        return FormRequest(
+            step_id=Step.SCAN_ADD_RECIPE,
+            fields=fields,
+            description_placeholders={
+                "name": product.get("name"),
+                "barcode": self.current_barcode,
+                "product_aliases": "\n".join([f"- {a.strip()}" for a in aliases if a]),
+                "lookup_output": (self.current_lookup or {}).get("lookup_output"),
+            },
+            errors=errors,
+        )
 
     async def _process_parent_selection(
         self, user_input: dict[str, Any]
@@ -1415,11 +1467,12 @@ class ScanSession:
         _LOGGER.info("SCAN-RESP: %s", response)
         return response
 
-    async def _handle_scan_success(self, response: dict) -> StepResult:
+    async def _handle_scan_success(self, response: dict | None = None) -> StepResult:
         """Handle successful scan."""
         self.barcode_queue.pop(0)
-        # TODO: handle responses with HTML-tags (warning/error messages)
-        self.barcode_results.append(str(response))
+        if response:
+            # TODO: handle responses with HTML-tags (warning/error messages)
+            self.barcode_results.append(str(response))
         # Re-run process method until queue is empty...
         return await self._step_scan_queue()
 

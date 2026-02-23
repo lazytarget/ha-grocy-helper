@@ -53,7 +53,7 @@ class RecipeDataBuilder:
         recipe["base_servings"] = user_input.get("base_servings", 4)
         recipe["desired_servings"] = user_input.get("desired_servings", 1)
         recipe["description"] = user_input.get("description", "")
-        recipe["type"] = user_input.get("type", "standard")
+        recipe["type"] = user_input.get("type", "normal")
 
         recipe["row_created_timestamp"] = dt.datetime.now().strftime(
             "%Y-%m-%d %H:%M:%S"
