@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .coordinator import GrocyHelperCoordinator
 from .const import DEV_CONST, SCAN_MODE
 from .grocytypes import GrocyMasterData, GrocyProduct
 from .scan_types import FieldType, FormField, NumberMode, SelectMode, SelectOption
@@ -17,15 +18,20 @@ from .scan_types import FieldType, FormField, NumberMode, SelectMode, SelectOpti
 class ScanFormBuilder:
     """Build form fields for the scanning workflow."""
 
-    def __init__(self, masterdata: GrocyMasterData):
+    def __init__(self, coordinator: GrocyHelperCoordinator):
         """Initialize the form builder.
 
         Parameters
         ----------
-        masterdata:
-            A ``GrocyMasterData`` dict with locations, products, etc.
+        coordinator:
+            A ``GrocyHelperCoordinator`` instance that handles persistence
+            and masterdata cache updates.
         """
-        self._masterdata = masterdata
+        self._coordinator = coordinator
+
+    @property
+    def _masterdata(self) -> GrocyMasterData:
+        return self._coordinator.data
 
     def build_scan_start_fields(self, scan_mode: SCAN_MODE | None) -> list[FormField]:
         """Build fields for the scan-start form."""
@@ -37,7 +43,9 @@ class ScanFormBuilder:
                 key="mode",
                 field_type=FieldType.SELECT,
                 required=False,
-                suggested_value=DEV_CONST.get("default_scan_mode", SCAN_MODE.SCAN_BBUDDY),
+                suggested_value=DEV_CONST.get(
+                    "default_scan_mode", SCAN_MODE.SCAN_BBUDDY
+                ),
                 select_mode=SelectMode.LIST,
                 # translation_key="scan_mode",
                 options=[
@@ -58,7 +66,9 @@ class ScanFormBuilder:
                         value=SCAN_MODE.PURCHASE,
                         label="Purchase / Produce",
                     ),
-                    SelectOption(value=SCAN_MODE.TRANSFER, label="Transfer"),  # TODO: only add option if has more than 1 locations setup
+                    SelectOption(
+                        value=SCAN_MODE.TRANSFER, label="Transfer"
+                    ),  # TODO: only add option if has more than 1 locations setup
                     SelectOption(value=SCAN_MODE.OPEN, label="Open"),
                     SelectOption(value=SCAN_MODE.INVENTORY, label="Inventory"),
                     # selector.SelectOptionDict(    # merge with Inventory-action
@@ -484,9 +494,11 @@ class ScanFormBuilder:
                     suggested_value=stock_entry["amount"],
                     default=stock_entry["amount"],
                     number_mode=NumberMode.SLIDER,
-                    step=product.get("quick_consume_amount", 1) or 1,   # follow consume amount for how many quantities can be transfered
-                    min_value=product.get("quick_consume_amount", 1) or 1,  # transfer at least 1
-                    max_value=stock_entry["amount"],    # maxium allowed to move all
+                    step=product.get("quick_consume_amount", 1)
+                    or 1,  # follow consume amount for how many quantities can be transfered
+                    min_value=product.get("quick_consume_amount", 1)
+                    or 1,  # transfer at least 1
+                    max_value=stock_entry["amount"],  # maxium allowed to move all
                 ),
             )
 

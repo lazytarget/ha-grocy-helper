@@ -8,12 +8,9 @@ data, and transforming data for API requests.
 from __future__ import annotations
 
 import datetime as dt
-import logging
 from typing import Any
 
 from .grocytypes import GrocyMasterData, GrocyRecipe
-
-_LOGGER = logging.getLogger(__name__)
 
 
 class RecipeDataBuilder:
@@ -31,8 +28,7 @@ class RecipeDataBuilder:
 
     @staticmethod
     def build_recipe_from_input(
-        user_input: dict[str, Any],
-        base_recipe: dict[str, Any] | None = None
+        user_input: dict[str, Any], base_recipe: dict[str, Any] | None = None
     ) -> GrocyRecipe:
         """Build a new recipe dict from user input.
 
