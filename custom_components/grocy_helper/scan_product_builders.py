@@ -59,6 +59,7 @@ class ProductDataBuilder:
         -------
             Dictionary with merged values
         """
+        # TODO: Obsolete, by transform_input method
         suggested: dict[str, Any] = {}
         for k in keys:
             val = user_input.get(k, product.get(k))

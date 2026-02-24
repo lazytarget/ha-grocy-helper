@@ -120,13 +120,14 @@ class ScanSession:
                 "default_fridge": 2,
                 "default_freezer": 5,
             },
+            # TODO: Add units? or still use "known_qu"
             "defaults": {
-                "should_not_be_frozen": False,
-                "default_best_before_days": 3,
+                "default_best_before_days": 5,
                 "default_best_before_days_after_opening": 3,
             },
             "defaults_for_recipe_product": {
                 "should_not_be_frozen": False,
+                "default_best_before_days": 3,
                 "default_best_before_days_after_freezing": 60,
                 "default_best_before_days_after_thawing": 3,
             },
@@ -433,7 +434,7 @@ class ScanSession:
 
         # First render - show form
         if user_input is None:
-            return self._show_add_product_form(new_product, {})
+            return self._show_add_product_form(user_input, new_product, {})
 
         # ── process submitted form ──────────────────────────────────
 
@@ -450,7 +451,7 @@ class ScanSession:
 
         # Validate location
         if errors := self._product_builder.validate_product_location(new_product):
-            return self._show_add_product_form(new_product, errors)
+            return self._show_add_product_form(user_input, new_product, errors)
 
         # Create product
         _LOGGER.info("Creating product: %s", new_product)
@@ -978,13 +979,22 @@ class ScanSession:
         return []
 
     def _show_add_product_form(
-        self, product: dict[str, Any], errors: dict[str, str]
+        self, user_input: dict[str, Any], product: dict[str, Any], errors: dict[str, str]
     ) -> FormRequest:
         """Build and return the add-product form."""
-        suggested = self._product_builder.merge_product_values(
-            {},
-            product,
-            [
+        defaults = (
+            self._get_recipe_product_defaults()
+            if self.current_recipe
+            else self._get_product_defaults()
+        )
+        _LOGGER.info("Defaults: %s", defaults)
+
+        # Resolve suggestions with a transform
+        suggested = self.transform_input(
+            user_input,
+            persisted=product,
+            suggested=defaults,
+            keys=[
                 "name",
                 "location_id",
                 "should_not_be_frozen",
