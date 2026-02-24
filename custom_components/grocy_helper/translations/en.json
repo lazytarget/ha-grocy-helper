@@ -84,6 +84,7 @@
                 "description": "{lookup_output}\n\n## Name suggestions\n{product_aliases}",
                 "data": {
                     "name": "Product name",
+                    "product_group_id": "Product group",
                     "location_id": "Default storage location",
                     "should_not_be_frozen": "Should not be frozen?",
                     "default_best_before_days": "Default best before days",
@@ -106,6 +107,7 @@
                 "description": "{lookup_output}\n\n## Name suggestions\n{product_aliases}",
                 "data": {
                     "name": "Product name",
+                    "product_group_id": "Product group",
                     "qu_id_stock": "Stock unit",
                     "qu_id_purchase": "Purchase unit",
                     "qu_id_consume": "Consume unit",

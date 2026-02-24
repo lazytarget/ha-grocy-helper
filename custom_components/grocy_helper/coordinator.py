@@ -77,7 +77,7 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
             _LOGGER.debug("Loaded products: %s", len(products))
 
             product_groups = await self._api_grocy.get_product_groups()
-            _LOGGER.debug("Loaded product groups: %s", len(product_groups))
+            _LOGGER.debug("Loaded product groups: %s", product_groups)
 
             recipes = await self._api_grocy.get_recipes()
             _LOGGER.debug("Loaded recipes: %s", len(recipes))
@@ -226,6 +226,7 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
         # ..let validation and fallback values be a part of Config flow not coordinator?
         new_product: GrocyProduct = {
             "name": user_input["name"],
+            "product_group_id": user_input.get("product_group_id"),
             "description": user_input.get("description"),
             "location_id": user_input["location_id"],
             "should_not_be_frozen": (

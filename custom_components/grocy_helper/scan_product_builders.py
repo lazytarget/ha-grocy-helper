@@ -87,6 +87,7 @@ class ProductDataBuilder:
         """
         product = base_product.copy()
         product["name"] = user_input["name"]
+        product["product_group_id"] = user_input.get("product_group_id")
         product["location_id"] = user_input["location_id"]
         product["should_not_be_frozen"] = (
             1 if user_input.get("should_not_be_frozen", False) else 0

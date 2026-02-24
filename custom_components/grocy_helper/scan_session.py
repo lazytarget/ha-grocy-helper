@@ -120,6 +120,9 @@ class ScanSession:
                 "default_fridge": 2,
                 "default_freezer": 5,
             },
+            "product_groups": {
+                "default_for_recipe_products": 1,   # "Färdiglagat"
+            },
             # TODO: Add units? or still use "known_qu"
             "defaults_for_product": {
                 "default_best_before_days": 5,
@@ -427,11 +430,13 @@ class ScanSession:
 
     async def _step_add_product(self, user_input: dict[str, Any] | None) -> StepResult:
         """Create a new product in Grocy."""
+        _LOGGER.info("form 'add_product' input: %s", user_input)
 
         if self.current_product and self.current_product.get("id"):
             return AbortResult(reason="Product already exists")
 
         new_product = (self.current_product or {}).copy()
+        _LOGGER.info("pre-filled 'new_product': %s", new_product)
 
         # First render - show form
         if user_input is None:
@@ -997,6 +1002,7 @@ class ScanSession:
             suggested=defaults,
             keys=[
                 "name",
+                "product_group_id",
                 "location_id",
                 "should_not_be_frozen",
                 "default_best_before_days",
@@ -1007,6 +1013,7 @@ class ScanSession:
                 "qu_id_price",
             ],
         )
+        _LOGGER.info("Suggested: %s", suggested)
         fields = self._form_builder.build_create_product_fields(
             suggested, creating_parent=False
         )
@@ -1180,6 +1187,7 @@ class ScanSession:
         # Since this is a 'cooked' product, it belongs in the Fridge or Freezer. As default, suggest to Freeze it first
         suggestions["location_id"] = locations.get("default_freezer")
         suggestions["default_consume_location_id"] = locations.get("default_fridge")
+        suggestions["product_group_id"] = self.scan_options.get("product_groups", {}).get("default_for_recipe_products")
         return suggestions
 
     def _complete_scan_queue(self) -> CompletedResult:
@@ -1430,6 +1438,11 @@ class ScanSession:
         plc = {
             "name": product.get("name"),
             "barcode": self.current_barcode,
+            "recipe_info": (
+                f"## Recipe\n#{self.current_recipe['id']} {self.current_recipe['name']}"
+                if self.current_recipe
+                else None
+            ),
             "product_aliases": "\n".join([f"- {a.strip()}" for a in aliases if a]),
             "lookup_output": (self.current_lookup or {}).get("lookup_output"),
         }
