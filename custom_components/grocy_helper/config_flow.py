@@ -51,17 +51,21 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(
             CONF_GROCY_API_URL,
-            description="Grocy API url",
-            default="http://localhost:4010",
+            description={
+                "description": "Grocy API url",
+                "suggested_value": "http://localhost:4010",
+            },
         ): cv.string,
-        vol.Required(CONF_GROCY_API_KEY, description="Grocy API Key"): cv.string,
-        vol.Required(
+        vol.Required(CONF_GROCY_API_KEY, {"description": "Grocy API Key"}): cv.string,
+        vol.Optional(
             CONF_BBUDDY_API_URL,
-            description="Barcode Buddy API url",
-            default="http://localhost:4011",
+            description={
+                "description": "Barcode Buddy API url",
+                "suggested_value": "http://localhost:4011",
+            },
         ): cv.string,
-        vol.Required(
-            CONF_BBUDDY_API_KEY, description="Barcode Buddy API Key"
+        vol.Optional(
+            CONF_BBUDDY_API_KEY, description={"description": "Barcode Buddy API Key"}
         ): cv.string,
     }
 )
@@ -90,8 +94,8 @@ class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             grocy_url = user_input[CONF_GROCY_API_URL]
             grocy_api_key = user_input[CONF_GROCY_API_KEY]
-            bbuddy_url = user_input[CONF_BBUDDY_API_URL]
-            bbuddy_api_key = user_input[CONF_BBUDDY_API_KEY]
+            bbuddy_url = user_input.get(CONF_BBUDDY_API_URL)
+            bbuddy_api_key = user_input.get(CONF_BBUDDY_API_KEY)
 
             # Assign unique id based on ApiKey, as host/port setup might change overtime...
             # TODO: Make a non-reversable hash of the ApiKey
@@ -130,8 +134,8 @@ class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             grocy_url = user_input[CONF_GROCY_API_URL]
             grocy_api_key = user_input[CONF_GROCY_API_KEY]
-            bbuddy_url = user_input[CONF_BBUDDY_API_URL]
-            bbuddy_api_key = user_input[CONF_BBUDDY_API_KEY]
+            bbuddy_url = user_input.get(CONF_BBUDDY_API_URL)
+            bbuddy_api_key = user_input.get(CONF_BBUDDY_API_KEY)
 
             # Assign unique id based on ApiKey, as host/port setup might change overtime...
             # TODO: Make a non-reversable hash of the ApiKey
@@ -151,9 +155,14 @@ class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 data_updates=config_entry_data,
             )
 
+        schema = STEP_USER_DATA_SCHEMA
+        schema = self.add_suggested_values_to_schema(
+            schema, self._get_reconfigure_entry().data
+        )
+
         return self.async_show_form(
             step_id="reconfigure",
-            data_schema=STEP_USER_DATA_SCHEMA,
+            data_schema=schema,
             errors=errors,
         )
 

@@ -2,7 +2,7 @@
 
 from aiohttp import ClientSession, FormData
 
-from .const import API, SCAN_MODE
+from .const import API, DEV_CONST, SCAN_MODE
 from .grocytypes import (
     BarcodeBuddyScanRequest,
     BarcodeBuddyScanResponse,
@@ -39,6 +39,9 @@ class BarcodeBuddyAPI:
         return "/".join([self._base_url, endpoint])
 
     def convert_scan_mode_to_bbuddy_mode(self, mode: SCAN_MODE) -> int:
+        if mode == SCAN_MODE.SCAN_BBUDDY:
+            return -1
+
         if mode == SCAN_MODE.CONSUME:
             return 0
         elif mode == SCAN_MODE.CONSUME_SPOILED:
@@ -55,7 +58,10 @@ class BarcodeBuddyAPI:
             return 6
         return -1
 
-    def convert_bbuddy_mode_to_scan_mode(self, bb_mode: int) -> SCAN_MODE:
+    def convert_bbuddy_mode_to_scan_mode(self, bb_mode: int) -> SCAN_MODE | None:
+        if bb_mode == -1:
+            return SCAN_MODE.SCAN_BBUDDY
+
         if bb_mode == 0:
             return SCAN_MODE.CONSUME
         elif bb_mode == 1:
@@ -96,4 +102,65 @@ class BarcodeBuddyAPI:
         fd = FormData(request)
         return await async_post(
             self._session, url, self._api_key, data=fd, content_type=False
+        )
+
+
+class BarcodeBuddyAPI_Fake:
+    """Class to integrate with a "FAKE"."""
+    mode: int = 0
+
+    def __init__(self) -> None:
+        self.mode: int = self.convert_scan_mode_to_bbuddy_mode(DEV_CONST.get("default_scan_mode", SCAN_MODE.CONSUME_SPOILED))
+
+    def convert_scan_mode_to_bbuddy_mode(self, mode: SCAN_MODE) -> int:
+        if mode == SCAN_MODE.SCAN_BBUDDY:
+            return self.mode
+
+        if mode == SCAN_MODE.CONSUME:
+            return 0
+        elif mode == SCAN_MODE.CONSUME_SPOILED:
+            return 1
+        elif mode == SCAN_MODE.PURCHASE:
+            return 2
+        elif mode == SCAN_MODE.OPEN:
+            return 3
+        elif mode == SCAN_MODE.INVENTORY:
+            return 4
+        elif mode == SCAN_MODE.ADD_TO_SHOPPING_LIST:
+            return 5
+        elif mode == SCAN_MODE.CONSUME_ALL:
+            return 6
+        return -1
+
+    def convert_bbuddy_mode_to_scan_mode(self, bb_mode: int) -> SCAN_MODE | None:
+        if bb_mode == -1:
+            return SCAN_MODE.SCAN_BBUDDY
+        
+        if bb_mode == 0:
+            return SCAN_MODE.CONSUME
+        elif bb_mode == 1:
+            return SCAN_MODE.CONSUME_SPOILED
+        elif bb_mode == 2:
+            return SCAN_MODE.PURCHASE
+        elif bb_mode == 3:
+            return SCAN_MODE.OPEN
+        elif bb_mode == 4:
+            return SCAN_MODE.INVENTORY
+        elif bb_mode == 5:
+            return SCAN_MODE.ADD_TO_SHOPPING_LIST
+        elif bb_mode == 6:
+            return SCAN_MODE.CONSUME_ALL
+        return None
+
+    async def get_mode(self) -> int:
+        return self.mode
+
+    async def set_mode(self, mode: int):
+        self.mode = mode
+
+    async def post_scan(
+        self, request: BarcodeBuddyScanRequest
+    ) -> BarcodeBuddyScanResponse:
+        raise NotImplementedError(
+            f"Fake API does not implement the scan action '{self.mode}' ({self.convert_bbuddy_mode_to_scan_mode(self.mode)}) for barcode '{request['barcode']}'"
         )
