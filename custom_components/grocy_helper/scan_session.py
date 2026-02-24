@@ -121,7 +121,7 @@ class ScanSession:
                 "default_freezer": 5,
             },
             "product_groups": {
-                "default_for_recipe_products": 1,   # "Färdiglagat"
+                "default_for_recipe_products": 1,  # "Färdiglagat"
             },
             # TODO: Add units? or still use "known_qu"
             "defaults_for_product": {
@@ -985,7 +985,10 @@ class ScanSession:
         return []
 
     def _show_add_product_form(
-        self, user_input: dict[str, Any], product: dict[str, Any], errors: dict[str, str]
+        self,
+        user_input: dict[str, Any],
+        product: dict[str, Any],
+        errors: dict[str, str],
     ) -> FormRequest:
         """Build and return the add-product form."""
         defaults = (
@@ -1187,7 +1190,9 @@ class ScanSession:
         # Since this is a 'cooked' product, it belongs in the Fridge or Freezer. As default, suggest to Freeze it first
         suggestions["location_id"] = locations.get("default_freezer")
         suggestions["default_consume_location_id"] = locations.get("default_fridge")
-        suggestions["product_group_id"] = self.scan_options.get("product_groups", {}).get("default_for_recipe_products")
+        suggestions["product_group_id"] = self.scan_options.get(
+            "product_groups", {}
+        ).get("default_for_recipe_products")
         return suggestions
 
     def _complete_scan_queue(self) -> CompletedResult:
@@ -1505,6 +1510,14 @@ class ScanSession:
             gram_unit["id"],
             1,
         )
+        if not c:
+            _LOGGER.warning(
+                "No conversion found from product QU to grams/ml, cannot calculate calories per pack. %s -> %s",
+                product["qu_id_stock"],
+                gram_unit["id"],
+            )
+            return None
+
         # TODO: handle c is None
         _LOGGER.warning(
             "Converted: %s %s -> %s %s",
