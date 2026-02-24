@@ -609,36 +609,19 @@ class ScanSession:
         if user_input is None:
             user_input = {}
 
-        # Initialize input with defaults from current product
-        user_input = self._product_builder.initialize_product_details_input(
-            user_input, self.current_product
+        # Suggestions
+        suggestions = (
+            self._get_recipe_product_defaults()
+            if self.current_recipe
+            else self._get_product_defaults()
         )
-        _LOGGER.info("Initialized input from current product: %s", user_input)
-        if show_form:
-            # Initial render, pre-fill some suggestions...
+        _LOGGER.info("Suggestions: %s", suggestions)
 
-            if not user_input.get("default_consume_location_id") and (loc_id := self.scan_options.get("locations", {}).get("default_fridge")):
-                user_input["default_consume_location_id"] = loc_id
-
-            # Pre-fill with default suggestions
-            user_input |= self.scan_options.get("defaults", {})
-
-            if self.current_recipe:
-                # Pre-fill suggestions for new recipe products
-                user_input |= self.scan_options.get("defaults_for_recipe_product")
-
-                if loc_id := self.scan_options.get("locations", {}).get("default_freezer"):
-                    user_input["location_id"] = loc_id
-                _LOGGER.info("Pre-filled input for recipe product: %s", user_input)
-            else:
-                # Regular product..
-                _LOGGER.info("Pre-filled input for product: %s", user_input)
-
-            # TODO: Dynamically set some fields
-            # - Consume location 'primary fridge'
-            # - Product quantity '1' ?
-            # - Product quantity unit 'portion' ?
-            # - Calories per 100 (calculate from ingredients)
+        # Initialize and transform input based on states
+        user_input = self._product_builder.transform_input(
+            user_input, persisted=self.current_product, suggested=suggestions
+        )
+        _LOGGER.info("Transformed user_input: %s", user_input)
 
         if self.current_product_ica is not None:
             # TODO: fill in info from ICA...
@@ -673,9 +656,23 @@ class ScanSession:
 
         # First render - show form
         if show_form:
+            # Initial render, pre-fill some extra suggestions...
+            # TODO: Dynamically set some fields
+            # - Product quantity '1' ?
+            # - Product quantity unit 'portion' ?
+            # - Calories per 100 (calculate from ingredients)
+
+            # user_input = self._product_builder.transform_input(
+            #     user_input, persisted=self.current_product, suggested={
+            #         "calories_per_100": kcal
+            #     }
+            # )
+            # _LOGGER.info("Transformed user_input extra: %s", user_input)
+
             user_input = self._prepare_form_defaults(
                 user_input, qu_id_product, product_quantity, kcal
             )
+            _LOGGER.info("Transformed user_input defaults: %s", user_input)
             return self._show_update_product_details_form(user_input, product, errors)
 
         # ── process submitted values ────────────────────────────────
@@ -1120,6 +1117,29 @@ class ScanSession:
                 "default_best_before_days_after_thawing": 3,
             }
         )
+
+    def _get_product_defaults(self) -> None:
+        """Get the default values for products."""
+        return self.scan_options.get("defaults", {}).copy()
+
+    def _get_recipe_product_defaults(self) -> None:
+        """Get the default values for recipe products."""
+        locations = self.scan_options.get("locations", {})
+
+        # Start with base product defaults
+        base = self._get_product_defaults()
+        suggestions = {}
+        suggestions |= base
+
+        # Update with 'recipe product' defaults
+        if over := self.scan_options.get("defaults_for_recipe_product"):
+            suggestions |= over
+
+        # Resolve dynamic fields manually:
+        # Since this is a 'cooked' product, it belongs in the Fridge or Freezer. As default, suggest to Freeze it first
+        suggestions["location_id"] = locations.get("default_freezer")
+        suggestions["default_consume_location_id"] = locations.get("default_fridge")
+        return suggestions
 
     def _complete_scan_queue(self) -> CompletedResult:
         """Return completed result when queue is empty."""
