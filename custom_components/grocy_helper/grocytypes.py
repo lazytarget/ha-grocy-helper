@@ -65,6 +65,12 @@ class GrocyAddProductQuantityUnitConversion(TypedDict):
     product_id: int
     row_created_timestamp: str
 
+class GrocyProductGroup(TypedDict):
+    id: int
+    name: str
+    description: str | None
+    row_created_timestamp: str
+    active: int
 
 class GrocyProduct(TypedDict):
     id: int
@@ -77,7 +83,7 @@ class GrocyProduct(TypedDict):
     qu_id_price: int
     row_created_timestamp: str
     # Optional
-    description: None
+    description: str | None
     product_group_id: int | None
     active: int
     shopping_location_id: int | None
@@ -86,12 +92,12 @@ class GrocyProduct(TypedDict):
     default_best_before_days_after_open: int
     default_best_before_days_after_freezing: int
     default_best_before_days_after_thawing: int
-    picture_file_name: None
+    picture_file_name: str | None
     enable_tare_weight_handling: int
     tare_weight: int
     not_check_stock_fulfillment_for_recipes: int
     parent_product_id: int | None
-    calories: int
+    calories: int | None
     cumulate_min_stock_amount_of_sub_products: int
     due_type: int
     quick_consume_amount: int
@@ -191,6 +197,7 @@ class GrocyMasterData(TypedDict):
     shopping_locations: list[GrocyShoppingLocation]
     quantity_units: list[GrocyQuantityUnit]
     products: list[GrocyProduct]
+    product_groups: list[GrocyProductGroup]
     recipes: list[GrocyRecipe]
     known_qu: dict[str, GrocyQuantityUnit | None]
 
