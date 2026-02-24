@@ -569,6 +569,11 @@ class ScanSession:
             plc = {
                 "name": new_product.get("name") if new_product else None,
                 "barcode": code,
+                "recipe_info": (
+                    f"## Recipe\n#{self.current_recipe['id']} {self.current_recipe['name']}"
+                    if self.current_recipe
+                    else None
+                ),
                 "product_aliases": "\n".join([f"- {a.strip()}" for a in aliases if a]),
                 "lookup_output": (self.current_lookup or {}).get("lookup_output"),
             }

@@ -142,7 +142,7 @@
             },
             "scan_add_product_barcode": {
                 "title": "Add barcode to {name}",
-                "description": "{lookup_output}{recipe_info}\n\n## Name suggestions\n{product_aliases}",
+                "description": "{lookup_output}\n\n## Name suggestions\n{product_aliases}",
                 "data": {
                     "note": "Barcode note",
                     "shopping_location_id": "Default shopping location",
