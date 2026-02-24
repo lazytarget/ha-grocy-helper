@@ -37,7 +37,7 @@ from typing import Any
 
 from .barcodebuddyapi import BarcodeBuddyAPI
 from .coordinator import GrocyHelperCoordinator
-from .const import SCAN_MODE
+from .const import SCAN_MODE, NUMERIC_FIELDS
 from .grocytypes import (
     BarcodeLookup,
     ExtendedGrocyProductStockInfo,
@@ -113,10 +113,8 @@ class ScanSession:
             "input_shoppingLocationId": True,
             "input_product_details_during_provision": True,
             # TODO: Enable detailed Barcode details; defaults for: [shopping_location_id, qu_id, amount] for specific Barcode
-            
             # Whether the "add_product_barcode" form should be shown for manual input during the creation of a recipe produced product.
             "show_add_product_barcode_form_for_recipe_product": False,
-
             # The values can be pre-filled during the generation of a recipe produced product
             "locations": {
                 "default_fridge": 2,
@@ -470,11 +468,13 @@ class ScanSession:
         ):
             await self._link_recipe_to_product()
 
-        if self.current_recipe and not self.scan_options.get("show_add_product_barcode_form_for_recipe_product"):
+        if self.current_recipe and not self.scan_options.get(
+            "show_add_product_barcode_form_for_recipe_product"
+        ):
             # Submit automatically...
-            return await self._step_add_product_barcode(user_input={
-                "note": self.current_recipe["name"]
-            })
+            return await self._step_add_product_barcode(
+                user_input={"note": self.current_recipe["name"]}
+            )
         return await self._step_add_product_barcode(user_input=None)
 
     # ── add_product_parent ───────────────────────────────────────────
@@ -618,7 +618,7 @@ class ScanSession:
         _LOGGER.info("Suggestions: %s", suggestions)
 
         # Initialize and transform input based on states
-        user_input = self._product_builder.transform_input(
+        user_input = self.transform_input(
             user_input, persisted=self.current_product, suggested=suggestions
         )
         _LOGGER.info("Transformed user_input: %s", user_input)
@@ -662,7 +662,7 @@ class ScanSession:
             # - Product quantity unit 'portion' ?
             # - Calories per 100 (calculate from ingredients)
 
-            # user_input = self._product_builder.transform_input(
+            # user_input = self.transform_input(
             #     user_input, persisted=self.current_product, suggested={
             #         "calories_per_100": kcal
             #     }
@@ -917,6 +917,49 @@ class ScanSession:
     # Form-field builders - now in scan_form_builders.py
     # =================================================================
     # All form building logic has been moved to ScanFormBuilder class
+
+    # =================================================================
+    # Public helpers
+    # =================================================================
+
+    @staticmethod
+    def transform_input(
+        user_input: dict | None,
+        persisted: dict | None,
+        suggested: dict | None,
+        keys: list[str] | None = None,
+    ) -> dict:
+        """Resolve input by merging user input, persisted data, and suggested data.
+
+        Parameters
+        ----------
+        user_input:
+            Submitted user input (highest precedence)
+        persisted:
+            Persisted product data (medium precedence)
+        suggested:
+            Suggested product data (lowest precedence)
+        keys:
+            List of keys to resolve (if None, resolve all keys present in any dict)
+
+        Returns
+        -------
+            User input dictionary with defaults filled in
+        """
+        user_input = user_input or {}
+        persisted = persisted or {}
+        suggested = suggested or {}
+        if keys is None:
+            # By default, resolve all keys present in any of the dictionaries
+            # keys = set(user_input) | set(persisted) | set(suggested)
+            keys = set(user_input) | set(suggested)
+
+        for key in keys:
+            val = user_input.get(key, persisted.get(key) or suggested.get(key))
+            if key not in NUMERIC_FIELDS:
+                val = str(val) if val is not None else None
+            user_input[key] = val
+        return user_input
 
     # =================================================================
     # Private helpers
