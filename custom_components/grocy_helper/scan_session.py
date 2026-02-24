@@ -121,13 +121,14 @@ class ScanSession:
                 "default_freezer": 5,
             },
             # TODO: Add units? or still use "known_qu"
-            "defaults": {
+            "defaults_for_product": {
                 "default_best_before_days": 5,
-                "default_best_before_days_after_opening": 3,
+                # "default_best_before_days_after_open": 3,
             },
             "defaults_for_recipe_product": {
                 "should_not_be_frozen": False,
                 "default_best_before_days": 3,
+                "default_best_before_days_after_open": 1,
                 "default_best_before_days_after_freezing": 60,
                 "default_best_before_days_after_thawing": 3,
             },
@@ -1141,9 +1142,9 @@ class ScanSession:
             )
             # TODO: Simplify
 
-            # Add recipe defaults
-            if self.current_recipe:
-                self._apply_recipe_product_defaults()
+            # # Add recipe defaults
+            # if self.current_recipe:
+            #     self._apply_recipe_product_defaults()
 
         return None
 
@@ -1158,22 +1159,9 @@ class ScanSession:
         )
         self.current_recipe.update(recipe_changes)
 
-    def _apply_recipe_product_defaults(self) -> None:
-        """Apply default settings for recipe-produced products."""
-        self.current_product.update(
-            {
-                "location_id": 5,  # TODO: Configurable default Freezer location
-                "default_consume_location_id": 2,  # TODO: Configurable default Fridge
-                "default_best_before_days": 3,
-                "default_best_before_days_after_open": 3,
-                "default_best_before_days_after_freezing": 60,
-                "default_best_before_days_after_thawing": 3,
-            }
-        )
-
     def _get_product_defaults(self) -> None:
         """Get the default values for products."""
-        return self.scan_options.get("defaults", {}).copy()
+        return self.scan_options.get("defaults_for_product", {}).copy()
 
     def _get_recipe_product_defaults(self) -> None:
         """Get the default values for recipe products."""
