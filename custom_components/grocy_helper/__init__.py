@@ -52,11 +52,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         ["GROCY-API-KEY", entry.data[CONF_GROCY_API_KEY]],
         websession,
     )
-    bbuddy_api_url = entry.data[CONF_BBUDDY_API_URL]
-    if bbuddy_api_url and entry.data[CONF_BBUDDY_API_KEY]:
+    bbuddy_api_url = entry.data.get(CONF_BBUDDY_API_URL)
+    if bbuddy_api_url and (bbuddy_api_key := entry.data.get(CONF_BBUDDY_API_KEY)):
         bbuddy = BarcodeBuddyAPI(
                 bbuddy_api_url,
-                ["BBUDDY-API-KEY", entry.data[CONF_BBUDDY_API_KEY]],
+                ["BBUDDY-API-KEY", bbuddy_api_key],
                 websession,
         )
     else:

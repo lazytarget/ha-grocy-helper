@@ -39,6 +39,9 @@ class BarcodeBuddyAPI:
         return "/".join([self._base_url, endpoint])
 
     def convert_scan_mode_to_bbuddy_mode(self, mode: SCAN_MODE) -> int:
+        if mode == SCAN_MODE.SCAN_BBUDDY:
+            return -1
+
         if mode == SCAN_MODE.CONSUME:
             return 0
         elif mode == SCAN_MODE.CONSUME_SPOILED:
@@ -55,7 +58,10 @@ class BarcodeBuddyAPI:
             return 6
         return -1
 
-    def convert_bbuddy_mode_to_scan_mode(self, bb_mode: int) -> SCAN_MODE:
+    def convert_bbuddy_mode_to_scan_mode(self, bb_mode: int) -> SCAN_MODE | None:
+        if bb_mode == -1:
+            return SCAN_MODE.SCAN_BBUDDY
+
         if bb_mode == 0:
             return SCAN_MODE.CONSUME
         elif bb_mode == 1:
@@ -126,7 +132,10 @@ class BarcodeBuddyAPI_Fake:
             return 6
         return -1
 
-    def convert_bbuddy_mode_to_scan_mode(self, bb_mode: int) -> SCAN_MODE:
+    def convert_bbuddy_mode_to_scan_mode(self, bb_mode: int) -> SCAN_MODE | None:
+        if bb_mode == -1:
+            return SCAN_MODE.SCAN_BBUDDY
+        
         if bb_mode == 0:
             return SCAN_MODE.CONSUME
         elif bb_mode == 1:
