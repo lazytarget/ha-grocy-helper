@@ -113,6 +113,25 @@ class ScanSession:
             "input_shoppingLocationId": True,
             "input_product_details_during_provision": True,
             # TODO: Enable detailed Barcode details; defaults for: [shopping_location_id, qu_id, amount] for specific Barcode
+            
+            # Whether the "add_product_barcode" form should be shown for manual input during the creation of a recipe produced product.
+            "show_add_product_barcode_form_for_recipe_product": False,
+
+            # The values can be pre-filled during the generation of a recipe produced product
+            "locations": {
+                "default_fridge": 2,
+                "default_freezer": 5,
+            },
+            "defaults": {
+                "should_not_be_frozen": False,
+                "default_best_before_days": 3,
+                "default_best_before_days_after_opening": 3,
+            },
+            "defaults_for_recipe_product": {
+                "should_not_be_frozen": False,
+                "default_best_before_days_after_freezing": 60,
+                "default_best_before_days_after_thawing": 3,
+            },
         }
 
         # ── workflow state ──────────────────────────────────────────
@@ -451,7 +470,12 @@ class ScanSession:
         ):
             await self._link_recipe_to_product()
 
-        return await self._step_add_product_barcode(None)
+        if self.current_recipe and not self.scan_options.get("show_add_product_barcode_form_for_recipe_product"):
+            # Submit automatically...
+            return await self._step_add_product_barcode(user_input={
+                "note": self.current_recipe["name"]
+            })
+        return await self._step_add_product_barcode(user_input=None)
 
     # ── add_product_parent ───────────────────────────────────────────
 
@@ -524,9 +548,10 @@ class ScanSession:
         self._cached_form = None
         code = self.current_barcode
 
-        new_product: GrocyProduct = (self.current_product_stock_info or {}).get(
-            "product"
-        )
+        # new_product: GrocyProduct = (self.current_product_stock_info or {}).get(
+        #     "product"
+        # )
+        new_product = self.current_product
 
         if user_input is None:
             suggested: dict[str, Any] = {
@@ -551,7 +576,7 @@ class ScanSession:
         # ── process ─────────────────────────────────────────────────
         br: GrocyProductBarcode = {
             "barcode": code,
-            "note": user_input["note"],
+            "note": user_input.get("note", ""),
             "product_id": new_product["id"],
             "qu_id": user_input.get("qu_id"),
             "shopping_location_id": user_input.get("shopping_location_id"),
@@ -574,10 +599,11 @@ class ScanSession:
         """Update product details (quantity, calories, shelf life)."""
 
         errors: dict[str, str] = {}
-        _LOGGER.info("form update-product: %s", user_input)
+        _LOGGER.info("form 'update_product_details': %s", user_input)
 
-        product_stock_info = self.current_product_stock_info
-        product = product_stock_info["product"]
+        # product_stock_info = self.current_product_stock_info
+        # product = product_stock_info["product"]
+        product = self.current_product
 
         show_form = user_input is None
         if user_input is None:
@@ -587,7 +613,32 @@ class ScanSession:
         user_input = self._product_builder.initialize_product_details_input(
             user_input, self.current_product
         )
-        _LOGGER.info("Updated input: %s", user_input)
+        _LOGGER.info("Initialized input from current product: %s", user_input)
+        if show_form:
+            # Initial render, pre-fill some suggestions...
+
+            if not user_input.get("default_consume_location_id") and (loc_id := self.scan_options.get("locations", {}).get("default_fridge")):
+                user_input["default_consume_location_id"] = loc_id
+
+            # Pre-fill with default suggestions
+            user_input |= self.scan_options.get("defaults", {})
+
+            if self.current_recipe:
+                # Pre-fill suggestions for new recipe products
+                user_input |= self.scan_options.get("defaults_for_recipe_product")
+
+                if loc_id := self.scan_options.get("locations", {}).get("default_freezer"):
+                    user_input["location_id"] = loc_id
+                _LOGGER.info("Pre-filled input for recipe product: %s", user_input)
+            else:
+                # Regular product..
+                _LOGGER.info("Pre-filled input for product: %s", user_input)
+
+            # TODO: Dynamically set some fields
+            # - Consume location 'primary fridge'
+            # - Product quantity '1' ?
+            # - Product quantity unit 'portion' ?
+            # - Calories per 100 (calculate from ingredients)
 
         if self.current_product_ica is not None:
             # TODO: fill in info from ICA...
@@ -798,7 +849,6 @@ class ScanSession:
         self.barcode_results.append(
             f"Created recipe {self.current_recipe['name']} with id {recipe['id']}"
         )
-
         _LOGGER.info(
             "Inserting barcode for created recipe into queue: %s",
             f"grcy:r:{self.current_recipe['id']}",
