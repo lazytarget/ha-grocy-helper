@@ -33,7 +33,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import logging
-from typing import Any
+from typing import Any, Iterable
 
 from .barcodebuddyapi import BarcodeBuddyAPI
 from .coordinator import GrocyHelperCoordinator
@@ -929,7 +929,7 @@ class ScanSession:
         user_input: dict | None,
         persisted: dict | None,
         suggested: dict | None,
-        keys: list[str] | None = None,
+        keys: Iterable[str] | None = None,
     ) -> dict:
         """Resolve input by merging user input, persisted data, and suggested data.
 
@@ -953,8 +953,7 @@ class ScanSession:
         suggested = suggested or {}
         if keys is None:
             # By default, resolve all keys present in any of the dictionaries
-            # keys = set(user_input) | set(persisted) | set(suggested)
-            keys = set(user_input) | set(suggested)
+            keys = set(user_input) | set(persisted) | set(suggested)
 
         for key in keys:
             val = user_input.get(key, persisted.get(key) or suggested.get(key))
@@ -1159,11 +1158,11 @@ class ScanSession:
         )
         self.current_recipe.update(recipe_changes)
 
-    def _get_product_defaults(self) -> None:
+    def _get_product_defaults(self) -> dict[str, Any]:
         """Get the default values for products."""
         return self.scan_options.get("defaults_for_product", {}).copy()
 
-    def _get_recipe_product_defaults(self) -> None:
+    def _get_recipe_product_defaults(self) -> dict[str, Any]:
         """Get the default values for recipe products."""
         locations = self.scan_options.get("locations", {})
 
