@@ -87,6 +87,7 @@ class ProductDataBuilder:
         """
         product = base_product.copy()
         product["name"] = user_input["name"]
+        product["product_group_id"] = user_input.get("product_group_id")
         product["location_id"] = user_input["location_id"]
         product["should_not_be_frozen"] = (
             1 if user_input.get("should_not_be_frozen", False) else 0
@@ -180,7 +181,7 @@ class ProductDataBuilder:
         masterdata = self._masterdata
 
         # Keys for parent product form
-        parent_keys = ["name", "qu_id_stock", "qu_id_price"]
+        parent_keys = ["name", 'product_group_id', "qu_id_stock", "qu_id_price"]
         if not creating_parent:
             parent_keys.extend(
                 [
@@ -257,6 +258,7 @@ class ProductDataBuilder:
             Parent product dictionary ready for API submission
         """
         new_product["name"] = user_input["name"]
+        new_product["product_group_id"] = user_input.get("product_group_id")
         # TODO: Location not super relevant for Parent products, perhaps set value as per child. But don't render field for it?
         new_product["location_id"] = user_input.get(
             "location_id",

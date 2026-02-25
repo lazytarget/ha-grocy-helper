@@ -190,6 +190,7 @@ class ScanFormBuilder:
         """Build fields for the create-product form."""
 
         loc_options = self._location_options()
+        product_group_options = self._product_group_options()
         qu_options = self._qu_options()
 
         fields: list[FormField] = [
@@ -202,6 +203,18 @@ class ScanFormBuilder:
                 # Example: Mango / Mango Fryst 250g ICA / Fryst mango
             ),
         ]
+        fields.extend(
+            [
+                FormField(
+                    key="product_group_id",
+                    field_type=FieldType.SELECT,
+                    required=False,
+                    suggested_value=self._str_val(suggested.get("product_group_id")),
+                    options=product_group_options,
+                    select_mode=SelectMode.DROPDOWN,
+                )
+            ]
+        )
 
         if not creating_parent:
             fields.extend(
@@ -633,13 +646,22 @@ class ScanFormBuilder:
     def _location_options(self) -> list[SelectOption]:
         return [
             SelectOption(value=str(loc["id"]), label=loc["name"])
-            for loc in self._masterdata["locations"]
+            for loc in self._masterdata.get("locations", [])
+            if loc.get("active") == 1
+        ]
+
+    def _product_group_options(self) -> list[SelectOption]:
+        return [
+            SelectOption(value=str(pg["id"]), label=pg["name"])
+            for pg in self._masterdata.get("product_groups", [])
+            if pg.get("active") == 1
         ]
 
     def _qu_options(self, include_blank: bool = False) -> list[SelectOption]:
         options = [
             SelectOption(value=str(qu["id"]), label=qu["name"])
-            for qu in self._masterdata["quantity_units"]
+            for qu in self._masterdata.get("quantity_units", [])
+            if qu["active"] == 1
         ]
         if include_blank:
             options.insert(0, SelectOption(value="", label=""))
