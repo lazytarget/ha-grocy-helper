@@ -94,3 +94,18 @@ DEV_CONST = {
     "default_scan_mode": SCAN_MODE.SCAN_BBUDDY,
     "default_barcode": "4011800420413",
 }
+
+
+# Fields whose suggested values should NOT be converted to ``str``
+# (they are numeric / boolean and the UI must receive them as-is).
+NUMERIC_FIELDS = frozenset(
+    {
+        "should_not_be_frozen",
+        "calories_per_100",
+        "default_best_before_days",
+        "default_best_before_days_after_open",
+        "default_best_before_days_after_freezing",
+        "default_best_before_days_after_thawing",
+    }
+)
+# TODO: This is a lazy hack. Improve!

@@ -33,11 +33,11 @@ from __future__ import annotations
 import datetime as dt
 import json
 import logging
-from typing import Any
+from typing import Any, Iterable
 
 from .barcodebuddyapi import BarcodeBuddyAPI
 from .coordinator import GrocyHelperCoordinator
-from .const import SCAN_MODE
+from .const import SCAN_MODE, NUMERIC_FIELDS
 from .grocytypes import (
     BarcodeLookup,
     ExtendedGrocyProductStockInfo,
@@ -113,6 +113,25 @@ class ScanSession:
             "input_shoppingLocationId": True,
             "input_product_details_during_provision": True,
             # TODO: Enable detailed Barcode details; defaults for: [shopping_location_id, qu_id, amount] for specific Barcode
+            # Whether the "add_product_barcode" form should be shown for manual input during the creation of a recipe produced product.
+            "show_add_product_barcode_form_for_recipe_product": False,
+            # The values can be pre-filled during the generation of a recipe produced product
+            "locations": {
+                "default_fridge": 2,
+                "default_freezer": 5,
+            },
+            # TODO: Add units? or still use "known_qu"
+            "defaults_for_product": {
+                "default_best_before_days": 5,
+                # "default_best_before_days_after_open": 3,
+            },
+            "defaults_for_recipe_product": {
+                "should_not_be_frozen": False,
+                "default_best_before_days": 3,
+                "default_best_before_days_after_open": 1,
+                "default_best_before_days_after_freezing": 60,
+                "default_best_before_days_after_thawing": 3,
+            },
         }
 
         # ── workflow state ──────────────────────────────────────────
@@ -416,7 +435,7 @@ class ScanSession:
 
         # First render - show form
         if user_input is None:
-            return self._show_add_product_form(new_product, {})
+            return self._show_add_product_form(user_input, new_product, {})
 
         # ── process submitted form ──────────────────────────────────
 
@@ -433,7 +452,7 @@ class ScanSession:
 
         # Validate location
         if errors := self._product_builder.validate_product_location(new_product):
-            return self._show_add_product_form(new_product, errors)
+            return self._show_add_product_form(user_input, new_product, errors)
 
         # Create product
         _LOGGER.info("Creating product: %s", new_product)
@@ -451,7 +470,14 @@ class ScanSession:
         ):
             await self._link_recipe_to_product()
 
-        return await self._step_add_product_barcode(None)
+        if self.current_recipe and not self.scan_options.get(
+            "show_add_product_barcode_form_for_recipe_product"
+        ):
+            # Submit automatically...
+            return await self._step_add_product_barcode(
+                user_input={"note": self.current_recipe["name"]}
+            )
+        return await self._step_add_product_barcode(user_input=None)
 
     # ── add_product_parent ───────────────────────────────────────────
 
@@ -524,9 +550,10 @@ class ScanSession:
         self._cached_form = None
         code = self.current_barcode
 
-        new_product: GrocyProduct = (self.current_product_stock_info or {}).get(
-            "product"
-        )
+        # new_product: GrocyProduct = (self.current_product_stock_info or {}).get(
+        #     "product"
+        # )
+        new_product = self.current_product
 
         if user_input is None:
             suggested: dict[str, Any] = {
@@ -551,7 +578,7 @@ class ScanSession:
         # ── process ─────────────────────────────────────────────────
         br: GrocyProductBarcode = {
             "barcode": code,
-            "note": user_input["note"],
+            "note": user_input.get("note", ""),
             "product_id": new_product["id"],
             "qu_id": user_input.get("qu_id"),
             "shopping_location_id": user_input.get("shopping_location_id"),
@@ -574,20 +601,29 @@ class ScanSession:
         """Update product details (quantity, calories, shelf life)."""
 
         errors: dict[str, str] = {}
-        _LOGGER.info("form update-product: %s", user_input)
+        _LOGGER.info("form 'update_product_details': %s", user_input)
 
-        product_stock_info = self.current_product_stock_info
-        product = product_stock_info["product"]
+        # product_stock_info = self.current_product_stock_info
+        # product = product_stock_info["product"]
+        product = self.current_product
 
         show_form = user_input is None
         if user_input is None:
             user_input = {}
 
-        # Initialize input with defaults from current product
-        user_input = self._product_builder.initialize_product_details_input(
-            user_input, self.current_product
+        # Suggestions
+        suggestions = (
+            self._get_recipe_product_defaults()
+            if self.current_recipe
+            else self._get_product_defaults()
         )
-        _LOGGER.info("Updated input: %s", user_input)
+        _LOGGER.info("Suggestions: %s", suggestions)
+
+        # Initialize and transform input based on states
+        user_input = self.transform_input(
+            user_input, persisted=self.current_product, suggested=suggestions
+        )
+        _LOGGER.info("Transformed user_input: %s", user_input)
 
         if self.current_product_ica is not None:
             # TODO: fill in info from ICA...
@@ -622,9 +658,23 @@ class ScanSession:
 
         # First render - show form
         if show_form:
+            # Initial render, pre-fill some extra suggestions...
+            # TODO: Dynamically set some fields
+            # - Product quantity '1' ?
+            # - Product quantity unit 'portion' ?
+            # - Calories per 100 (calculate from ingredients)
+
+            # user_input = self.transform_input(
+            #     user_input, persisted=self.current_product, suggested={
+            #         "calories_per_100": kcal
+            #     }
+            # )
+            # _LOGGER.info("Transformed user_input extra: %s", user_input)
+
             user_input = self._prepare_form_defaults(
                 user_input, qu_id_product, product_quantity, kcal
             )
+            _LOGGER.info("Transformed user_input defaults: %s", user_input)
             return self._show_update_product_details_form(user_input, product, errors)
 
         # ── process submitted values ────────────────────────────────
@@ -798,7 +848,6 @@ class ScanSession:
         self.barcode_results.append(
             f"Created recipe {self.current_recipe['name']} with id {recipe['id']}"
         )
-
         _LOGGER.info(
             "Inserting barcode for created recipe into queue: %s",
             f"grcy:r:{self.current_recipe['id']}",
@@ -872,6 +921,48 @@ class ScanSession:
     # All form building logic has been moved to ScanFormBuilder class
 
     # =================================================================
+    # Public helpers
+    # =================================================================
+
+    @staticmethod
+    def transform_input(
+        user_input: dict | None,
+        persisted: dict | None,
+        suggested: dict | None,
+        keys: Iterable[str] | None = None,
+    ) -> dict:
+        """Resolve input by merging user input, persisted data, and suggested data.
+
+        Parameters
+        ----------
+        user_input:
+            Submitted user input (highest precedence)
+        persisted:
+            Persisted product data (medium precedence)
+        suggested:
+            Suggested product data (lowest precedence)
+        keys:
+            List of keys to resolve (if None, resolve all keys present in any dict)
+
+        Returns
+        -------
+            User input dictionary with defaults filled in
+        """
+        user_input = user_input or {}
+        persisted = persisted or {}
+        suggested = suggested or {}
+        if keys is None:
+            # By default, resolve all keys present in any of the dictionaries
+            keys = set(user_input) | set(persisted) | set(suggested)
+
+        for key in keys:
+            val = user_input.get(key, persisted.get(key) or suggested.get(key))
+            if key not in NUMERIC_FIELDS:
+                val = str(val) if val is not None else None
+            user_input[key] = val
+        return user_input
+
+    # =================================================================
     # Private helpers
     # =================================================================
 
@@ -888,13 +979,22 @@ class ScanSession:
         return []
 
     def _show_add_product_form(
-        self, product: dict[str, Any], errors: dict[str, str]
+        self, user_input: dict[str, Any], product: dict[str, Any], errors: dict[str, str]
     ) -> FormRequest:
         """Build and return the add-product form."""
-        suggested = self._product_builder.merge_product_values(
-            {},
-            product,
-            [
+        defaults = (
+            self._get_recipe_product_defaults()
+            if self.current_recipe
+            else self._get_product_defaults()
+        )
+        _LOGGER.info("Defaults: %s", defaults)
+
+        # Resolve suggestions with a transform
+        suggested = self.transform_input(
+            user_input,
+            persisted=product,
+            suggested=defaults,
+            keys=[
                 "name",
                 "location_id",
                 "should_not_be_frozen",
@@ -1041,9 +1141,9 @@ class ScanSession:
             )
             # TODO: Simplify
 
-            # Add recipe defaults
-            if self.current_recipe:
-                self._apply_recipe_product_defaults()
+            # # Add recipe defaults
+            # if self.current_recipe:
+            #     self._apply_recipe_product_defaults()
 
         return None
 
@@ -1058,18 +1158,28 @@ class ScanSession:
         )
         self.current_recipe.update(recipe_changes)
 
-    def _apply_recipe_product_defaults(self) -> None:
-        """Apply default settings for recipe-produced products."""
-        self.current_product.update(
-            {
-                "location_id": 5,  # TODO: Configurable default Freezer location
-                "default_consume_location_id": 2,  # TODO: Configurable default Fridge
-                "default_best_before_days": 3,
-                "default_best_before_days_after_open": 3,
-                "default_best_before_days_after_freezing": 60,
-                "default_best_before_days_after_thawing": 3,
-            }
-        )
+    def _get_product_defaults(self) -> dict[str, Any]:
+        """Get the default values for products."""
+        return self.scan_options.get("defaults_for_product", {}).copy()
+
+    def _get_recipe_product_defaults(self) -> dict[str, Any]:
+        """Get the default values for recipe products."""
+        locations = self.scan_options.get("locations", {})
+
+        # Start with base product defaults
+        base = self._get_product_defaults()
+        suggestions = {}
+        suggestions |= base
+
+        # Update with 'recipe product' defaults
+        if over := self.scan_options.get("defaults_for_recipe_product"):
+            suggestions |= over
+
+        # Resolve dynamic fields manually:
+        # Since this is a 'cooked' product, it belongs in the Fridge or Freezer. As default, suggest to Freeze it first
+        suggestions["location_id"] = locations.get("default_freezer")
+        suggestions["default_consume_location_id"] = locations.get("default_fridge")
+        return suggestions
 
     def _complete_scan_queue(self) -> CompletedResult:
         """Return completed result when queue is empty."""

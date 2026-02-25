@@ -12,23 +12,10 @@ import logging
 from typing import Any
 
 from .coordinator import GrocyHelperCoordinator
+from .const import NUMERIC_FIELDS
 from .grocytypes import GrocyMasterData
 
 _LOGGER = logging.getLogger(__name__)
-
-# Fields whose suggested values should NOT be converted to ``str``
-# (they are numeric / boolean and the UI must receive them as-is).
-_NUMERIC_FIELDS = frozenset(
-    {
-        "should_not_be_frozen",
-        "calories_per_100",
-        "default_best_before_days",
-        "default_best_before_days_after_open",
-        "default_best_before_days_after_freezing",
-        "default_best_before_days_after_thawing",
-    }
-)
-# TODO: This is a lazy hack. Improve!
 
 
 class ProductDataBuilder:
@@ -72,10 +59,11 @@ class ProductDataBuilder:
         -------
             Dictionary with merged values
         """
+        # TODO: Obsolete, by transform_input method
         suggested: dict[str, Any] = {}
         for k in keys:
             val = user_input.get(k, product.get(k))
-            if k not in _NUMERIC_FIELDS:
+            if k not in NUMERIC_FIELDS:
                 val = str(val) if val is not None else None
             suggested[k] = val
         return suggested
@@ -215,7 +203,7 @@ class ProductDataBuilder:
                         "COPY prop to parent: %s=%s", k, current_product.get(k)
                     )
                     val = current_product.get(k)
-            if k not in _NUMERIC_FIELDS:
+            if k not in NUMERIC_FIELDS:
                 val = str(val) if val is not None else None
             suggested[k] = val
 
@@ -350,6 +338,7 @@ class ProductDataBuilder:
         -------
             User input dictionary with defaults filled in
         """
+        # TODO: Remove method, or call `self.transform_input` with passed keys
         for key in (
             "should_not_be_frozen",
             "default_consume_location_id",
@@ -357,7 +346,7 @@ class ProductDataBuilder:
             "default_best_before_days_after_thawing",
         ):
             val = user_input.get(key, (current_product or {}).get(key))
-            if key not in _NUMERIC_FIELDS:
+            if key not in NUMERIC_FIELDS:
                 val = str(val) if val is not None else None
             user_input[key] = val
         return user_input
