@@ -9,6 +9,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from .coordinator import GrocyHelperCoordinator
+
 if TYPE_CHECKING:
     from .grocyapi import GrocyAPI
     from .grocytypes import (
@@ -34,6 +36,7 @@ class ScanStateManager:
     def __init__(
         self,
         api_grocy: GrocyAPI,
+        coordinator: GrocyHelperCoordinator,
     ) -> None:
         """Initialize state manager.
 
@@ -43,6 +46,7 @@ class ScanStateManager:
             Grocy API instance for loading products
         """
         self._api_grocy = api_grocy
+        self._coordinator = coordinator
 
         # Primary product state - stock info contains full details
         self._current_stock_info: ExtendedGrocyProductStockInfo | None = None
@@ -112,6 +116,14 @@ class ScanStateManager:
         except Exception as ex:
             _LOGGER.error("Failed to load product by ID %s: %s", product_id, ex)
             return None
+
+    async def load_lookup(self, barcode: str) -> BarcodeLookup:
+        """Load barcode lookup."""
+        self.current_lookup = await self._coordinator.lookup_barcode(barcode)
+        self.current_product_openfoodfacts = self.current_lookup.get("off")
+        self.current_product_ica = self.current_lookup.get("ica")
+        _LOGGER.debug("Loaded lookup for barcode %s: %s", barcode, self.current_lookup)
+        return self.current_lookup
 
     async def load_product_by_barcode(self, barcode: str) -> GrocyProduct | None:
         """Load product by barcode and update state.
