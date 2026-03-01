@@ -33,6 +33,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import logging
+import re
 from typing import Any, Iterable
 
 from .barcodebuddyapi import BarcodeBuddyAPI
@@ -144,6 +145,7 @@ class ScanSession:
         self.barcode_queue: list[str] = []
         self.barcode_results: list[str] = []
         self.current_barcode: str | None = None
+        self.current_barcode_meta: dict[str, Any] = {}
 
         # Cached form for error re-display
         self._cached_form: FormRequest | None = None
@@ -280,8 +282,14 @@ class ScanSession:
         self.barcode_queue = []
         self.barcode_results = []
 
-        # Parse barcodes (split by whitespace)
-        self.barcode_queue = [part for part in barcodes_input.split() if part]
+        # Parse barcodes
+        # Supports both:
+        # - Regular space-separated barcodes: "123 456" -> ["123", "456"]
+        # - Angle-bracket-wrapped barcodes with spaces: "<123|n:test> <456>" -> ["123|n:test", "456"]
+        pattern = r'<([^>]+)>|(\S+)'
+        matches = re.findall(pattern, barcodes_input)
+        self.barcode_queue = [match[0] if match[0] else match[1] for match in matches]
+        _LOGGER.info("Parsed barcode queue: %s", self.barcode_queue)
 
         return await self._step_scan_queue()
 
@@ -299,11 +307,27 @@ class ScanSession:
             return self._complete_scan_queue()
 
         # Prepare current barcode
-        code = self._normalize_barcode(self.barcode_queue[0])
+        raw_barcode = self.barcode_queue[0]
+
+        # Parse structured barcode metadata
+        barcode_data = self._parse_structured_barcode(raw_barcode)
+        code = self._normalize_barcode(barcode_data["barcode"])
+
         if self.current_barcode != code:
             # Different barcode since last time. Clear all info
             self._clear_barcode_state()
+
         self.current_barcode = code
+        self.current_barcode_meta = {
+            "original_input": raw_barcode,
+            "barcode": code,
+            "quantity": barcode_data.get("q"),
+            "unit": barcode_data.get("u"),
+            "price": barcode_data.get("p"),
+            "price_sum": barcode_data.get("s"),
+            "name": barcode_data.get("n"),
+        }
+        _LOGGER.info("Parsed barcode metadata: %s", self.current_barcode_meta)
 
         # Update BarcodeBuddy mode if needed
         await self._update_bbuddy_mode_if_needed()
@@ -583,7 +607,7 @@ class ScanSession:
                     else None
                 ),
                 "product_aliases": "\n".join([f"- {a.strip()}" for a in aliases if a]),
-                "lookup_output": (self.current_lookup or {}).get("lookup_output"),
+                "lookup_output": self._format_lookup_output(),
             }
             self._cached_form = FormRequest(
                 step_id=Step.SCAN_ADD_PRODUCT_BARCODE,
@@ -908,9 +932,14 @@ class ScanSession:
         # Show form if needed
         if user_input is None and in_purchase_mode:
             # TODO: If in Purchase context AND self.current_recipe, then add field for target to place "Matlådor", and how many portions that where produced...
+
+            if self.current_barcode_meta and "price" in self.current_barcode_meta:
+                price = self.current_barcode_meta["price"]
+
             if form := self._show_scan_process_form(
                 product, price, best_before_in_days, shopping_location_id, errors
             ):
+                # TODO: Add fields for Amount and QU_ID
                 return form
 
         # Build request
@@ -984,17 +1013,64 @@ class ScanSession:
     # Private helpers
     # =================================================================
 
+    def _parse_structured_barcode(self, barcode_str: str) -> dict[str, Any]:
+        """Parse structured barcode format into a dictionary.
+        
+        Parses strings like:
+        "3392590205420|q:2|u:st|p:25.0|s:50.0|n:Pizza Surdeg"
+        
+        Into:
+        {
+            "barcode": "3392590205420",
+            "q": "2",
+            "u": "st",
+            "p": "25.0",
+            "s": "50.0",
+            "n": "Pizza Surdeg"
+        }
+        
+        Parameters
+        ----------
+        barcode_str:
+            The barcode string to parse. Can be simple ("123456"), multiple ("123 456") or
+            structured ("<123456|q:1|u:st|p:10.0|n:Product Name>")
+        
+        Returns
+        -------
+        dict
+            Dictionary with parsed values. Always includes "barcode" key.
+            For simple barcodes, only "barcode" key is present.
+            For structured barcodes, includes all key:value pairs found.
+        """
+        parts = barcode_str.split('|')
+        result = {"barcode": parts[0]}
+
+        # Parse key:value pairs from remaining parts
+        for part in parts[1:]:
+            if ':' in part:
+                key, value = part.split(':', 1)  # Split on first ':' only
+                if value:
+                    result[key] = value.strip()
+
+        return result
+
     def _get_aliases(self) -> list[str]:
         """Return product name aliases from lookup data or recipe."""
-
+        aliases = []
         if self.current_lookup:
-            return self.current_lookup.get("product_aliases") or []
+            aliases.extend(self.current_lookup.get("product_aliases") or [])
+
+        if barcode_name := (self.current_barcode_meta or {}).get("name"):
+            if barcode_name not in aliases:
+                aliases.insert(0, barcode_name)
+
         if self.current_recipe:
             return [f"Matlåda: {self.current_recipe['name']}"]
+
         # TODO: also loop through ProductBarcode notes
         # TODO: ICA offer name
         # TODO: skip Active==0 products
-        return []
+        return aliases
 
     def _try_map_product_group(self) -> GrocyProductGroup | None:
         groups = self.masterdata.get("product_groups")
@@ -1088,7 +1164,7 @@ class ScanSession:
                 "name": product.get("name"),
                 "barcode": self.current_barcode,
                 "product_aliases": "\n".join([f"- {a.strip()}" for a in aliases if a]),
-                "lookup_output": (self.current_lookup or {}).get("lookup_output"),
+                "lookup_output": self._format_lookup_output(),
             },
             errors=errors,
         )
@@ -1115,7 +1191,7 @@ class ScanSession:
                     else None
                 ),
                 "product_aliases": "\n ".join([f"- {a.strip()}" for a in aliases if a]),
-                "lookup_output": (self.current_lookup or {}).get("lookup_output"),
+                "lookup_output": self._format_lookup_output(),
                 "product_matches": "\n".join(
                     f"{p['name']}" for p in self.matching_products
                 ),
@@ -1137,7 +1213,7 @@ class ScanSession:
                 "name": recipe.get("name"),
                 "barcode": self.current_barcode,
                 "product_aliases": "\n".join([f"- {a.strip()}" for a in aliases if a]),
-                "lookup_output": (self.current_lookup or {}).get("lookup_output"),
+                "lookup_output": self._format_lookup_output(),
             },
             errors=errors,
         )
@@ -1390,7 +1466,7 @@ class ScanSession:
             "name": new_product.get("name"),
             "barcode": self.current_barcode,
             "product_aliases": "\n".join([f"- {a.strip()}" for a in aliases if a]),
-            "lookup_output": (self.current_lookup or {}).get("lookup_output"),
+            "lookup_output": self._format_lookup_output(),
         }
         self._cached_form = FormRequest(
             step_id=Step.SCAN_ADD_PRODUCT_PARENT,
@@ -1482,6 +1558,18 @@ class ScanSession:
             product_quantity_unit_as_weight,
         )
 
+    def _format_lookup_output(self) -> str:
+        lookup_output = f"# Barcode lookup\nBarcode: {self.current_barcode}"
+        if self.current_barcode_meta:
+            if name := self.current_barcode_meta.get("name"):
+                lookup_output += f"\nName: {name}"
+            if q := self.current_barcode_meta.get("quantity"):
+                unit = self.current_barcode_meta.get("unit")
+                lookup_output += f"\nQuantity: {q} {unit}"
+        if output := (self.current_lookup or {}).get("lookup_output"):
+            lookup_output += f"\n\n{output}"
+        return lookup_output
+
     def _prepare_form_defaults(
         self,
         user_input: dict,
@@ -1515,7 +1603,7 @@ class ScanSession:
                 else None
             ),
             "product_aliases": "\n".join([f"- {a.strip()}" for a in aliases if a]),
-            "lookup_output": (self.current_lookup or {}).get("lookup_output"),
+            "lookup_output": self._format_lookup_output(),
         }
         self._cached_form = FormRequest(
             step_id=Step.SCAN_UPDATE_PRODUCT_DETAILS,
