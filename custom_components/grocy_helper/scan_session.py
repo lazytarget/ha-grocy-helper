@@ -1564,7 +1564,8 @@ class ScanSession:
             if name := self.current_barcode_meta.get("name"):
                 lookup_output += f"\nName: {name}"
             if q := self.current_barcode_meta.get("quantity"):
-                lookup_output += f"\nQuantity: {q} {self.current_barcode_meta.get("unit")}"
+                unit = self.current_barcode_meta.get("unit")
+                lookup_output += f"\nQuantity: {q} {unit}"
         if output := (self.current_lookup or {}).get("lookup_output"):
             lookup_output += f"\n\n{output}"
         return lookup_output
