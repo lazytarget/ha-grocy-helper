@@ -45,6 +45,7 @@ from .grocytypes import (
     GrocyMasterData,
     GrocyProduct,
     GrocyProductBarcode,
+    GrocyProductGroup,
     GrocyQuantityUnitConversionResult,
     GrocyRecipe,
     GrocyStockEntry,
@@ -94,7 +95,6 @@ class ScanSession:
         self._coordinator = coordinator
         self._api_grocy = coordinator._api_grocy
         self._api_bbuddy = api_bbuddy
-        self._lookup_barcode = coordinator.lookup_barcode
         self._convert_quantity = coordinator.convert_quantity_for_product
 
         # Form builder for UI fields
@@ -105,7 +105,7 @@ class ScanSession:
         self._recipe_builder = RecipeDataBuilder(self._coordinator)
 
         # State manager for product/stock tracking
-        self._state = ScanStateManager(self._api_grocy)
+        self._state = ScanStateManager(self._api_grocy, self._coordinator)
 
         self.scan_options: dict[str, bool] = scan_options or {
             "input_price": True,
@@ -144,11 +144,6 @@ class ScanSession:
         self.barcode_results: list[str] = []
         self.current_barcode: str | None = None
 
-        # Additional workflow state (not managed by state manager)
-        # TODO: These should be removed (or fully moved to state manager)
-        self.current_product_openfoodfacts: dict | None = None
-        self.current_product_ica: dict | None = None
-
         # Cached form for error re-display
         self._cached_form: FormRequest | None = None
         # Cached process-step schema fields (for error re-display)
@@ -174,6 +169,18 @@ class ScanSession:
     def current_lookup(self) -> BarcodeLookup | None:
         """Product found during lookup phase."""
         return self._state.current_lookup
+
+    @property
+    def current_product_openfoodfacts(self) -> dict | None:
+        """OpenFoodFacts product details from lookup."""
+        return self._state.current_product_openfoodfacts
+        # return self.current_lookup.get("off") if self.current_lookup else None
+
+    @property
+    def current_product_ica(self) -> dict | None:
+        """ICA-specific product details from lookup."""
+        return self._state.current_product_ica
+        # return self.current_lookup.get("ica") if self.current_lookup else None
 
     @property
     def matching_products(self) -> list[GrocyProduct]:
@@ -988,6 +995,32 @@ class ScanSession:
         # TODO: skip Active==0 products
         return []
 
+    def _try_map_product_group(self) -> GrocyProductGroup | None:
+        groups = self.masterdata.get("product_groups")
+        if not groups:
+            return None
+        ica = self._state.current_product_ica or {}
+        ica_article = ica.get("article", {})
+        _LOGGER.info("Trying to map ICA article to Grocy product group: %s   ::  %s", ica, ica_article)
+        if ica_article_group_id := (
+            ica_article.get("expandedArticleGroupId")
+            or ica_article.get("articleGroupId")
+        ):
+            # If ICA data has an 'articleGroupId' or 'expandedArticleGroupId', try to match it to an active product group in Grocy
+            return next(
+                (
+                    pg
+                    for pg in groups
+                    if pg.get("active") == 1
+                    and (pg.get("userfields") or {}).get("ica_group_id")
+                    == str(ica_article_group_id)
+                ),
+                None,
+            )
+        # elif
+        # TODO: check categories on openfoodfacts_product
+        return None
+
     def _show_add_product_form(
         self,
         user_input: dict[str, Any],
@@ -1000,6 +1033,10 @@ class ScanSession:
             if self.current_recipe
             else self._get_product_defaults()
         )
+        if "product_group_id" not in defaults:
+            if product_group := self._try_map_product_group():
+                defaults["product_group_id"] = product_group["id"]
+
         _LOGGER.info("Defaults: %s", defaults)
 
         # Resolve suggestions with a transform
@@ -1217,8 +1254,6 @@ class ScanSession:
     def _clear_barcode_state(self) -> None:
         """Clear state when processing a new barcode."""
         self._state.clear_barcode_state()
-        self.current_product_openfoodfacts = None
-        self.current_product_ica = None
 
     async def _update_bbuddy_mode_if_needed(self) -> None:
         """Update BarcodeBuddy mode based on scan mode."""
@@ -1243,6 +1278,9 @@ class ScanSession:
             try:
                 await self._state.load_product_by_barcode(code)
                 _LOGGER.info("Product lookup: %s", self.current_product_stock_info)
+                
+                lookup = await self._state.load_lookup(code)
+                _LOGGER.info("Barcode lookup: %s", lookup)
             except Exception as ex:
                 _LOGGER.error("Get product exception: %s", ex)
                 raise
@@ -1269,9 +1307,7 @@ class ScanSession:
         if not self.current_recipe and (
             not self.current_lookup or self.current_lookup["barcode"] != code
         ):
-            self._state.current_lookup = await self._lookup_barcode(code)
-            self.current_product_openfoodfacts = self.current_lookup.get("off")
-            self.current_product_ica = self.current_lookup.get("ica")
+            await self._state.load_lookup(code)
 
         # Match against existing products by alias
         aliases = (self.current_lookup or {}).get("product_aliases") or []
@@ -1319,14 +1355,16 @@ class ScanSession:
         self, new_product: dict, suggested: dict, creating_parent: bool, errors: dict
     ) -> FormRequest:
         """Show form for creating parent product."""
-        code = self.current_barcode
+        if "product_group_id" not in suggested:
+            if product_group := self._try_map_product_group():
+                suggested["product_group_id"] = product_group["id"]
         fields = self._form_builder.build_create_product_fields(
             suggested, creating_parent=creating_parent
         )
         aliases = self._get_aliases()
         plc = {
             "name": new_product.get("name"),
-            "barcode": code,
+            "barcode": self.current_barcode,
             "product_aliases": "\n".join([f"- {a.strip()}" for a in aliases if a]),
             "lookup_output": (self.current_lookup or {}).get("lookup_output"),
         }

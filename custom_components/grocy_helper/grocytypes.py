@@ -18,6 +18,7 @@ class GrocyLocation(TypedDict):
     row_created_timestamp: str
     is_freezer: int
     active: int
+    userfields: dict[str, Any] | None
 
 
 class GrocyShoppingLocation(TypedDict):
@@ -26,6 +27,7 @@ class GrocyShoppingLocation(TypedDict):
     description: str | None
     row_created_timestamp: str
     active: int
+    userfields: dict[str, Any] | None
 
 
 class GrocyQuantityUnit(TypedDict):
@@ -36,6 +38,7 @@ class GrocyQuantityUnit(TypedDict):
     name_plural: str
     plural_forms: str | None
     active: int
+    userfields: dict[str, Any] | None
 
 
 class GrocyProductBarcode(TypedDict):
@@ -48,6 +51,7 @@ class GrocyProductBarcode(TypedDict):
     shopping_location_id: int | None
     last_price: float | None
     row_created_timestamp: str
+    userfields: dict[str, Any] | None
 
 
 class GrocyAddStockProduct(TypedDict):
@@ -71,6 +75,7 @@ class GrocyProductGroup(TypedDict):
     description: str | None
     row_created_timestamp: str
     active: int
+    userfields: dict[str, Any] | None
 
 class GrocyProduct(TypedDict):
     id: int
@@ -112,6 +117,7 @@ class GrocyProduct(TypedDict):
     quick_open_amount: int
     disable_open: int
     default_purchase_price_type: int
+    userfields: dict[str, Any] | None
 
 
 class ExtendedGrocyProductStockInfo(TypedDict):
