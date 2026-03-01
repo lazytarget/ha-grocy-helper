@@ -607,7 +607,7 @@ class ScanSession:
                     else None
                 ),
                 "product_aliases": "\n".join([f"- {a.strip()}" for a in aliases if a]),
-                "lookup_output": (self.current_lookup or {}).get("lookup_output"),
+                "lookup_output": self._format_lookup_output(),
             }
             self._cached_form = FormRequest(
                 step_id=Step.SCAN_ADD_PRODUCT_BARCODE,
@@ -1164,7 +1164,7 @@ class ScanSession:
                 "name": product.get("name"),
                 "barcode": self.current_barcode,
                 "product_aliases": "\n".join([f"- {a.strip()}" for a in aliases if a]),
-                "lookup_output": (self.current_lookup or {}).get("lookup_output"),
+                "lookup_output": self._format_lookup_output(),
             },
             errors=errors,
         )
@@ -1191,7 +1191,7 @@ class ScanSession:
                     else None
                 ),
                 "product_aliases": "\n ".join([f"- {a.strip()}" for a in aliases if a]),
-                "lookup_output": (self.current_lookup or {}).get("lookup_output"),
+                "lookup_output": self._format_lookup_output(),
                 "product_matches": "\n".join(
                     f"{p['name']}" for p in self.matching_products
                 ),
@@ -1213,7 +1213,7 @@ class ScanSession:
                 "name": recipe.get("name"),
                 "barcode": self.current_barcode,
                 "product_aliases": "\n".join([f"- {a.strip()}" for a in aliases if a]),
-                "lookup_output": (self.current_lookup or {}).get("lookup_output"),
+                "lookup_output": self._format_lookup_output(),
             },
             errors=errors,
         )
@@ -1466,7 +1466,7 @@ class ScanSession:
             "name": new_product.get("name"),
             "barcode": self.current_barcode,
             "product_aliases": "\n".join([f"- {a.strip()}" for a in aliases if a]),
-            "lookup_output": (self.current_lookup or {}).get("lookup_output"),
+            "lookup_output": self._format_lookup_output(),
         }
         self._cached_form = FormRequest(
             step_id=Step.SCAN_ADD_PRODUCT_PARENT,
@@ -1558,6 +1558,17 @@ class ScanSession:
             product_quantity_unit_as_weight,
         )
 
+    def _format_lookup_output(self) -> str:
+        lookup_output = f"# Barcode lookup\nBarcode: {self.current_barcode}"
+        if self.current_barcode_meta:
+            if name := self.current_barcode_meta.get("name"):
+                lookup_output += f"\nName: {name}"
+            if q := self.current_barcode_meta.get("quantity"):
+                lookup_output += f"\nQuantity: {q} {self.current_barcode_meta.get("unit")}"
+        if output := (self.current_lookup or {}).get("lookup_output"):
+            lookup_output += f"\n\n{output}"
+        return lookup_output
+
     def _prepare_form_defaults(
         self,
         user_input: dict,
@@ -1591,7 +1602,7 @@ class ScanSession:
                 else None
             ),
             "product_aliases": "\n".join([f"- {a.strip()}" for a in aliases if a]),
-            "lookup_output": (self.current_lookup or {}).get("lookup_output"),
+            "lookup_output": self._format_lookup_output(),
         }
         self._cached_form = FormRequest(
             step_id=Step.SCAN_UPDATE_PRODUCT_DETAILS,
