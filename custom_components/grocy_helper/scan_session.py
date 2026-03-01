@@ -33,6 +33,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import logging
+import re
 from typing import Any, Iterable
 
 from .barcodebuddyapi import BarcodeBuddyAPI
@@ -280,8 +281,14 @@ class ScanSession:
         self.barcode_queue = []
         self.barcode_results = []
 
-        # Parse barcodes (split by whitespace)
-        self.barcode_queue = [part for part in barcodes_input.split() if part]
+        # Parse barcodes
+        # Supports both:
+        # - Regular space-separated barcodes: "123 456" -> ["123", "456"]
+        # - Angle-bracket-wrapped barcodes with spaces: "<123|n:test> <456>" -> ["123|n:test", "456"]
+        pattern = r'<([^>]+)>|(\S+)'
+        matches = re.findall(pattern, barcodes_input)
+        self.barcode_queue = [match[0] if match[0] else match[1] for match in matches]
+        _LOGGER.info("Parsed barcode queue: %s", self.barcode_queue)
 
         return await self._step_scan_queue()
 
