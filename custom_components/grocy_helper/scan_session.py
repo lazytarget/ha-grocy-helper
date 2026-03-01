@@ -932,9 +932,14 @@ class ScanSession:
         # Show form if needed
         if user_input is None and in_purchase_mode:
             # TODO: If in Purchase context AND self.current_recipe, then add field for target to place "Matlådor", and how many portions that where produced...
+
+            if self.current_barcode_meta and "price" in self.current_barcode_meta:
+                price = self.current_barcode_meta["price"]
+
             if form := self._show_scan_process_form(
                 product, price, best_before_in_days, shopping_location_id, errors
             ):
+                # TODO: Add fields for Amount and QU_ID
                 return form
 
         # Build request
@@ -1051,15 +1056,21 @@ class ScanSession:
 
     def _get_aliases(self) -> list[str]:
         """Return product name aliases from lookup data or recipe."""
-
+        aliases = []
         if self.current_lookup:
-            return self.current_lookup.get("product_aliases") or []
+            aliases.extend(self.current_lookup.get("product_aliases") or [])
+
+        if barcode_name := (self.current_barcode_meta or {}).get("name"):
+            if barcode_name not in aliases:
+                aliases.insert(0, barcode_name)
+
         if self.current_recipe:
             return [f"Matlåda: {self.current_recipe['name']}"]
+
         # TODO: also loop through ProductBarcode notes
         # TODO: ICA offer name
         # TODO: skip Active==0 products
-        return []
+        return aliases
 
     def _try_map_product_group(self) -> GrocyProductGroup | None:
         groups = self.masterdata.get("product_groups")
