@@ -999,15 +999,30 @@ class ScanSession:
         groups = self.masterdata.get("product_groups")
         if not groups:
             return None
+
+        off = self._state.current_product_openfoodfacts or {}
+        _LOGGER.debug("PGs: %s", groups)
+        if lookup_categories := (off.get("categories") or []):
+            # If OpenFoodFacts data has categories, try to match them to active product groups in Grocy
+            _LOGGER.debug("Trying to match OpenFoodFacts categories '%s' to product groups...", lookup_categories)
+            for pg in groups:
+                if pg.get("active") != 1:
+                    continue
+                group_categories = (pg.get("userfields") or {}).get("off_categories") or ""
+                if not group_categories:
+                    continue
+                group_categories = [c.strip() for c in group_categories.split(",") if c.strip()]
+                if any(x in group_categories for x in lookup_categories):
+                    return pg
+
         ica = self._state.current_product_ica or {}
-        ica_article = ica.get("article", {})
-        _LOGGER.info("Trying to map ICA article to Grocy product group: %s   ::  %s", ica, ica_article)
+        ica_article = ica.get("article") or {}
         if ica_article_group_id := (
             ica_article.get("expandedArticleGroupId")
             or ica_article.get("articleGroupId")
         ):
             # If ICA data has an 'articleGroupId' or 'expandedArticleGroupId', try to match it to an active product group in Grocy
-            return next(
+            if pg := next(
                 (
                     pg
                     for pg in groups
@@ -1016,9 +1031,9 @@ class ScanSession:
                     == str(ica_article_group_id)
                 ),
                 None,
-            )
-        # elif
-        # TODO: check categories on openfoodfacts_product
+            ):
+                return pg
+
         return None
 
     def _show_add_product_form(
