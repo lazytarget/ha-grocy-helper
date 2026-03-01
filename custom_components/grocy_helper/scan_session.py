@@ -145,6 +145,7 @@ class ScanSession:
         self.barcode_queue: list[str] = []
         self.barcode_results: list[str] = []
         self.current_barcode: str | None = None
+        self.current_barcode_meta: dict[str, Any] = {}
 
         # Cached form for error re-display
         self._cached_form: FormRequest | None = None
@@ -306,11 +307,27 @@ class ScanSession:
             return self._complete_scan_queue()
 
         # Prepare current barcode
-        code = self._normalize_barcode(self.barcode_queue[0])
+        raw_barcode = self.barcode_queue[0]
+
+        # Parse structured barcode metadata
+        barcode_data = self._parse_structured_barcode(raw_barcode)
+        code = self._normalize_barcode(barcode_data["barcode"])
+
         if self.current_barcode != code:
             # Different barcode since last time. Clear all info
             self._clear_barcode_state()
+
         self.current_barcode = code
+        self.current_barcode_meta = {
+            "original_input": raw_barcode,
+            "barcode": code,
+            "quantity": barcode_data.get("q"),
+            "unit": barcode_data.get("u"),
+            "price": barcode_data.get("p"),
+            "price_sum": barcode_data.get("s"),
+            "name": barcode_data.get("n"),
+        }
+        _LOGGER.info("Parsed barcode metadata: %s", self.current_barcode_meta)
 
         # Update BarcodeBuddy mode if needed
         await self._update_bbuddy_mode_if_needed()
@@ -990,6 +1007,47 @@ class ScanSession:
     # =================================================================
     # Private helpers
     # =================================================================
+
+    def _parse_structured_barcode(self, barcode_str: str) -> dict[str, Any]:
+        """Parse structured barcode format into a dictionary.
+        
+        Parses strings like:
+        "3392590205420|q:2|u:st|p:25.0|s:50.0|n:Pizza Surdeg"
+        
+        Into:
+        {
+            "barcode": "3392590205420",
+            "q": "2",
+            "u": "st",
+            "p": "25.0",
+            "s": "50.0",
+            "n": "Pizza Surdeg"
+        }
+        
+        Parameters
+        ----------
+        barcode_str:
+            The barcode string to parse. Can be simple ("123456"), multiple ("123 456") or
+            structured ("<123456|q:1|u:st|p:10.0|n:Product Name>")
+        
+        Returns
+        -------
+        dict
+            Dictionary with parsed values. Always includes "barcode" key.
+            For simple barcodes, only "barcode" key is present.
+            For structured barcodes, includes all key:value pairs found.
+        """
+        parts = barcode_str.split('|')
+        result = {"barcode": parts[0]}
+
+        # Parse key:value pairs from remaining parts
+        for part in parts[1:]:
+            if ':' in part:
+                key, value = part.split(':', 1)  # Split on first ':' only
+                if value:
+                    result[key] = value.strip()
+
+        return result
 
     def _get_aliases(self) -> list[str]:
         """Return product name aliases from lookup data or recipe."""
