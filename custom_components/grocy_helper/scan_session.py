@@ -1012,7 +1012,7 @@ class ScanSession:
                     pg
                     for pg in groups
                     if pg.get("active") == 1
-                    and pg.get("userfields", {}).get("ica_group_id")
+                    and (pg.get("userfields") or {}).get("ica_group_id")
                     == str(ica_article_group_id)
                 ),
                 None,
