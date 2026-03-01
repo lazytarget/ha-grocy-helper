@@ -118,7 +118,7 @@ class ScanSession:
             # The values can be pre-filled during the generation of a recipe produced product
             "locations": {
                 "default_fridge": 2,
-                "default_freezer": 5,
+                "default_freezer": 4,
             },
             "product_groups": {
                 "default_for_recipe_products": 1,  # "Färdiglagat"
@@ -129,6 +129,7 @@ class ScanSession:
                 # "default_best_before_days_after_open": 3,
             },
             "defaults_for_recipe_product": {
+                "location_id": 5,
                 "should_not_be_frozen": False,
                 "default_best_before_days": 3,
                 "default_best_before_days_after_open": 1,
@@ -1051,6 +1052,9 @@ class ScanSession:
         if "product_group_id" not in defaults:
             if product_group := self._try_map_product_group():
                 defaults["product_group_id"] = product_group["id"]
+                if loc_id := (product_group.get("userfields") or {}).get("location_id"):
+                    # If product group has a default location id, then use that instead of previous default value...
+                    defaults["location_id"] = loc_id
 
         _LOGGER.info("Defaults: %s", defaults)
 
@@ -1238,10 +1242,6 @@ class ScanSession:
         suggestions = {}
         suggestions |= base
 
-        # Update with 'recipe product' defaults
-        if over := self.scan_options.get("defaults_for_recipe_product"):
-            suggestions |= over
-
         # Resolve dynamic fields manually:
         # Since this is a 'cooked' product, it belongs in the Fridge or Freezer. As default, suggest to Freeze it first
         suggestions["location_id"] = locations.get("default_freezer")
@@ -1249,6 +1249,11 @@ class ScanSession:
         suggestions["product_group_id"] = self.scan_options.get(
             "product_groups", {}
         ).get("default_for_recipe_products")
+
+        # Update with 'recipe product' defaults
+        if over := self.scan_options.get("defaults_for_recipe_product"):
+            suggestions |= over
+
         return suggestions
 
     def _complete_scan_queue(self) -> CompletedResult:
@@ -1373,6 +1378,10 @@ class ScanSession:
         if "product_group_id" not in suggested:
             if product_group := self._try_map_product_group():
                 suggested["product_group_id"] = product_group["id"]
+                if loc_id := (product_group.get("userfields") or {}).get("location_id"):
+                    # If product group has a default location id, then use that instead of previous default value...
+                    suggested["location_id"] = loc_id
+
         fields = self._form_builder.build_create_product_fields(
             suggested, creating_parent=creating_parent
         )
