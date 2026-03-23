@@ -26,6 +26,8 @@ import homeassistant.helpers.config_validation as cv
 
 from .const import (
     CONF_DEFAULT_LOCATION_FREEZER,
+    CONF_DEFAULT_LOCATION_FRIDGE,
+    CONF_DEFAULT_LOCATION_RECIPE,
     DOMAIN,
     CONF_GROCY_API_URL,
     CONF_GROCY_API_KEY,
@@ -179,7 +181,9 @@ class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 persisted=None,
                 # if the following fields are None, then fallback to these values...
                 suggested={
-                    CONF_DEFAULT_LOCATION_FREEZER: ''
+                    CONF_DEFAULT_LOCATION_FRIDGE: '',
+                    CONF_DEFAULT_LOCATION_FREEZER: '',
+                    CONF_DEFAULT_LOCATION_RECIPE: '',
                 },
             )
             new_config_entry_data = transform_input(

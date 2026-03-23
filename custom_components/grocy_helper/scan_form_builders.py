@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from .coordinator import GrocyHelperCoordinator
-from .const import CONF_DEFAULT_LOCATION_FREEZER, DEV_CONST, SCAN_MODE
+from .const import CONF_DEFAULT_LOCATION_FREEZER, CONF_DEFAULT_LOCATION_FRIDGE, CONF_DEFAULT_LOCATION_RECIPE, DEV_CONST, SCAN_MODE
 from .grocytypes import GrocyMasterData, GrocyProduct
 from .scan_types import FieldType, FormField, NumberMode, SelectMode, SelectOption
 
@@ -651,6 +651,17 @@ class ScanFormBuilder:
         fields.extend(
             [
                 FormField(
+                    key=CONF_DEFAULT_LOCATION_FRIDGE,
+                    field_type=FieldType.SELECT,
+                    required=False,
+                    default=None, # Allow for clearing the value
+                    suggested_value=self._str_val(suggested.get(CONF_DEFAULT_LOCATION_FRIDGE)),
+                    options=loc_options,
+                    select_mode=SelectMode.DROPDOWN,
+                    multiple=False,
+                    custom_value=False,
+                ),
+                FormField(
                     key=CONF_DEFAULT_LOCATION_FREEZER,
                     field_type=FieldType.SELECT,
                     required=False,
@@ -660,7 +671,18 @@ class ScanFormBuilder:
                     select_mode=SelectMode.DROPDOWN,
                     multiple=False,
                     custom_value=False,
-                )
+                ),
+                FormField(
+                    key=CONF_DEFAULT_LOCATION_RECIPE,
+                    field_type=FieldType.SELECT,
+                    required=False,
+                    default=None, # Allow for clearing the value
+                    suggested_value=self._str_val(suggested.get(CONF_DEFAULT_LOCATION_RECIPE)),
+                    options=loc_options,
+                    select_mode=SelectMode.DROPDOWN,
+                    multiple=False,
+                    custom_value=False,
+                ),
             ]
         )
         return fields
