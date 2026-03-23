@@ -255,6 +255,13 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         self._session = ScanSession(
             coordinator=coordinator,
             api_bbuddy=coordinator._api_bbuddy,
+            # scan_options={
+            #     "locations": {
+            #         "default_fridge": config_entry.data.get(CONF_DEFAULT_LOCATION_FRIDGE),
+            #         "default_freezer": config_entry.data.get(CONF_DEFAULT_LOCATION_FREEZER),
+            #     },
+            # },
+            config_entry_data=config_entry.data,
         )
 
     # ── HA entry point ──────────────────────────────────────────────

@@ -38,7 +38,7 @@ from typing import Any
 
 from .barcodebuddyapi import BarcodeBuddyAPI
 from .coordinator import GrocyHelperCoordinator
-from .const import SCAN_MODE
+from .const import CONF_DEFAULT_LOCATION_FREEZER, CONF_DEFAULT_LOCATION_FRIDGE, CONF_DEFAULT_LOCATION_RECIPE, SCAN_MODE
 from .grocytypes import (
     BarcodeLookup,
     ExtendedGrocyProductStockInfo,
@@ -63,7 +63,7 @@ from .scan_types import (
     Step,
     StepResult,
 )
-from .utils import transform_input, try_parse_int
+from .utils import parse_int, transform_input, try_parse_int
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -92,6 +92,7 @@ class ScanSession:
         coordinator: GrocyHelperCoordinator,
         api_bbuddy: BarcodeBuddyAPI,
         scan_options: dict[str, bool] | None = None,
+        config_entry_data: dict[str, Any] | None = None,
     ) -> None:
         self._coordinator = coordinator
         self._api_grocy = coordinator._api_grocy
@@ -108,7 +109,7 @@ class ScanSession:
         # State manager for product/stock tracking
         self._state = ScanStateManager(self._api_grocy, self._coordinator)
 
-        self.scan_options: dict[str, bool] = scan_options or {
+        self.scan_option_defaults = {
             "input_price": True,
             "input_bestBeforeInDays": True,
             "input_shoppingLocationId": True,
@@ -118,8 +119,8 @@ class ScanSession:
             "show_add_product_barcode_form_for_recipe_product": False,
             # The values can be pre-filled during the generation of a recipe produced product
             "locations": {
-                "default_fridge": 2,
-                "default_freezer": 4,
+                "default_fridge": parse_int(config_entry_data.get(CONF_DEFAULT_LOCATION_FRIDGE) or 2),
+                "default_freezer": parse_int(config_entry_data.get(CONF_DEFAULT_LOCATION_FREEZER) or 4),
             },
             "product_groups": {
                 "default_for_recipe_products": 1,  # "Färdiglagat"
@@ -130,7 +131,7 @@ class ScanSession:
                 # "default_best_before_days_after_open": 3,
             },
             "defaults_for_recipe_product": {
-                "location_id": 5,
+                "location_id": parse_int(config_entry_data.get(CONF_DEFAULT_LOCATION_RECIPE)),
                 "should_not_be_frozen": False,
                 "default_best_before_days": 3,
                 "default_best_before_days_after_open": 1,
@@ -138,6 +139,17 @@ class ScanSession:
                 "default_best_before_days_after_thawing": 3,
             },
         }
+        if scan_options:
+            scan_options = scan_options or {}
+            # Any passed `scan_options` are considered "overrides"
+            scan_option_overrides = scan_options.copy()
+            # Update passed `scan_options` reference with the defaults
+            scan_options.update(self.scan_option_defaults)
+            # Re-apply the "overrides" on top
+            scan_options.update(scan_option_overrides)
+            self.scan_options: dict[str, bool] = scan_options
+        else:
+            self.scan_options: dict[str, bool] = self.scan_option_defaults
 
         # ── workflow state ──────────────────────────────────────────
         self.current_bb_mode: int = -1
