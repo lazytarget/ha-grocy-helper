@@ -34,11 +34,11 @@ import datetime as dt
 import json
 import logging
 import re
-from typing import Any, Iterable
+from typing import Any
 
 from .barcodebuddyapi import BarcodeBuddyAPI
 from .coordinator import GrocyHelperCoordinator
-from .const import SCAN_MODE, NUMERIC_FIELDS
+from .const import SCAN_MODE
 from .grocytypes import (
     BarcodeLookup,
     ExtendedGrocyProductStockInfo,
@@ -63,7 +63,7 @@ from .scan_types import (
     Step,
     StepResult,
 )
-from .utils import try_parse_int
+from .utils import transform_input, try_parse_int
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -662,7 +662,7 @@ class ScanSession:
         _LOGGER.info("Suggestions: %s", suggestions)
 
         # Initialize and transform input based on states
-        user_input = self.transform_input(
+        user_input = transform_input(
             user_input, persisted=self.current_product, suggested=suggestions
         )
         _LOGGER.info("Transformed user_input: %s", user_input)
@@ -706,7 +706,7 @@ class ScanSession:
             # - Product quantity unit 'portion' ?
             # - Calories per 100 (calculate from ingredients)
 
-            # user_input = self.transform_input(
+            # user_input = transform_input(
             #     user_input, persisted=self.current_product, suggested={
             #         "calories_per_100": kcal
             #     }
@@ -971,43 +971,7 @@ class ScanSession:
     # Public helpers
     # =================================================================
 
-    @staticmethod
-    def transform_input(
-        user_input: dict | None,
-        persisted: dict | None,
-        suggested: dict | None,
-        keys: Iterable[str] | None = None,
-    ) -> dict:
-        """Resolve input by merging user input, persisted data, and suggested data.
-
-        Parameters
-        ----------
-        user_input:
-            Submitted user input (highest precedence)
-        persisted:
-            Persisted product data (medium precedence)
-        suggested:
-            Suggested product data (lowest precedence)
-        keys:
-            List of keys to resolve (if None, resolve all keys present in any dict)
-
-        Returns
-        -------
-            User input dictionary with defaults filled in
-        """
-        user_input = user_input or {}
-        persisted = persisted or {}
-        suggested = suggested or {}
-        if keys is None:
-            # By default, resolve all keys present in any of the dictionaries
-            keys = set(user_input) | set(persisted) | set(suggested)
-
-        for key in keys:
-            val = user_input.get(key, persisted.get(key) or suggested.get(key))
-            if key not in NUMERIC_FIELDS:
-                val = str(val) if val is not None else None
-            user_input[key] = val
-        return user_input
+    # transform_input has been moved to utils.py
 
     # =================================================================
     # Private helpers
@@ -1135,7 +1099,7 @@ class ScanSession:
         _LOGGER.info("Defaults: %s", defaults)
 
         # Resolve suggestions with a transform
-        suggested = self.transform_input(
+        suggested = transform_input(
             user_input,
             persisted=product,
             suggested=defaults,
