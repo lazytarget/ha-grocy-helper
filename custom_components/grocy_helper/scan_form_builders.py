@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from .coordinator import GrocyHelperCoordinator
-from .const import CONF_DEFAULT_LOCATION_FREEZER, CONF_DEFAULT_LOCATION_FRIDGE, CONF_DEFAULT_LOCATION_RECIPE, DEV_CONST, SCAN_MODE
+from .const import CONF_DEFAULT_LOCATION_FREEZER, CONF_DEFAULT_LOCATION_FRIDGE, CONF_DEFAULT_LOCATION_RECIPE_RESULT, CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT, DEV_CONST, SCAN_MODE
 from .grocytypes import GrocyMasterData, GrocyProduct
 from .scan_types import FieldType, FormField, NumberMode, SelectMode, SelectOption
 
@@ -646,6 +646,7 @@ class ScanFormBuilder:
     ) -> list[FormField]:
         """Build fields for the scan options form."""
         loc_options = self._location_options(include_inactive=True)
+        product_group_options = self._product_group_options()
 
         fields: list[FormField] = []
         fields.extend(
@@ -673,12 +674,23 @@ class ScanFormBuilder:
                     custom_value=False,
                 ),
                 FormField(
-                    key=CONF_DEFAULT_LOCATION_RECIPE,
+                    key=CONF_DEFAULT_LOCATION_RECIPE_RESULT,
                     field_type=FieldType.SELECT,
                     required=False,
                     default=None, # Allow for clearing the value
-                    suggested_value=self._str_val(suggested.get(CONF_DEFAULT_LOCATION_RECIPE)),
+                    suggested_value=self._str_val(suggested.get(CONF_DEFAULT_LOCATION_RECIPE_RESULT)),
                     options=loc_options,
+                    select_mode=SelectMode.DROPDOWN,
+                    multiple=False,
+                    custom_value=False,
+                ),
+                FormField(
+                    key=CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT,
+                    field_type=FieldType.SELECT,
+                    required=False,
+                    default=None, # Allow for clearing the value
+                    suggested_value=self._str_val(suggested.get(CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT)),
+                    options=product_group_options,
                     select_mode=SelectMode.DROPDOWN,
                     multiple=False,
                     custom_value=False,

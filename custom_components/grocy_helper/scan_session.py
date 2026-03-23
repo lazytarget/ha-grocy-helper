@@ -38,7 +38,7 @@ from typing import Any
 
 from .barcodebuddyapi import BarcodeBuddyAPI
 from .coordinator import GrocyHelperCoordinator
-from .const import CONF_DEFAULT_LOCATION_FREEZER, CONF_DEFAULT_LOCATION_FRIDGE, CONF_DEFAULT_LOCATION_RECIPE, SCAN_MODE
+from .const import CONF_DEFAULT_LOCATION_FREEZER, CONF_DEFAULT_LOCATION_FRIDGE, CONF_DEFAULT_LOCATION_RECIPE_RESULT, CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT, SCAN_MODE
 from .grocytypes import (
     BarcodeLookup,
     ExtendedGrocyProductStockInfo,
@@ -123,7 +123,8 @@ class ScanSession:
                 "default_freezer": parse_int(config_entry_data.get(CONF_DEFAULT_LOCATION_FREEZER) or 4),
             },
             "product_groups": {
-                "default_for_recipe_products": 1,  # "Färdiglagat"
+                # "Färdiglagat"
+                "default_for_recipe_products": parse_int(config_entry_data.get(CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT)),
             },
             # TODO: Add units? or still use "known_qu"
             "defaults_for_product": {
@@ -131,7 +132,7 @@ class ScanSession:
                 # "default_best_before_days_after_open": 3,
             },
             "defaults_for_recipe_product": {
-                "location_id": parse_int(config_entry_data.get(CONF_DEFAULT_LOCATION_RECIPE)),
+                "location_id": parse_int(config_entry_data.get(CONF_DEFAULT_LOCATION_RECIPE_RESULT)),
                 "should_not_be_frozen": False,
                 "default_best_before_days": 3,
                 "default_best_before_days_after_open": 1,
