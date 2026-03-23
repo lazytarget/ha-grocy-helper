@@ -25,12 +25,18 @@ from homeassistant.helpers import selector
 import homeassistant.helpers.config_validation as cv
 
 from .const import (
+    CONF_DEFAULT_LOCATION_FREEZER,
+    CONF_DEFAULT_LOCATION_FRIDGE,
+    CONF_DEFAULT_LOCATION_RECIPE_RESULT,
+    CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT,
     DOMAIN,
     CONF_GROCY_API_URL,
     CONF_GROCY_API_KEY,
     CONF_BBUDDY_API_URL,
     CONF_BBUDDY_API_KEY,
 )
+from .coordinator import GrocyHelperCoordinator
+from .scan_form_builders import ScanFormBuilder
 from .scan_session import ScanSession
 from .scan_types import (
     AbortResult,
@@ -43,6 +49,7 @@ from .scan_types import (
     Step,
     StepResult,
 )
+from .utils import transform_input
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -123,15 +130,20 @@ class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_reconfigure(
-        self, user_input: dict[str, Any] | None = None
+        self, user_input: dict[str, Any] | None = None, edit_options: bool = False
     ) -> FlowResult:
         # return await self.async_step_user(user_input=user_input)
         """Handle the reconfigure step."""
         # if self._async_current_entries():
         #     return self.async_abort(reason="single_instance_allowed")
+        
+        config_entry = self._get_reconfigure_entry()
 
         errors: dict[str, str] = {}
-        if user_input is not None:
+        if user_input is not None and CONF_GROCY_API_URL not in user_input:
+            # Didn't pass the required API credentials, so this must be an options edit. Show the options form instead.
+            edit_options = True
+        if user_input is not None and not edit_options:
             grocy_url = user_input[CONF_GROCY_API_URL]
             grocy_api_key = user_input[CONF_GROCY_API_KEY]
             bbuddy_url = user_input.get(CONF_BBUDDY_API_URL)
@@ -144,22 +156,76 @@ class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # Abort flow if a unique_id is not a match with existing config entry
             self._abort_if_unique_id_mismatch()
 
-            config_entry_data = {
-                CONF_GROCY_API_URL: grocy_url,
-                CONF_GROCY_API_KEY: grocy_api_key,
-                CONF_BBUDDY_API_URL: bbuddy_url,
-                CONF_BBUDDY_API_KEY: bbuddy_api_key,
-            }
+            # Assign API credentials
+            new_config_entry_data = config_entry.data.copy()
+            new_config_entry_data[CONF_GROCY_API_URL] = grocy_url
+            new_config_entry_data[CONF_GROCY_API_KEY] = grocy_api_key
+            new_config_entry_data[CONF_BBUDDY_API_URL] = bbuddy_url
+            new_config_entry_data[CONF_BBUDDY_API_KEY] = bbuddy_api_key
+
+            has_diffs = any(config_entry.data.get(k) != new_config_entry_data.get(k) for k in new_config_entry_data.keys())
+            if has_diffs:
+                _LOGGER.info("API credentials changed during reconfigure. Updating config entry with new credentials: %s -> %s", config_entry.data, new_config_entry_data)
+                # Persist changed Grocy API credentials and exit
+                return self.async_update_reload_and_abort(
+                    config_entry,
+                    data_updates=new_config_entry_data,
+                )
+            else:
+                _LOGGER.info("No changes to API credentials detected during reconfigure. Edit scan options instead.")
+                # Instead show the scan options form, as no changes to the API credentials were made
+                return await self.async_step_reconfigure(user_input=None, edit_options=True)
+        elif user_input is not None and edit_options:
+            # Submitted scan options
+            user_input = transform_input(
+                user_input,
+                persisted=None,
+                # if the following fields are None, then fallback to these values...
+                suggested={
+                    CONF_DEFAULT_LOCATION_FRIDGE: '',
+                    CONF_DEFAULT_LOCATION_FREEZER: '',
+                    CONF_DEFAULT_LOCATION_RECIPE_RESULT: '',
+                    CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT: '',
+                },
+            )
+            new_config_entry_data = transform_input(
+                # Input has highest prio
+                user_input,
+                # Finally fallback to the actual persisted values...
+                persisted=config_entry.data,
+                suggested=None,
+            )
+            _LOGGER.info("Updating config entry with new scan options: %s + %s -> %s", config_entry.data, user_input, new_config_entry_data)
             return self.async_update_reload_and_abort(
-                self._get_reconfigure_entry(),
-                data_updates=config_entry_data,
+                config_entry,
+                data_updates=new_config_entry_data,
+            )
+
+        if edit_options:
+            # Render scan options fields
+            coordinator: GrocyHelperCoordinator = config_entry.coordinator
+            form_builder = ScanFormBuilder(coordinator)
+            fields = form_builder.build_scan_options_fields(config_entry.data)
+            request = FormRequest(
+                step_id="reconfigure",
+                fields=fields,
+                errors=errors,
+            )
+            schema = _form_request_to_schema(request)
+            # schema = self.add_suggested_values_to_schema(
+            #     schema, config_entry.data
+            # )
+            _LOGGER.info("Render edit options form with fields: %s", fields)
+            return self.async_show_form(
+                step_id=request.step_id,
+                data_schema=schema,
+                errors=errors,
             )
 
         schema = STEP_USER_DATA_SCHEMA
         schema = self.add_suggested_values_to_schema(
-            schema, self._get_reconfigure_entry().data
+            schema, config_entry.data
         )
-
         return self.async_show_form(
             step_id="reconfigure",
             data_schema=schema,
@@ -191,6 +257,13 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         self._session = ScanSession(
             coordinator=coordinator,
             api_bbuddy=coordinator._api_bbuddy,
+            # scan_options={
+            #     "locations": {
+            #         "default_fridge": config_entry.data.get(CONF_DEFAULT_LOCATION_FRIDGE),
+            #         "default_freezer": config_entry.data.get(CONF_DEFAULT_LOCATION_FREEZER),
+            #     },
+            # },
+            config_entry_data=config_entry.data,
         )
 
     # ── HA entry point ──────────────────────────────────────────────

@@ -34,11 +34,11 @@ import datetime as dt
 import json
 import logging
 import re
-from typing import Any, Iterable
+from typing import Any
 
 from .barcodebuddyapi import BarcodeBuddyAPI
 from .coordinator import GrocyHelperCoordinator
-from .const import SCAN_MODE, NUMERIC_FIELDS
+from .const import CONF_DEFAULT_LOCATION_FREEZER, CONF_DEFAULT_LOCATION_FRIDGE, CONF_DEFAULT_LOCATION_RECIPE_RESULT, CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT, SCAN_MODE
 from .grocytypes import (
     BarcodeLookup,
     ExtendedGrocyProductStockInfo,
@@ -63,7 +63,7 @@ from .scan_types import (
     Step,
     StepResult,
 )
-from .utils import try_parse_int
+from .utils import parse_int, transform_input, try_parse_int
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -92,7 +92,9 @@ class ScanSession:
         coordinator: GrocyHelperCoordinator,
         api_bbuddy: BarcodeBuddyAPI,
         scan_options: dict[str, bool] | None = None,
+        config_entry_data: dict[str, Any] | None = None,
     ) -> None:
+        config_entry_data = config_entry_data or {}
         self._coordinator = coordinator
         self._api_grocy = coordinator._api_grocy
         self._api_bbuddy = api_bbuddy
@@ -108,7 +110,7 @@ class ScanSession:
         # State manager for product/stock tracking
         self._state = ScanStateManager(self._api_grocy, self._coordinator)
 
-        self.scan_options: dict[str, bool] = scan_options or {
+        self.scan_option_defaults = {
             "input_price": True,
             "input_bestBeforeInDays": True,
             "input_shoppingLocationId": True,
@@ -118,11 +120,12 @@ class ScanSession:
             "show_add_product_barcode_form_for_recipe_product": False,
             # The values can be pre-filled during the generation of a recipe produced product
             "locations": {
-                "default_fridge": 2,
-                "default_freezer": 4,
+                "default_fridge": parse_int(config_entry_data.get(CONF_DEFAULT_LOCATION_FRIDGE) or 2),
+                "default_freezer": parse_int(config_entry_data.get(CONF_DEFAULT_LOCATION_FREEZER) or 4),
             },
             "product_groups": {
-                "default_for_recipe_products": 1,  # "Färdiglagat"
+                # "Färdiglagat"
+                "default_for_recipe_products": parse_int(config_entry_data.get(CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT)),
             },
             # TODO: Add units? or still use "known_qu"
             "defaults_for_product": {
@@ -130,7 +133,7 @@ class ScanSession:
                 # "default_best_before_days_after_open": 3,
             },
             "defaults_for_recipe_product": {
-                "location_id": 5,
+                "location_id": parse_int(config_entry_data.get(CONF_DEFAULT_LOCATION_RECIPE_RESULT)),
                 "should_not_be_frozen": False,
                 "default_best_before_days": 3,
                 "default_best_before_days_after_open": 1,
@@ -138,6 +141,16 @@ class ScanSession:
                 "default_best_before_days_after_thawing": 3,
             },
         }
+        if scan_options:
+            # Build a new dict so we don't mutate the caller-provided `scan_options`
+            # Any passed `scan_options` are considered "overrides"
+            self.scan_options: dict[str, bool] = {
+                **self.scan_option_defaults,
+                **scan_options,
+            }
+        else:
+            # Use a copy to avoid accidental mutation of the defaults elsewhere
+            self.scan_options: dict[str, bool] = dict(self.scan_option_defaults)
 
         # ── workflow state ──────────────────────────────────────────
         self.current_bb_mode: int = -1
@@ -662,7 +675,7 @@ class ScanSession:
         _LOGGER.info("Suggestions: %s", suggestions)
 
         # Initialize and transform input based on states
-        user_input = self.transform_input(
+        user_input = transform_input(
             user_input, persisted=self.current_product, suggested=suggestions
         )
         _LOGGER.info("Transformed user_input: %s", user_input)
@@ -706,7 +719,7 @@ class ScanSession:
             # - Product quantity unit 'portion' ?
             # - Calories per 100 (calculate from ingredients)
 
-            # user_input = self.transform_input(
+            # user_input = transform_input(
             #     user_input, persisted=self.current_product, suggested={
             #         "calories_per_100": kcal
             #     }
@@ -971,43 +984,7 @@ class ScanSession:
     # Public helpers
     # =================================================================
 
-    @staticmethod
-    def transform_input(
-        user_input: dict | None,
-        persisted: dict | None,
-        suggested: dict | None,
-        keys: Iterable[str] | None = None,
-    ) -> dict:
-        """Resolve input by merging user input, persisted data, and suggested data.
-
-        Parameters
-        ----------
-        user_input:
-            Submitted user input (highest precedence)
-        persisted:
-            Persisted product data (medium precedence)
-        suggested:
-            Suggested product data (lowest precedence)
-        keys:
-            List of keys to resolve (if None, resolve all keys present in any dict)
-
-        Returns
-        -------
-            User input dictionary with defaults filled in
-        """
-        user_input = user_input or {}
-        persisted = persisted or {}
-        suggested = suggested or {}
-        if keys is None:
-            # By default, resolve all keys present in any of the dictionaries
-            keys = set(user_input) | set(persisted) | set(suggested)
-
-        for key in keys:
-            val = user_input.get(key, persisted.get(key) or suggested.get(key))
-            if key not in NUMERIC_FIELDS:
-                val = str(val) if val is not None else None
-            user_input[key] = val
-        return user_input
+    # transform_input has been moved to utils.py
 
     # =================================================================
     # Private helpers
@@ -1135,7 +1112,7 @@ class ScanSession:
         _LOGGER.info("Defaults: %s", defaults)
 
         # Resolve suggestions with a transform
-        suggested = self.transform_input(
+        suggested = transform_input(
             user_input,
             persisted=product,
             suggested=defaults,
