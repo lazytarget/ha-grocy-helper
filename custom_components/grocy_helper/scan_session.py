@@ -94,6 +94,7 @@ class ScanSession:
         scan_options: dict[str, bool] | None = None,
         config_entry_data: dict[str, Any] | None = None,
     ) -> None:
+        config_entry_data = config_entry_data or {}
         self._coordinator = coordinator
         self._api_grocy = coordinator._api_grocy
         self._api_bbuddy = api_bbuddy
@@ -141,16 +142,15 @@ class ScanSession:
             },
         }
         if scan_options:
-            scan_options = scan_options or {}
+            # Build a new dict so we don't mutate the caller-provided `scan_options`
             # Any passed `scan_options` are considered "overrides"
-            scan_option_overrides = scan_options.copy()
-            # Update passed `scan_options` reference with the defaults
-            scan_options.update(self.scan_option_defaults)
-            # Re-apply the "overrides" on top
-            scan_options.update(scan_option_overrides)
-            self.scan_options: dict[str, bool] = scan_options
+            self.scan_options: dict[str, bool] = {
+                **self.scan_option_defaults,
+                **scan_options,
+            }
         else:
-            self.scan_options: dict[str, bool] = self.scan_option_defaults
+            # Use a copy to avoid accidental mutation of the defaults elsewhere
+            self.scan_options: dict[str, bool] = dict(self.scan_option_defaults)
 
         # ── workflow state ──────────────────────────────────────────
         self.current_bb_mode: int = -1
