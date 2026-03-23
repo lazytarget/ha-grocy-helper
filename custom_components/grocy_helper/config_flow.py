@@ -25,6 +25,7 @@ from homeassistant.helpers import selector
 import homeassistant.helpers.config_validation as cv
 
 from .const import (
+    CONF_DEFAULT_LOCATION_FREEZER,
     DOMAIN,
     CONF_GROCY_API_URL,
     CONF_GROCY_API_KEY,
@@ -45,6 +46,7 @@ from .scan_types import (
     Step,
     StepResult,
 )
+from .utils import transform_input
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -172,9 +174,22 @@ class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return await self.async_step_reconfigure(user_input=None, edit_options=True)
         elif user_input is not None and edit_options:
             # Submitted scan options
-            new_config_entry_data = config_entry.data.copy()
-            _LOGGER.info("Updating config entry with new scan options: %s -> %s", new_config_entry_data, user_input)
-            new_config_entry_data.update(user_input)
+            user_input = transform_input(
+                user_input,
+                persisted=None,
+                # if the following fields are None, then fallback to these values...
+                suggested={
+                    CONF_DEFAULT_LOCATION_FREEZER: ''
+                },
+            )
+            new_config_entry_data = transform_input(
+                # Input has highest prio
+                user_input,
+                # Finally fallback to the actual persisted values...
+                persisted=config_entry.data,
+                suggested=None,
+            )
+            _LOGGER.info("Updating config entry with new scan options: %s + %s -> %s", config_entry.data, user_input, new_config_entry_data)
             return self.async_update_reload_and_abort(
                 config_entry,
                 data_updates=new_config_entry_data,
