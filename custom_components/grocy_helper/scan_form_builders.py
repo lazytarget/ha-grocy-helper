@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from .coordinator import GrocyHelperCoordinator
-from .const import DEV_CONST, SCAN_MODE
+from .const import CONF_DEFAULT_LOCATION_FREEZER, DEV_CONST, SCAN_MODE
 from .grocytypes import GrocyMasterData, GrocyProduct
 from .scan_types import FieldType, FormField, NumberMode, SelectMode, SelectOption
 
@@ -638,16 +638,40 @@ class ScanFormBuilder:
                     select_mode=SelectMode.DROPDOWN,
                 ),
             )
+        return fields
 
+    def build_scan_options_fields(
+        self,
+        suggested: dict[str, Any],
+    ) -> list[FormField]:
+        """Build fields for the scan options form."""
+        loc_options = self._location_options(include_inactive=True)
+
+        fields: list[FormField] = []
+        fields.extend(
+            [
+                FormField(
+                    key=CONF_DEFAULT_LOCATION_FREEZER,
+                    field_type=FieldType.SELECT,
+                    required=False,
+                    default=None, # Allow for clearing the value
+                    suggested_value=self._str_val(suggested.get(CONF_DEFAULT_LOCATION_FREEZER)),
+                    options=loc_options,
+                    select_mode=SelectMode.DROPDOWN,
+                    multiple=False,
+                    custom_value=False,
+                )
+            ]
+        )
         return fields
 
     # ── Helper methods ───────────────────────────────────────────────
 
-    def _location_options(self) -> list[SelectOption]:
+    def _location_options(self, include_inactive: bool = False) -> list[SelectOption]:
         return [
             SelectOption(value=str(loc["id"]), label=loc["name"])
             for loc in self._masterdata.get("locations", [])
-            if loc.get("active") == 1
+            if include_inactive or loc.get("active") == 1
         ]
 
     def _product_group_options(self) -> list[SelectOption]:
