@@ -90,6 +90,16 @@ class GrocyAPI:
             self._session, url, self._api_key, return_none_when_404=True
         )
 
+    async def get_stock_by_stock_id(self, stock_id: str) -> dict[str, any]:
+        url = self.get_rest_url(API.URLs.GET_STOCK_ENTRY_BY_ID)
+        params = [("query[]", f"stock_id={stock_id}")]
+        response = await async_get(self._session, url, self._api_key, params=params)
+        if response and isinstance(response, list) and len(response) > 0:
+            if len(response) > 1:
+                raise ApiException(400, f"Multiple stock entries found for stock_id {stock_id}: {response}")
+            return response[0]
+        return None
+
     async def get_stock_product_by_id(
         self, product_id: int
     ) -> ExtendedGrocyProductStockInfo | None:

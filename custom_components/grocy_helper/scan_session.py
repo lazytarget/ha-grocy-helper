@@ -111,6 +111,7 @@ class ScanSession:
         self._state = ScanStateManager(self._api_grocy, self._coordinator)
 
         self.scan_option_defaults = {
+            "enable_auto_print": True,
             "input_price": True,
             "input_bestBeforeInDays": True,
             "input_shoppingLocationId": True,
@@ -1752,6 +1753,20 @@ class ScanSession:
             request.pop("barcode", None)  # Instead go by ´product_id´
             response = await self._coordinator.add_stock(product_id, request)
             # response = ""   # TODO: set based on response from Grocy
+
+            transaction = response[0] if response and isinstance(response, list) and len(response) > 0 else {}
+            _LOGGER.debug("Transaction: %s", transaction)
+            stock_row_id = transaction.get("stock_row_id")
+            if not stock_row_id and (stock_id := transaction.get("stock_id")):
+                stock_entry = await self._api_grocy.get_stock_by_stock_id(stock_id)
+                _LOGGER.debug("Stock entry: %s", stock_entry)
+                stock_row_id = stock_entry.get("id") if stock_entry else None
+
+            if stock_row_id and self.scan_options.get("enable_auto_print", False):
+                # Send print command
+                _LOGGER.info("Sending print command for stock_entry: %s", stock_row_id)
+                await self._api_grocy.print_label_for_stock_entry(stock_row_id)
+
         else:
             # Call Barcode Buddy scan
             # TODO: make Barcode Buddy obsolete? Instead do everything via Grocy API?. Gives more control, and cuts of middlehand. But looses the BBuddy UI and it's contextual settings.
