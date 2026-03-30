@@ -181,3 +181,15 @@ class GrocyAPI:
         url = self.get_rest_url(API.URLs.UPDATE_RECIPE) % recipe_id
         response = await async_put(self._session, url, self._api_key, json_data=data)
         return response
+
+    async def print_label_for_product(self, product_id: int) -> dict:
+        url = self.get_rest_url(API.URLs.PRINT_LABEL_FOR_PRODUCT) % product_id
+        return await async_get(self._session, url, self._api_key)
+
+    async def print_label_for_stock_entry(self, stock_entry_id: int) -> dict:
+        url = self.get_rest_url(API.URLs.PRINT_LABEL_FOR_STOCK_ENTRY) % stock_entry_id
+        return await async_get(self._session, url, self._api_key)
+
+    async def print_label_for_recipe(self, recipe_id: int) -> dict:
+        url = self.get_rest_url(API.URLs.PRINT_LABEL_FOR_RECIPE) % recipe_id
+        return await async_get(self._session, url, self._api_key)

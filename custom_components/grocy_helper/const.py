@@ -73,6 +73,10 @@ class API:
         CREATE_RECIPE: Final = "api/objects/recipes"
         UPDATE_RECIPE: Final = "api/objects/recipes/%s"
 
+        PRINT_LABEL_FOR_PRODUCT: Final = "api/stock/products/%s/printlabel"
+        PRINT_LABEL_FOR_STOCK_ENTRY: Final = "api/stock/entry/%s/printlabel"
+        PRINT_LABEL_FOR_RECIPE: Final = "api/recipes/%s/printlabel"
+
         BBUDDY_SCAN: Final = "api/action/scan"
         BBUDDY_GET_MODE: Final = "api/state/getmode"
         BBUDDY_SET_MODE: Final = "api/state/setmode"
