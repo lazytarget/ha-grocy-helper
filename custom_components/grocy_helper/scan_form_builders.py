@@ -534,18 +534,27 @@ class ScanFormBuilder:
 
     def build_create_recipe_fields(
         self,
-        base_recipe: dict | None = None,
+        suggestions: dict[str, Any] | None = None,
+        printing_enabled: bool = False,
     ) -> list[FormField]:
         """Build fields for the create-recipe form."""
-        base_recipe = base_recipe or {}
+        suggestions = suggestions or {}
         fields: list[FormField] = [
             FormField(
                 key="name",
                 field_type=FieldType.TEXT,
                 required=True,
-                suggested_value=base_recipe.get("name"),
+                suggested_value=suggestions.get("name"),
             )
         ]
+        if printing_enabled:
+            fields.extend(FormField(
+                key="print",
+                field_type=FieldType.BOOLEAN,
+                required=False,
+                default=False,
+                suggested_value=suggestions.get("print", False),
+            ))
         return fields
 
     def build_scan_process_fields(

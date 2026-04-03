@@ -38,7 +38,7 @@ from typing import Any
 
 from .barcodebuddyapi import BarcodeBuddyAPI
 from .coordinator import GrocyHelperCoordinator
-from .const import CONF_DEFAULT_LOCATION_FREEZER, CONF_DEFAULT_LOCATION_FRIDGE, CONF_DEFAULT_LOCATION_RECIPE_RESULT, CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT, CONF_ENABLE_AUTO_PRINT, SCAN_MODE
+from .const import CONF_DEFAULT_LOCATION_FREEZER, CONF_DEFAULT_LOCATION_FRIDGE, CONF_DEFAULT_LOCATION_RECIPE_RESULT, CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT, CONF_ENABLE_AUTO_PRINT, CONF_ENABLE_PRINTING, SCAN_MODE
 from .grocytypes import (
     BarcodeLookup,
     ExtendedGrocyProductStockInfo,
@@ -885,7 +885,7 @@ class ScanSession:
 
         # First render - show form
         if user_input is None:
-            return self._show_create_recipe_form(new_recipe, {})
+            return self._show_create_recipe_form(suggestions={**new_recipe, "print": self.scan_options.get(CONF_ENABLE_AUTO_PRINT, False)})
 
         # ── process submitted form ──────────────────────────────────
 
@@ -908,6 +908,12 @@ class ScanSession:
             "Inserting barcode for created recipe into queue: %s",
             f"grcy:r:{self.current_recipe['id']}",
         )
+
+        if self.scan_options.get(CONF_ENABLE_PRINTING) and user_input.get("print"):
+            # Print label for Recipe booklet
+            _LOGGER.info("Sending print command for recipe: %s", recipe)
+            await self._api_grocy.print_label_for_recipe(recipe["id"])
+
         self.barcode_queue.insert(0, f"grcy:r:{self.current_recipe['id']}")
         return await self._step_scan_queue()
 
@@ -1179,16 +1185,21 @@ class ScanSession:
         return self._cached_form
 
     def _show_create_recipe_form(
-        self, recipe: dict[str, Any], errors: dict[str, str]
+        self,
+        suggestions: dict[str, Any] | None = None,
+        errors: dict[str, str] | None = None
     ) -> FormRequest:
         """Build and return the add-recipe form."""
-        fields = self._form_builder.build_create_recipe_fields()
+        fields = self._form_builder.build_create_recipe_fields(
+            suggestions=suggestions,
+            printing_enabled=self.scan_options.get(CONF_ENABLE_PRINTING, False),
+        )
         aliases = self._get_aliases()
         return FormRequest(
             step_id=Step.SCAN_CREATE_RECIPE,
             fields=fields,
             description_placeholders={
-                "name": recipe.get("name"),
+                "name": suggestions.get("name"),
                 "barcode": self.current_barcode,
                 "product_aliases": "\n".join([f"- {a.strip()}" for a in aliases if a]),
                 "lookup_output": self._format_lookup_output(),
@@ -1754,7 +1765,7 @@ class ScanSession:
             response = await self._coordinator.add_stock(product_id, request)
             # response = ""   # TODO: set based on response from Grocy
 
-            if self.scan_options.get(CONF_ENABLE_AUTO_PRINT, False):
+            if self.scan_options.get(CONF_ENABLE_PRINTING) and self.scan_options.get(CONF_ENABLE_AUTO_PRINT):
                 # Print the label for the newly added stock entry
                 transaction = response[0] if response and isinstance(response, list) and len(response) > 0 else {}
                 _LOGGER.debug("Transaction: %s", transaction)
