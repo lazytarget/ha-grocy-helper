@@ -191,6 +191,7 @@ class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_ENABLE_PRINTING: False,
                     CONF_ENABLE_AUTO_PRINT: False,
                 },
+                str_keys=[],
             )
             new_config_entry_data = transform_input(
                 # Input has highest prio
@@ -198,6 +199,7 @@ class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # Finally fallback to the actual persisted values...
                 persisted=config_entry.data,
                 suggested=None,
+                str_keys=[],
             )
             _LOGGER.info("Updating config entry with new scan options: %s + %s -> %s", config_entry.data, user_input, new_config_entry_data)
             return self.async_update_reload_and_abort(

@@ -24,6 +24,7 @@ def transform_input(
     persisted: dict | None,
     suggested: dict | None,
     keys: Iterable[str] | None = None,
+    str_keys: Iterable[str] | None = None,
 ) -> dict:
     """Resolve input by merging user input, persisted data, and suggested data.
 
@@ -37,6 +38,8 @@ def transform_input(
         Suggested product data (lowest precedence)
     keys:
         List of keys to resolve (if None, resolve all keys present in any dict)
+    str_keys:
+        List of keys to always convert to strings (if None, use default behavior)
 
     Returns
     -------
@@ -51,7 +54,11 @@ def transform_input(
 
     for key in keys:
         val = user_input.get(key, persisted.get(key) or suggested.get(key))
-        if key not in NUMERIC_FIELDS:
-            val = str(val) if val is not None else None
+        if str_keys is not None:
+            if key in str_keys:
+                val = str(val) if val is not None else None
+        else:
+            if key not in NUMERIC_FIELDS:
+                val = str(val) if val is not None else None
         user_input[key] = val
     return user_input

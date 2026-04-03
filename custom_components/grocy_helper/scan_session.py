@@ -111,6 +111,7 @@ class ScanSession:
         self._state = ScanStateManager(self._api_grocy, self._coordinator)
 
         self.scan_option_defaults = {
+            CONF_ENABLE_PRINTING: bool(config_entry_data.get(CONF_ENABLE_PRINTING, False)),
             CONF_ENABLE_AUTO_PRINT: bool(config_entry_data.get(CONF_ENABLE_AUTO_PRINT, False)),
             "input_price": True,
             "input_bestBeforeInDays": True,
@@ -121,8 +122,8 @@ class ScanSession:
             "show_add_product_barcode_form_for_recipe_product": False,
             # The values can be pre-filled during the generation of a recipe produced product
             "locations": {
-                "default_fridge": parse_int(config_entry_data.get(CONF_DEFAULT_LOCATION_FRIDGE) or 2),
-                "default_freezer": parse_int(config_entry_data.get(CONF_DEFAULT_LOCATION_FREEZER) or 4),
+                "default_fridge": parse_int(config_entry_data.get(CONF_DEFAULT_LOCATION_FRIDGE)),
+                "default_freezer": parse_int(config_entry_data.get(CONF_DEFAULT_LOCATION_FREEZER)),
             },
             "product_groups": {
                 # "Färdiglagat"
@@ -882,10 +883,14 @@ class ScanSession:
             return AbortResult(reason="Recipe already exists")
 
         new_recipe: GrocyRecipe = {}
+        enable_printing = self.scan_options.get(CONF_ENABLE_PRINTING, False)
 
         # First render - show form
         if user_input is None:
-            return self._show_create_recipe_form(suggestions={**new_recipe, "print": self.scan_options.get(CONF_ENABLE_AUTO_PRINT, False)})
+            return self._show_create_recipe_form(
+                suggestions={**new_recipe, "print": self.scan_options.get(CONF_ENABLE_AUTO_PRINT, False)},
+                printing_enabled=enable_printing
+            )
 
         # ── process submitted form ──────────────────────────────────
 
@@ -909,7 +914,7 @@ class ScanSession:
             f"grcy:r:{self.current_recipe['id']}",
         )
 
-        if self.scan_options.get(CONF_ENABLE_PRINTING) and user_input.get("print"):
+        if enable_printing and user_input.get("print"):
             # Print label for Recipe booklet
             _LOGGER.info("Sending print command for recipe: %s", recipe)
             await self._api_grocy.print_label_for_recipe(recipe["id"])
@@ -1187,22 +1192,21 @@ class ScanSession:
     def _show_create_recipe_form(
         self,
         suggestions: dict[str, Any] | None = None,
-        errors: dict[str, str] | None = None
+        errors: dict[str, str] | None = None,
+        printing_enabled: bool = False,
     ) -> FormRequest:
         """Build and return the add-recipe form."""
         fields = self._form_builder.build_create_recipe_fields(
             suggestions=suggestions,
-            printing_enabled=self.scan_options.get(CONF_ENABLE_PRINTING, False),
+            printing_enabled=printing_enabled,
         )
-        aliases = self._get_aliases()
         return FormRequest(
             step_id=Step.SCAN_CREATE_RECIPE,
             fields=fields,
             description_placeholders={
                 "name": suggestions.get("name"),
                 "barcode": self.current_barcode,
-                "product_aliases": "\n".join([f"- {a.strip()}" for a in aliases if a]),
-                "lookup_output": self._format_lookup_output(),
+                "recipe_product_name_prefix": "Matlåda: ",
             },
             errors=errors,
         )

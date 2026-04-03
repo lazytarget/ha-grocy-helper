@@ -167,12 +167,12 @@
             },
             "scan_create_recipe": {
                 "title": "Create recipe",
-                "description": "{lookup_output}\n\n## Name suggestions\n{product_aliases}",
+                "description": "Create a new recipe in Grocy. Prefix '{recipe_product_name_prefix}' is recommended for better identification of cooked products in Grocy",
                 "data": {
                     "name": "Recipe name"
                 },
                 "data_description": {
-                    "name": "Can be prefixed with 'Matlåda: ' for better identification of cooked products"
+                    "name": "Can be prefixed with '{recipe_product_name_prefix}' for better identification of cooked products"
                 }
             },
             "scan": {

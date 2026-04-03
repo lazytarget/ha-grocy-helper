@@ -548,7 +548,7 @@ class ScanFormBuilder:
             )
         ]
         if printing_enabled:
-            fields.extend(FormField(
+            fields.append(FormField(
                 key="print",
                 field_type=FieldType.BOOLEAN,
                 required=False,
