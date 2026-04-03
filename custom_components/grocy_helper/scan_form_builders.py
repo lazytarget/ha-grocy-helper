@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from .coordinator import GrocyHelperCoordinator
-from .const import CONF_DEFAULT_LOCATION_FREEZER, CONF_DEFAULT_LOCATION_FRIDGE, CONF_DEFAULT_LOCATION_RECIPE_RESULT, CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT, CONF_ENABLE_AUTO_PRINT, DEV_CONST, SCAN_MODE
+from .const import CONF_DEFAULT_LOCATION_FREEZER, CONF_DEFAULT_LOCATION_FRIDGE, CONF_DEFAULT_LOCATION_RECIPE_RESULT, CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT, CONF_ENABLE_AUTO_PRINT, CONF_ENABLE_PRINTING, DEV_CONST, SCAN_MODE
 from .grocytypes import GrocyMasterData, GrocyProduct
 from .scan_types import FieldType, FormField, NumberMode, SelectMode, SelectOption
 
@@ -703,6 +703,13 @@ class ScanFormBuilder:
                     select_mode=SelectMode.DROPDOWN,
                     multiple=False,
                     custom_value=False,
+                ),
+                FormField(
+                    key=CONF_ENABLE_PRINTING,
+                    field_type=FieldType.BOOLEAN,
+                    required=False,
+                    default=None, # Allow for clearing the value
+                    suggested_value=self._str_val(suggested.get(CONF_ENABLE_PRINTING)),
                 ),
                 FormField(
                     key=CONF_ENABLE_AUTO_PRINT,
