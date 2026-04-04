@@ -1702,13 +1702,29 @@ class ScanSession:
         # ── First render: show produce input form ───────────────────
         if user_input is None:
             recipe_cost: float | None = None
+            fulfillment_calories: float | None = None
             try:
                 fulfillment = await self._api_grocy.get_recipe_fulfillment(recipe["id"])
-                recipe_cost = fulfillment.get("costs")
-                if recipe_cost is not None:
-                    recipe_cost = float(recipe_cost)
+
+                # costs in fulfillment is scaled by desired_servings.
+                # Normalize to per-base-serving so we can re-scale to user's servings.
+                desired = int(recipe.get("desired_servings", 1) or 1)
+                raw_costs = fulfillment.get("costs")
+                if raw_costs is not None:
+                    cost_per_serving = float(raw_costs) / max(desired, 1)
+                    base_s = int(recipe.get("base_servings", 1) or 1)
+                    # Pre-fill with cost scaled to base_servings (user can edit)
+                    recipe_cost = round(cost_per_serving * base_s, 2)
+
+                # calories in fulfillment is total for 1× base_servings
+                # (amounts NOT scaled by desired_servings in the SQL view).
+                raw_cal = fulfillment.get("calories")
+                if raw_cal is not None:
+                    fulfillment_calories = float(raw_cal)
+
                 _LOGGER.info(
-                    "Recipe #%s fulfillment costs: %s", recipe["id"], recipe_cost
+                    "Recipe #%s fulfillment — costs: %s, calories: %s",
+                    recipe["id"], recipe_cost, fulfillment_calories,
                 )
             except Exception:
                 _LOGGER.warning(
@@ -1728,6 +1744,12 @@ class ScanSession:
                 base_servings=base_servings,
             )
             self._cached_process_fields = fields
+
+            # Pre-stash fulfillment data so it survives across the form round-trip
+            self._produce_input = {
+                "fulfillment_calories": fulfillment_calories,
+            }
+
             return FormRequest(
                 step_id=Step.SCAN_PROCESS,
                 fields=fields,
@@ -1742,12 +1764,12 @@ class ScanSession:
             )
 
         # ── Stash submitted values and go to confirmation ───────────
-        self._produce_input = {
+        self._produce_input.update({
             "produce_servings": int(user_input.get("produce_servings", 1)),
             "produce_amount": int(user_input.get("produce_amount", 1)),
             "produce_location_id": int(user_input["produce_location_id"]),
             "produce_price": user_input.get("produce_price"),
-        }
+        })
         return await self._step_produce_confirm(user_input=None)
 
     # ── produce_confirm ──────────────────────────────────────────────
@@ -1790,13 +1812,22 @@ class ScanSession:
             except (ValueError, ZeroDivisionError):
                 pass
 
-        # Calories per serving from product
+        # Calories per serving: prefer product.calories, fall back to
+        # fulfillment.calories / base_servings (fulfillment calories is the
+        # total for 1× base recipe, NOT scaled by desired_servings).
         calories_per_serving_str = "—"
         product_calories = product.get("calories")
-        if product_calories:
+        fulfillment_calories = inp.get("fulfillment_calories")
+        if product_calories and float(product_calories) > 0:
             try:
-                calories_per_serving_str = f"{int(product_calories)} kcal"
+                calories_per_serving_str = f"{int(float(product_calories))} kcal"
             except (ValueError, TypeError):
+                pass
+        elif fulfillment_calories and base_servings > 0:
+            try:
+                cps = round(float(fulfillment_calories) / base_servings)
+                calories_per_serving_str = f"~{cps} kcal"
+            except (ValueError, TypeError, ZeroDivisionError):
                 pass
 
         # Location name
