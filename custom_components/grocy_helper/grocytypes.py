@@ -178,6 +178,14 @@ class GrocyRecipe(TypedDict):
     userfields: dict[str, Any] | None
 
 
+class GrocyRecipeFulfillment(TypedDict):
+    recipe_id: int
+    need_fulfilled: bool
+    need_fulfilled_with_shopping_list: bool
+    missing_products_count: int
+    costs: float
+
+
 class BarcodeBuddyScanRequest(TypedDict):
     barcode: str
     price: float | None

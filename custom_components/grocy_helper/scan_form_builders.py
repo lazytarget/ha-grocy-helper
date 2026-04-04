@@ -649,6 +649,85 @@ class ScanFormBuilder:
             )
         return fields
 
+    def build_produce_fields(
+        self,
+        product: dict,
+        location_id: int | None,
+        printing_enabled: bool = False,
+        auto_print: bool = False,
+        recipe_cost: float | None = None,
+        base_servings: int = 1,
+    ) -> list[FormField]:
+        """Build fields for the produce form (recipe → stock entries).
+
+        Parameters
+        ----------
+        product:
+            The producing product.
+        location_id:
+            Suggested default location for the produced items.
+        printing_enabled:
+            Whether label printing is configured.
+        auto_print:
+            Whether auto-print is enabled (used as default for print checkbox).
+        recipe_cost:
+            Total recipe cost from Grocy fulfillment endpoint.
+        base_servings:
+            Number of servings from the recipe definition.
+        """
+
+        loc_options = [
+            SelectOption(value=str(loc["id"]), label=loc["name"])
+            for loc in self._masterdata.get("locations", [])
+            if loc.get("active") == 1
+            and (product.get("should_not_be_frozen", 0) == 0 or loc["is_freezer"] == 0)
+        ]
+
+        fields: list[FormField] = [
+            FormField(
+                key="produce_amount",
+                field_type=FieldType.NUMBER,
+                required=True,
+                suggested_value=max(1, base_servings - 1),
+                min_value=1,
+                max_value=20,
+                step=1,
+                number_mode=NumberMode.BOX,
+            ),
+            FormField(
+                key="produce_location_id",
+                field_type=FieldType.SELECT,
+                required=True,
+                suggested_value=self._str_val(location_id),
+                options=loc_options,
+                select_mode=SelectMode.DROPDOWN,
+            ),
+        ]
+
+        if recipe_cost is not None:
+            fields.append(
+                FormField(
+                    key="produce_price",
+                    field_type=FieldType.TEXT,
+                    required=False,
+                    suggested_value=str(round(recipe_cost, 2)),
+                    description="Total cost of ingredients (editable)",
+                ),
+            )
+
+        if printing_enabled:
+            fields.append(
+                FormField(
+                    key="produce_print",
+                    field_type=FieldType.BOOLEAN,
+                    required=False,
+                    default=auto_print,
+                    suggested_value=auto_print,
+                ),
+            )
+
+        return fields
+
     def build_scan_options_fields(
         self,
         suggested: dict[str, Any],

@@ -946,18 +946,20 @@ class ScanSession:
             "product", {}
         )
 
+        # Check if in purchase mode
+        in_purchase_mode = self._is_in_purchase_mode()
+
+        # ── Produce flow (recipe context) ───────────────────────────
+        if in_purchase_mode and self.current_recipe:
+            return await self._handle_produce_flow(user_input, product, errors)
+
         # Extract input values
         price, best_before_in_days, shopping_location_id = (
             self._extract_scan_process_input(user_input, product)
         )
 
-        # Check if in purchase mode
-        in_purchase_mode = self._is_in_purchase_mode()
-
         # Show form if needed
         if user_input is None and in_purchase_mode:
-            # TODO: If in Purchase context AND self.current_recipe, then add field for target to place "Matlådor", and how many portions that where produced...
-
             if self.current_barcode_meta and "price" in self.current_barcode_meta:
                 price = self.current_barcode_meta["price"]
 
@@ -1679,6 +1681,149 @@ class ScanSession:
 
     # ── Helpers for _step_scan_process ────────────────────────────────
 
+    async def _handle_produce_flow(
+        self,
+        user_input: dict[str, Any] | None,
+        product: dict,
+        errors: dict[str, str],
+    ) -> StepResult:
+        """Handle produce flow when in purchase mode with a recipe context.
+
+        Shows a form to specify the number of containers and target
+        location.  On submit, fetches recipe cost, creates N stock
+        entries and optionally prints a label for each.
+        """
+
+        recipe = self.current_recipe
+        enable_printing = self.scan_options.get(CONF_ENABLE_PRINTING, False)
+        auto_print = self.scan_options.get(CONF_ENABLE_AUTO_PRINT, False)
+
+        # ── First render: show produce form ─────────────────────────
+        if user_input is None:
+            recipe_cost: float | None = None
+            try:
+                fulfillment = await self._api_grocy.get_recipe_fulfillment(recipe["id"])
+                recipe_cost = fulfillment.get("costs")
+                if recipe_cost is not None:
+                    recipe_cost = float(recipe_cost)
+                _LOGGER.info(
+                    "Recipe #%s fulfillment costs: %s", recipe["id"], recipe_cost
+                )
+            except Exception:
+                _LOGGER.warning(
+                    "Could not fetch recipe fulfillment for #%s", recipe["id"],
+                    exc_info=True,
+                )
+
+            base_servings = int(recipe.get("base_servings", 1) or 1)
+            default_location = self.scan_options.get(
+                "defaults_for_recipe_product", {}
+            ).get("location_id")
+
+            fields = self._form_builder.build_produce_fields(
+                product=product,
+                location_id=default_location,
+                printing_enabled=enable_printing,
+                auto_print=auto_print,
+                recipe_cost=recipe_cost,
+                base_servings=base_servings,
+            )
+            self._cached_process_fields = fields
+            return FormRequest(
+                step_id=Step.SCAN_PROCESS,
+                fields=fields,
+                description_placeholders={
+                    "name": product.get("name"),
+                    "recipe_info": (
+                        f"## Produce: {recipe['name']}\n"
+                        f"Base servings: {base_servings}"
+                    ),
+                },
+                errors=errors,
+            )
+
+        # ── Process submitted produce form ──────────────────────────
+        produce_amount = int(user_input.get("produce_amount", 1))
+        produce_location_id = int(user_input["produce_location_id"])
+        produce_price_total = user_input.get("produce_price")
+        should_print = enable_printing and user_input.get("produce_print", False)
+
+        # Price per unit = total ingredient cost / base_servings
+        # This reflects the actual cost of what's inside each container,
+        # regardless of how many containers are produced vs eaten.
+        base_servings = int(recipe.get("base_servings", 1) or 1)
+        price_per_unit: float | None = None
+        if produce_price_total is not None and str(produce_price_total).strip():
+            try:
+                price_per_unit = round(float(produce_price_total) / base_servings, 2)
+            except (ValueError, ZeroDivisionError):
+                pass
+
+        best_before_days = product.get("default_best_before_days")
+        best_before_date: str | None = None
+        if best_before_days is not None and int(best_before_days) > 0:
+            d = dt.datetime.now() + dt.timedelta(days=int(best_before_days))
+            best_before_date = d.strftime("%Y-%m-%d")
+
+        product_id = product["id"]
+        created_count = 0
+
+        for i in range(produce_amount):
+            stock_data: dict[str, Any] = {
+                "amount": 1,
+                "transaction_type": "purchase",
+                "location_id": produce_location_id,
+            }
+            if price_per_unit is not None:
+                stock_data["price"] = price_per_unit
+            if best_before_date:
+                stock_data["best_before_date"] = best_before_date
+
+            try:
+                response = await self._coordinator.add_stock(product_id, stock_data)
+                created_count += 1
+                _LOGGER.info(
+                    "Produced stock entry %d/%d for product #%s: %s",
+                    i + 1, produce_amount, product_id, response,
+                )
+
+                # Print label for each created stock entry
+                if should_print:
+                    await self._print_stock_entry_label(response)
+
+            except Exception:
+                _LOGGER.error(
+                    "Failed to create stock entry %d/%d for product #%s",
+                    i + 1, produce_amount, product_id,
+                    exc_info=True,
+                )
+
+        self.barcode_queue.pop(0)
+        self.barcode_results.append(
+            f"Produced {created_count}/{produce_amount} × {product.get('name')} "
+            f"from recipe '{recipe['name']}'"
+        )
+        return await self._step_scan_queue()
+
+    async def _print_stock_entry_label(self, add_stock_response: Any) -> None:
+        """Print a label for a newly created stock entry."""
+        transaction = (
+            add_stock_response[0]
+            if add_stock_response
+            and isinstance(add_stock_response, list)
+            and len(add_stock_response) > 0
+            else {}
+        )
+        stock_row_id = transaction.get("stock_row_id")
+        if not stock_row_id and (stock_id := transaction.get("stock_id")):
+            stock_entry = await self._api_grocy.get_stock_by_stock_id(stock_id)
+            stock_row_id = stock_entry.get("id") if stock_entry else None
+        if stock_row_id:
+            _LOGGER.info("Sending print command for stock_entry: %s", stock_row_id)
+            await self._api_grocy.print_label_for_stock_entry(stock_row_id)
+        else:
+            _LOGGER.warning("Could not resolve stock_row_id for printing")
+
     async def _ensure_product_stock_loaded(self) -> None:
         """Ensure product stock info is loaded."""
         if self.current_product:
@@ -1772,17 +1917,7 @@ class ScanSession:
 
             if self.scan_options.get(CONF_ENABLE_PRINTING) and self.scan_options.get(CONF_ENABLE_AUTO_PRINT):
                 # Print the label for the newly added stock entry
-                transaction = response[0] if response and isinstance(response, list) and len(response) > 0 else {}
-                _LOGGER.debug("Transaction: %s", transaction)
-                stock_row_id = transaction.get("stock_row_id")
-                if not stock_row_id and (stock_id := transaction.get("stock_id")):
-                    stock_entry = await self._api_grocy.get_stock_by_stock_id(stock_id)
-                    _LOGGER.debug("Stock entry: %s", stock_entry)
-                    stock_row_id = stock_entry.get("id") if stock_entry else None
-                if stock_row_id:
-                    # Send print command
-                    _LOGGER.info("Sending print command for stock_entry: %s", stock_row_id)
-                    await self._api_grocy.print_label_for_stock_entry(stock_row_id)
+                await self._print_stock_entry_label(response)
 
         else:
             # Call Barcode Buddy scan

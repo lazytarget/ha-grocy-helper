@@ -76,6 +76,8 @@ class API:
         CREATE_RECIPE: Final = "api/objects/recipes"
         UPDATE_RECIPE: Final = "api/objects/recipes/%s"
 
+        GET_RECIPE_FULFILLMENT: Final = "api/recipes/%s/fulfillment"
+
         PRINT_LABEL_FOR_PRODUCT: Final = "api/stock/products/%s/printlabel"
         PRINT_LABEL_FOR_STOCK_ENTRY: Final = "api/stock/entry/%s/printlabel"
         PRINT_LABEL_FOR_RECIPE: Final = "api/recipes/%s/printlabel"
