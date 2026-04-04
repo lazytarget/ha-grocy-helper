@@ -166,6 +166,8 @@ class ScanSession:
         self._cached_form: FormRequest | None = None
         # Cached process-step schema fields (for error re-display)
         self._cached_process_fields: list[FormField] | None = None
+        # Stashed produce-input between form 1 and confirm form
+        self._produce_input: dict[str, Any] = {}
 
     # ── public helpers ───────────────────────────────────────────────
 
@@ -257,6 +259,7 @@ class ScanSession:
             Step.SCAN_TRANSFER_START: self._step_transfer_start,
             Step.SCAN_TRANSFER_INPUT: self._step_transfer_input,
             Step.SCAN_CREATE_RECIPE: self._step_create_recipe,
+            Step.SCAN_PRODUCE_CONFIRM: self._step_produce_confirm,
             Step.SCAN_PROCESS: self._step_scan_process,
         }
         handler = handlers.get(step_id)
@@ -1687,18 +1690,16 @@ class ScanSession:
         product: dict,
         errors: dict[str, str],
     ) -> StepResult:
-        """Handle produce flow when in purchase mode with a recipe context.
+        """Handle produce input form (Form 1 of 2).
 
-        Shows a form to specify the number of containers and target
-        location.  On submit, fetches recipe cost, creates N stock
-        entries and optionally prints a label for each.
+        Collects servings cooked, containers to produce, location and
+        total ingredient cost.  On submit, stashes the values and
+        transitions to the confirmation step.
         """
 
         recipe = self.current_recipe
-        enable_printing = self.scan_options.get(CONF_ENABLE_PRINTING, False)
-        auto_print = self.scan_options.get(CONF_ENABLE_AUTO_PRINT, False)
 
-        # ── First render: show produce form ─────────────────────────
+        # ── First render: show produce input form ───────────────────
         if user_input is None:
             recipe_cost: float | None = None
             try:
@@ -1716,15 +1717,13 @@ class ScanSession:
                 )
 
             base_servings = int(recipe.get("base_servings", 1) or 1)
-            default_location = self.scan_options.get(
-                "defaults_for_recipe_product", {}
-            ).get("location_id")
+
+            # Default location from the producing product, not from scan_options
+            default_location = product.get("location_id")
 
             fields = self._form_builder.build_produce_fields(
                 product=product,
                 location_id=default_location,
-                printing_enabled=enable_printing,
-                auto_print=auto_print,
                 recipe_cost=recipe_cost,
                 base_servings=base_servings,
             )
@@ -1742,23 +1741,134 @@ class ScanSession:
                 errors=errors,
             )
 
-        # ── Process submitted produce form ──────────────────────────
-        produce_amount = int(user_input.get("produce_amount", 1))
-        produce_location_id = int(user_input["produce_location_id"])
-        produce_price_total = user_input.get("produce_price")
-        should_print = enable_printing and user_input.get("produce_print", False)
+        # ── Stash submitted values and go to confirmation ───────────
+        self._produce_input = {
+            "produce_servings": int(user_input.get("produce_servings", 1)),
+            "produce_amount": int(user_input.get("produce_amount", 1)),
+            "produce_location_id": int(user_input["produce_location_id"]),
+            "produce_price": user_input.get("produce_price"),
+        }
+        return await self._step_produce_confirm(user_input=None)
 
-        # Price per unit = total ingredient cost / base_servings
-        # This reflects the actual cost of what's inside each container,
-        # regardless of how many containers are produced vs eaten.
+    # ── produce_confirm ──────────────────────────────────────────────
+
+    async def _step_produce_confirm(
+        self, user_input: dict[str, Any] | None
+    ) -> StepResult:
+        """Produce confirmation form (Form 2 of 2).
+
+        Shows a summary of servings, calories and price per serving.
+        On submit: consumes recipe ingredients, creates stock entries,
+        prints labels.
+        """
+        recipe = self.current_recipe
+        product = self.current_product or (self.current_product_stock_info or {}).get(
+            "product", {}
+        )
+        inp = self._produce_input
+        enable_printing = self.scan_options.get(CONF_ENABLE_PRINTING, False)
+        auto_print = self.scan_options.get(CONF_ENABLE_AUTO_PRINT, False)
+
+        produce_servings = inp["produce_servings"]
+        produce_amount = inp["produce_amount"]
+        produce_location_id = inp["produce_location_id"]
+        produce_price_total_str = inp.get("produce_price")
+
+        # ── Calculate summary values ────────────────────────────────
         base_servings = int(recipe.get("base_servings", 1) or 1)
-        price_per_unit: float | None = None
-        if produce_price_total is not None and str(produce_price_total).strip():
+        eaten_servings = produce_servings - produce_amount
+
+        # Price per serving
+        price_per_serving: float | None = None
+        price_per_serving_str = "—"
+        if produce_price_total_str and str(produce_price_total_str).strip():
             try:
-                price_per_unit = round(float(produce_price_total) / base_servings, 2)
+                total = float(produce_price_total_str)
+                price_per_serving = round(total / produce_servings, 2) if produce_servings > 0 else None
+                if price_per_serving is not None:
+                    price_per_serving_str = f"{price_per_serving}"
             except (ValueError, ZeroDivisionError):
                 pass
 
+        # Calories per serving from product
+        calories_per_serving_str = "—"
+        product_calories = product.get("calories")
+        if product_calories:
+            try:
+                calories_per_serving_str = f"{int(product_calories)} kcal"
+            except (ValueError, TypeError):
+                pass
+
+        # Location name
+        location_name = str(produce_location_id)
+        for loc in self.masterdata.get("locations", []):
+            if loc["id"] == produce_location_id:
+                location_name = loc["name"]
+                break
+
+        # ── First render: show confirmation form ────────────────────
+        if user_input is None:
+            fields = self._form_builder.build_produce_confirm_fields(
+                printing_enabled=enable_printing,
+                auto_print=auto_print,
+            )
+            summary_lines = [
+                f"## Produce: {recipe['name']}",
+                f"",
+                f"| | |",
+                f"|---|---|",
+                f"| Servings cooked | **{produce_servings}** |",
+                f"| Eaten now | **{eaten_servings}** |",
+                f"| Containers → {location_name} | **{produce_amount}** |",
+                f"| Price / serving | **{price_per_serving_str}** |",
+                f"| Calories / serving | **{calories_per_serving_str}** |",
+            ]
+
+            return FormRequest(
+                step_id=Step.SCAN_PRODUCE_CONFIRM,
+                fields=fields,
+                description_placeholders={
+                    "name": product.get("name"),
+                    "summary": "\n".join(summary_lines),
+                },
+                errors={},
+            )
+
+        # ── Process: consume ingredients, create stock, print ───────
+        should_print = enable_printing and user_input.get("produce_print", False)
+
+        # 1. Consume recipe ingredients
+        #    Set desired_servings to the user's value, consume, then restore.
+        original_desired = recipe.get("desired_servings", base_servings)
+        try:
+            if produce_servings != original_desired:
+                await self._coordinator.update_recipe(
+                    recipe["id"], {"desired_servings": produce_servings}
+                )
+            await self._api_grocy.consume_recipe(recipe["id"])
+            _LOGGER.info(
+                "Consumed recipe #%s ingredients for %d servings",
+                recipe["id"], produce_servings,
+            )
+        except Exception:
+            _LOGGER.error(
+                "Failed to consume recipe #%s ingredients",
+                recipe["id"], exc_info=True,
+            )
+        finally:
+            # Restore original desired_servings
+            if produce_servings != original_desired:
+                try:
+                    await self._coordinator.update_recipe(
+                        recipe["id"], {"desired_servings": original_desired}
+                    )
+                except Exception:
+                    _LOGGER.warning(
+                        "Failed to restore desired_servings on recipe #%s",
+                        recipe["id"], exc_info=True,
+                    )
+
+        # 2. Create stock entries for produced containers
         best_before_days = product.get("default_best_before_days")
         best_before_date: str | None = None
         if best_before_days is not None and int(best_before_days) > 0:
@@ -1774,8 +1884,8 @@ class ScanSession:
                 "transaction_type": "purchase",
                 "location_id": produce_location_id,
             }
-            if price_per_unit is not None:
-                stock_data["price"] = price_per_unit
+            if price_per_serving is not None:
+                stock_data["price"] = price_per_serving
             if best_before_date:
                 stock_data["best_before_date"] = best_before_date
 
@@ -1787,7 +1897,6 @@ class ScanSession:
                     i + 1, produce_amount, product_id, response,
                 )
 
-                # Print label for each created stock entry
                 if should_print:
                     await self._print_stock_entry_label(response)
 
@@ -1801,7 +1910,7 @@ class ScanSession:
         self.barcode_queue.pop(0)
         self.barcode_results.append(
             f"Produced {created_count}/{produce_amount} × {product.get('name')} "
-            f"from recipe '{recipe['name']}'"
+            f"from recipe '{recipe['name']}' ({produce_servings} servings)"
         )
         return await self._step_scan_queue()
 

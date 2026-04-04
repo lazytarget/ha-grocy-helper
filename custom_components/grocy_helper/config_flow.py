@@ -384,6 +384,13 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             await self._session.handle_step(Step.SCAN_CREATE_RECIPE, user_input)
         )
 
+    async def async_step_scan_produce_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        return self._to_flow_result(
+            await self._session.handle_step(Step.SCAN_PRODUCE_CONFIRM, user_input)
+        )
+
     async def async_step_scan_process(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:

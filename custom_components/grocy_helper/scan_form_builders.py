@@ -658,7 +658,7 @@ class ScanFormBuilder:
         recipe_cost: float | None = None,
         base_servings: int = 1,
     ) -> list[FormField]:
-        """Build fields for the produce form (recipe → stock entries).
+        """Build input fields for the produce form (recipe → stock entries).
 
         Parameters
         ----------
@@ -666,10 +666,6 @@ class ScanFormBuilder:
             The producing product.
         location_id:
             Suggested default location for the produced items.
-        printing_enabled:
-            Whether label printing is configured.
-        auto_print:
-            Whether auto-print is enabled (used as default for print checkbox).
         recipe_cost:
             Total recipe cost from Grocy fulfillment endpoint.
         base_servings:
@@ -685,12 +681,22 @@ class ScanFormBuilder:
 
         fields: list[FormField] = [
             FormField(
+                key="produce_servings",
+                field_type=FieldType.NUMBER,
+                required=True,
+                suggested_value=base_servings,
+                min_value=1,
+                max_value=50,
+                step=1,
+                number_mode=NumberMode.BOX,
+            ),
+            FormField(
                 key="produce_amount",
                 field_type=FieldType.NUMBER,
                 required=True,
                 suggested_value=max(1, base_servings - 1),
-                min_value=1,
-                max_value=20,
+                min_value=0,
+                max_value=50,
                 step=1,
                 number_mode=NumberMode.BOX,
             ),
@@ -710,10 +716,23 @@ class ScanFormBuilder:
                     key="produce_price",
                     field_type=FieldType.TEXT,
                     required=False,
-                    suggested_value=str(round(recipe_cost, 2)),
-                    description="Total cost of ingredients (editable)",
+                    suggested_value=str(round(recipe_cost, 2)) if recipe_cost > 0 else None,
                 ),
             )
+
+        return fields
+
+    def build_produce_confirm_fields(
+        self,
+        printing_enabled: bool = False,
+        auto_print: bool = False,
+    ) -> list[FormField]:
+        """Build fields for the produce confirmation form.
+
+        Only contains the print toggle; the summary is rendered via
+        description_placeholders.
+        """
+        fields: list[FormField] = []
 
         if printing_enabled:
             fields.append(

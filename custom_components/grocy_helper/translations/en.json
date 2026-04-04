@@ -181,19 +181,29 @@
                 "title": "Produce {name}",
                 "description": "{recipe_info}",
                 "data": {
-                    "produce_amount": "Amount (containers)",
+                    "produce_servings": "Servings cooked",
+                    "produce_amount": "Containers to store",
                     "produce_location_id": "Storage location",
                     "produce_price": "Total ingredient cost",
-                    "produce_print": "Print label for each entry",
                     "price": "Price",
                     "best_before_in_days": "Best before (days)",
                     "shopping_location_id": "Shopping location"
                 },
                 "data_description": {
-                    "produce_amount": "Number of containers/packages to create as stock entries (e.g. Tupperware boxes for the fridge/freezer)",
-                    "produce_location_id": "Where the produced items will be stored",
-                    "produce_price": "Total ingredient cost from recipe. Price per container = total / base servings (not per container count)",
-                    "produce_print": "Print a label for each created stock entry"
+                    "produce_servings": "Total number of servings being cooked (may differ from the recipe default)",
+                    "produce_amount": "Number of containers/packages to store (e.g. Tupperware boxes). Remaining servings are assumed eaten now",
+                    "produce_location_id": "Where the produced containers will be stored",
+                    "produce_price": "Total ingredient cost. Will be divided by servings cooked to get per-serving price"
+                }
+            },
+            "scan_produce_confirm": {
+                "title": "Confirm: {name}",
+                "description": "{summary}",
+                "data": {
+                    "produce_print": "Print label for each container"
+                },
+                "data_description": {
+                    "produce_print": "Send a print command for each created stock entry"
                 }
             },
             "scan": {
