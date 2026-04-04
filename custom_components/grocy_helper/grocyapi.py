@@ -1,5 +1,7 @@
 """API integration with Grocy."""
 
+from typing import Any
+
 from aiohttp import ClientSession
 
 from .const import API, ApiException
@@ -89,6 +91,16 @@ class GrocyAPI:
         return await async_get(
             self._session, url, self._api_key, return_none_when_404=True
         )
+
+    async def get_stock_by_stock_id(self, stock_id: str) -> dict[str, Any] | None:
+        url = self.get_rest_url(API.URLs.GET_STOCK_ENTRY_BY_ID)
+        params = [("query[]", f"stock_id={stock_id}")]
+        response = await async_get(self._session, url, self._api_key, params=params)
+        if response and isinstance(response, list) and len(response) > 0:
+            if len(response) > 1:
+                raise ApiException(400, f"Multiple stock entries found for stock_id {stock_id}: {response}")
+            return response[0]
+        return None
 
     async def get_stock_product_by_id(
         self, product_id: int
@@ -181,3 +193,15 @@ class GrocyAPI:
         url = self.get_rest_url(API.URLs.UPDATE_RECIPE) % recipe_id
         response = await async_put(self._session, url, self._api_key, json_data=data)
         return response
+
+    async def print_label_for_product(self, product_id: int) -> dict:
+        url = self.get_rest_url(API.URLs.PRINT_LABEL_FOR_PRODUCT) % product_id
+        return await async_get(self._session, url, self._api_key)
+
+    async def print_label_for_stock_entry(self, stock_entry_id: int) -> dict:
+        url = self.get_rest_url(API.URLs.PRINT_LABEL_FOR_STOCK_ENTRY) % stock_entry_id
+        return await async_get(self._session, url, self._api_key)
+
+    async def print_label_for_recipe(self, recipe_id: int) -> dict:
+        url = self.get_rest_url(API.URLs.PRINT_LABEL_FOR_RECIPE) % recipe_id
+        return await async_get(self._session, url, self._api_key)

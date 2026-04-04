@@ -29,6 +29,8 @@ from .const import (
     CONF_DEFAULT_LOCATION_FRIDGE,
     CONF_DEFAULT_LOCATION_RECIPE_RESULT,
     CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT,
+    CONF_ENABLE_AUTO_PRINT,
+    CONF_ENABLE_PRINTING,
     DOMAIN,
     CONF_GROCY_API_URL,
     CONF_GROCY_API_KEY,
@@ -186,7 +188,10 @@ class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_DEFAULT_LOCATION_FREEZER: '',
                     CONF_DEFAULT_LOCATION_RECIPE_RESULT: '',
                     CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT: '',
+                    CONF_ENABLE_PRINTING: False,
+                    CONF_ENABLE_AUTO_PRINT: False,
                 },
+                str_keys=[],
             )
             new_config_entry_data = transform_input(
                 # Input has highest prio
@@ -194,6 +199,7 @@ class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # Finally fallback to the actual persisted values...
                 persisted=config_entry.data,
                 suggested=None,
+                str_keys=[],
             )
             _LOGGER.info("Updating config entry with new scan options: %s + %s -> %s", config_entry.data, user_input, new_config_entry_data)
             return self.async_update_reload_and_abort(

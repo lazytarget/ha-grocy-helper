@@ -17,6 +17,8 @@ CONF_DEFAULT_LOCATION_FRIDGE: Final = "DEFAULT_LOCATION_FRIDGE"
 CONF_DEFAULT_LOCATION_FREEZER: Final = "DEFAULT_LOCATION_FREEZER"
 CONF_DEFAULT_LOCATION_RECIPE_RESULT: Final = "DEFAULT_LOCATION_RECIPE_RESULT"
 CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT: Final = "DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT"
+CONF_ENABLE_PRINTING: Final = "ENABLE_PRINTING"
+CONF_ENABLE_AUTO_PRINT: Final = "ENABLE_AUTO_PRINT"
 
 class SCAN_MODE(StrEnum):
     # BBuddy
@@ -61,6 +63,7 @@ class API:
         GET_STOCK_PRODUCT_BY_ID: Final = "api/stock/products/%s"
         GET_STOCK_PRODUCT_BY_BARCODE: Final = "api/stock/products/by-barcode/%s"
         GET_STOCK_ENTRIES_BY_PRODUCT_ID: Final = "api/stock/products/%s/entries"
+        GET_STOCK_ENTRY_BY_ID: Final = "api/objects/stock"
         GET_PRODUCT_BARCODE_BY_ID: Final = "api/objects/product_barcodes/%s"
         TRANSFER_STOCK_ENTRY: Final = "api/stock/products/%s/transfer"
         ADD_STOCK_PRODUCT: Final = "api/stock/products/%s/add"
@@ -72,6 +75,10 @@ class API:
         GET_RECIPES: Final = "api/objects/recipes"
         CREATE_RECIPE: Final = "api/objects/recipes"
         UPDATE_RECIPE: Final = "api/objects/recipes/%s"
+
+        PRINT_LABEL_FOR_PRODUCT: Final = "api/stock/products/%s/printlabel"
+        PRINT_LABEL_FOR_STOCK_ENTRY: Final = "api/stock/entry/%s/printlabel"
+        PRINT_LABEL_FOR_RECIPE: Final = "api/recipes/%s/printlabel"
 
         BBUDDY_SCAN: Final = "api/action/scan"
         BBUDDY_GET_MODE: Final = "api/state/getmode"
