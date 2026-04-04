@@ -1196,6 +1196,7 @@ class ScanSession:
         printing_enabled: bool = False,
     ) -> FormRequest:
         """Build and return the add-recipe form."""
+        suggestions = suggestions or {}
         fields = self._form_builder.build_create_recipe_fields(
             suggestions=suggestions,
             printing_enabled=printing_enabled,

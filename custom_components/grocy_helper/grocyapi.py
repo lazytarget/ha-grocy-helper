@@ -90,7 +90,7 @@ class GrocyAPI:
             self._session, url, self._api_key, return_none_when_404=True
         )
 
-    async def get_stock_by_stock_id(self, stock_id: str) -> dict[str, any]:
+    async def get_stock_by_stock_id(self, stock_id: str) -> dict[str, any] | None:
         url = self.get_rest_url(API.URLs.GET_STOCK_ENTRY_BY_ID)
         params = [("query[]", f"stock_id={stock_id}")]
         response = await async_get(self._session, url, self._api_key, params=params)
