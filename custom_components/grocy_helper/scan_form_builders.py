@@ -807,14 +807,14 @@ class ScanFormBuilder:
                     field_type=FieldType.BOOLEAN,
                     required=False,
                     default=None, # Allow for clearing the value
-                    suggested_value=self._str_val(suggested.get(CONF_ENABLE_PRINTING)),
+                    suggested_value=suggested.get(CONF_ENABLE_PRINTING),
                 ),
                 FormField(
                     key=CONF_ENABLE_AUTO_PRINT,
                     field_type=FieldType.BOOLEAN,
                     required=False,
                     default=None, # Allow for clearing the value
-                    suggested_value=self._str_val(suggested.get(CONF_ENABLE_AUTO_PRINT)),
+                    suggested_value=suggested.get(CONF_ENABLE_AUTO_PRINT),
                 ),
             ]
         )
