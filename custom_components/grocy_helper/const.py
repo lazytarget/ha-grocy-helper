@@ -67,6 +67,7 @@ class API:
         GET_PRODUCT_BARCODE_BY_ID: Final = "api/objects/product_barcodes/%s"
         TRANSFER_STOCK_ENTRY: Final = "api/stock/products/%s/transfer"
         ADD_STOCK_PRODUCT: Final = "api/stock/products/%s/add"
+        CONSUME_STOCK_PRODUCT: Final = "api/stock/products/%s/consume"
         ADD_PRODUCT: Final = "api/objects/products"
         ADD_PRODUCT_BARCODE: Final = "api/objects/product_barcodes"
         UPDATE_PRODUCT: Final = "api/objects/products/%s"

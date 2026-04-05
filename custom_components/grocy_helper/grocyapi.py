@@ -137,6 +137,14 @@ class GrocyAPI:
         response = await async_post(self._session, url, self._api_key, json_data=data)
         return response
 
+    async def consume_stock_product(
+        self, product_id: int, amount: float, **kwargs
+    ) -> list[dict]:
+        """Consume a product from stock."""
+        url = self.get_rest_url(API.URLs.CONSUME_STOCK_PRODUCT) % product_id
+        data: dict[str, Any] = {"amount": amount, **kwargs}
+        return await async_post(self._session, url, self._api_key, json_data=data)
+
     async def add_product(self, data: GrocyProduct) -> GrocyProduct:
         url = self.get_rest_url(API.URLs.ADD_PRODUCT)
         response = await async_post(self._session, url, self._api_key, json_data=data)

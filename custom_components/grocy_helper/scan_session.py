@@ -1868,23 +1868,68 @@ class ScanSession:
         # ── Process: consume ingredients, create stock, print ───────
         should_print = enable_printing and user_input.get("produce_print", False)
 
-        # 1. Consume recipe ingredients
-        #    Set desired_servings to the user's value, consume, then restore.
+        # 1. Consume recipe ingredients ourselves (instead of ConsumeRecipe)
+        #    so we keep full control over stock creation.
+        #    First, make sure desired_servings matches our produce_servings
+        #    so that recipes_pos_resolved returns correctly scaled amounts.
         original_desired = recipe.get("desired_servings", base_servings)
         try:
             if produce_servings != original_desired:
                 await self._coordinator.update_recipe(
                     recipe["id"], {"desired_servings": produce_servings}
                 )
-            await self._api_grocy.consume_recipe(recipe["id"])
+
+            positions = await self._api_grocy.get_recipes_pos_resolved(
+                recipe["id"]
+            )
+            consumed_count = 0
+            for pos in positions:
+                # Skip positions that are check-only or have no stock
+                if pos.get("only_check_single_unit_in_stock") == 1:
+                    continue
+                stock_amount = float(pos.get("stock_amount", 0) or 0)
+                if stock_amount <= 0:
+                    continue
+
+                ingredient_amount = float(pos.get("recipe_amount", 0) or 0)
+                if ingredient_amount <= 0:
+                    continue
+
+                # Don't consume more than what's available
+                amount_to_consume = min(ingredient_amount, stock_amount)
+
+                try:
+                    await self._api_grocy.consume_stock_product(
+                        pos["product_id"],
+                        amount_to_consume,
+                        exact_amount=True,
+                        allow_subproduct_substitution=True,
+                        recipe_id=recipe["id"],
+                    )
+                    consumed_count += 1
+                except Exception:
+                    _LOGGER.warning(
+                        "Failed to consume ingredient product #%s "
+                        "(%.2f of %.2f)",
+                        pos.get("product_id"),
+                        amount_to_consume,
+                        ingredient_amount,
+                        exc_info=True,
+                    )
+
             _LOGGER.info(
-                "Consumed recipe #%s ingredients for %d servings",
-                recipe["id"], produce_servings,
+                "Consumed %d/%d ingredient positions for recipe #%s "
+                "(%d servings)",
+                consumed_count,
+                len(positions),
+                recipe["id"],
+                produce_servings,
             )
         except Exception:
             _LOGGER.error(
                 "Failed to consume recipe #%s ingredients",
-                recipe["id"], exc_info=True,
+                recipe["id"],
+                exc_info=True,
             )
         finally:
             # Restore original desired_servings
@@ -1896,10 +1941,12 @@ class ScanSession:
                 except Exception:
                     _LOGGER.warning(
                         "Failed to restore desired_servings on recipe #%s",
-                        recipe["id"], exc_info=True,
+                        recipe["id"],
+                        exc_info=True,
                     )
 
-        # 2. Create stock entries for produced containers
+        # 2. Create stock entries — single call with stock_label_type=2
+        #    to get separate entries with x-prefixed stock_ids (no merging).
         best_before_days = product.get("default_best_before_days")
         best_before_date: str | None = None
         if best_before_days is not None and int(best_before_days) > 0:
@@ -1907,36 +1954,40 @@ class ScanSession:
             best_before_date = d.strftime("%Y-%m-%d")
 
         product_id = product["id"]
+        stock_data: dict[str, Any] = {
+            "amount": produce_amount,
+            "transaction_type": "self-production",
+            "location_id": produce_location_id,
+            "note": recipe["name"],
+            "stock_label_type": 2,
+        }
+        if price_per_serving is not None:
+            stock_data["price"] = price_per_serving
+        if best_before_date:
+            stock_data["best_before_date"] = best_before_date
+
         created_count = 0
+        try:
+            response = await self._coordinator.add_stock(product_id, stock_data)
+            # Response is a list of stock_log entries, one per unit
+            if isinstance(response, list):
+                created_count = len(response)
+            else:
+                created_count = produce_amount
+            _LOGGER.info(
+                "Created %d stock entries for product #%s: %s",
+                created_count, product_id, response,
+            )
 
-        for i in range(produce_amount):
-            stock_data: dict[str, Any] = {
-                "amount": 1,
-                "transaction_type": "purchase",
-                "location_id": produce_location_id,
-            }
-            if price_per_serving is not None:
-                stock_data["price"] = price_per_serving
-            if best_before_date:
-                stock_data["best_before_date"] = best_before_date
-
-            try:
-                response = await self._coordinator.add_stock(product_id, stock_data)
-                created_count += 1
-                _LOGGER.info(
-                    "Produced stock entry %d/%d for product #%s: %s",
-                    i + 1, produce_amount, product_id, response,
-                )
-
-                if should_print:
-                    await self._print_stock_entry_label(response)
-
-            except Exception:
-                _LOGGER.error(
-                    "Failed to create stock entry %d/%d for product #%s",
-                    i + 1, produce_amount, product_id,
-                    exc_info=True,
-                )
+            if should_print and isinstance(response, list):
+                for entry in response:
+                    await self._print_stock_entry_label([entry])
+        except Exception:
+            _LOGGER.error(
+                "Failed to create stock entries for product #%s",
+                product_id,
+                exc_info=True,
+            )
 
         self.barcode_queue.pop(0)
         self.barcode_results.append(
