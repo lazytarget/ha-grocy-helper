@@ -398,6 +398,7 @@ class ScanFormBuilder:
                 options=qu_options,
                 select_mode=SelectMode.DROPDOWN,
             ),
+            # TODO: 'calories_per_100' could probably be hidden for Products produced by Recipes? As those should instead Summarize the Ingredients
             FormField(
                 key="calories_per_100",
                 field_type=FieldType.NUMBER,

@@ -451,6 +451,7 @@ class ScanSession:
         # First render - show form
         if user_input is None:
             return self._show_match_product_form()
+            # TODO: If about to create a Product for a Recipe, AND there is no matches, only the suggested "{prefix} {recipe_name}" alias, then SKIP matching form?
 
         # Process submitted form
         _LOGGER.info("match-product input: %s", user_input)
@@ -1151,6 +1152,7 @@ class ScanSession:
             suggested, creating_parent=False
         )
         aliases = self._get_aliases()
+        recipe_product_name_prefix = "Matlåda: "
         return FormRequest(
             step_id=Step.SCAN_ADD_PRODUCT,
             fields=fields,
@@ -1159,6 +1161,7 @@ class ScanSession:
                 "barcode": self.current_barcode,
                 "product_aliases": "\n".join([f"- {a.strip()}" for a in aliases if a]),
                 "lookup_output": self._format_lookup_output(),
+                "name_description": f"Can be prefixed with \"{recipe_product_name_prefix}\" for easier identification of cooked products",
             },
             errors=errors,
         )

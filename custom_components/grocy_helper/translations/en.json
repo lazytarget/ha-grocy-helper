@@ -95,6 +95,7 @@
                     "qu_id_price": "Price unit"
                 },
                 "data_description": {
+                    "name": "{name_description}",
                     "location_id": "Where any new and unopened products are usually stored",
                     "qu_id_stock": "99% of cases this should be Piece/Pack (the one which sounds more appropriate)",
                     "qu_id_purchase": "Should be same as ´qu_id_consume´",
@@ -174,7 +175,7 @@
                 },
                 "data_description": {
                     "name": "Can be prefixed with \"{recipe_product_name_prefix}\" for better identification of cooked products",
-                    "print": "Whether to print a label after creating the recipe"
+                    "print": "Whether to print a label after creating the recipe."
                 }
             },
             "scan_process": {
