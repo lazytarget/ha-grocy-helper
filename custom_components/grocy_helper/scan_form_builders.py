@@ -681,6 +681,12 @@ class ScanFormBuilder:
 
         fields: list[FormField] = [
             FormField(
+                key="produce_consume_ingredients",
+                field_type=FieldType.BOOLEAN,
+                required=True,
+                suggested_value=True,
+            ),
+            FormField(
                 key="produce_servings",
                 field_type=FieldType.NUMBER,
                 required=True,

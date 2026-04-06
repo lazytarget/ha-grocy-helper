@@ -181,6 +181,7 @@
                 "title": "Produce {name}",
                 "description": "{recipe_info}",
                 "data": {
+                    "produce_consume_ingredients": "Consume recipe ingredients",
                     "produce_servings": "Servings cooked",
                     "produce_amount": "Containers to store",
                     "produce_location_id": "Storage location",
@@ -190,6 +191,7 @@
                     "shopping_location_id": "Shopping location"
                 },
                 "data_description": {
+                    "produce_consume_ingredients": "Remove used ingredients from Grocy stock",
                     "produce_servings": "Total number of servings being cooked (may differ from the recipe default)",
                     "produce_amount": "Number of containers/packages to store (e.g. Tupperware boxes). Remaining servings are assumed eaten now",
                     "produce_location_id": "Where the produced containers will be stored",

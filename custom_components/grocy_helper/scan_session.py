@@ -1765,6 +1765,9 @@ class ScanSession:
 
         # ── Stash submitted values and go to confirmation ───────────
         self._produce_input.update({
+            "produce_consume_ingredients": bool(
+                user_input.get("produce_consume_ingredients", True)
+            ),
             "produce_servings": int(user_input.get("produce_servings", 1)),
             "produce_amount": int(user_input.get("produce_amount", 1)),
             "produce_location_id": int(user_input["produce_location_id"]),
@@ -1791,6 +1794,7 @@ class ScanSession:
         enable_printing = self.scan_options.get(CONF_ENABLE_PRINTING, False)
         auto_print = self.scan_options.get(CONF_ENABLE_AUTO_PRINT, False)
 
+        produce_consume_ingredients = inp.get("produce_consume_ingredients", True)
         produce_servings = inp["produce_servings"]
         produce_amount = inp["produce_amount"]
         produce_location_id = inp["produce_location_id"]
@@ -1818,7 +1822,7 @@ class ScanSession:
         calories_per_serving_str = "—"
         product_calories = product.get("calories")
         fulfillment_calories = inp.get("fulfillment_calories")
-        if product_calories and float(product_calories) > 0:
+        if product_calories and float(product_calories) > 1:
             try:
                 calories_per_serving_str = f"{int(float(product_calories))} kcal"
             except (ValueError, TypeError):
@@ -1846,8 +1850,9 @@ class ScanSession:
             summary_lines = [
                 f"## Produce: {recipe['name']}",
                 f"",
-                f"| | |",
+                f"| Key | Value |",
                 f"|---|---|",
+                f"| Consume ingredients | **{'Yes' if produce_consume_ingredients else 'No'}** |",
                 f"| Servings cooked | **{produce_servings}** |",
                 f"| Eaten now | **{eaten_servings}** |",
                 f"| Containers → {location_name} | **{produce_amount}** |",
@@ -1870,80 +1875,86 @@ class ScanSession:
 
         # 1. Consume recipe ingredients ourselves (instead of ConsumeRecipe)
         #    so we keep full control over stock creation.
-        #    First, make sure desired_servings matches our produce_servings
-        #    so that recipes_pos_resolved returns correctly scaled amounts.
-        original_desired = recipe.get("desired_servings", base_servings)
-        try:
-            if produce_servings != original_desired:
-                await self._coordinator.update_recipe(
-                    recipe["id"], {"desired_servings": produce_servings}
-                )
-
-            positions = await self._api_grocy.get_recipes_pos_resolved(
-                recipe["id"]
-            )
-            consumed_count = 0
-            for pos in positions:
-                # Skip positions that are check-only or have no stock
-                if pos.get("only_check_single_unit_in_stock") == 1:
-                    continue
-                stock_amount = float(pos.get("stock_amount", 0) or 0)
-                if stock_amount <= 0:
-                    continue
-
-                ingredient_amount = float(pos.get("recipe_amount", 0) or 0)
-                if ingredient_amount <= 0:
-                    continue
-
-                # Don't consume more than what's available
-                amount_to_consume = min(ingredient_amount, stock_amount)
-
-                try:
-                    await self._api_grocy.consume_stock_product(
-                        pos["product_id"],
-                        amount_to_consume,
-                        exact_amount=True,
-                        allow_subproduct_substitution=True,
-                        recipe_id=recipe["id"],
-                    )
-                    consumed_count += 1
-                except Exception:
-                    _LOGGER.warning(
-                        "Failed to consume ingredient product #%s "
-                        "(%.2f of %.2f)",
-                        pos.get("product_id"),
-                        amount_to_consume,
-                        ingredient_amount,
-                        exc_info=True,
-                    )
-
+        if not produce_consume_ingredients:
             _LOGGER.info(
-                "Consumed %d/%d ingredient positions for recipe #%s "
-                "(%d servings)",
-                consumed_count,
-                len(positions),
+                "Skipping ingredient consumption for recipe #%s (user opted out)",
                 recipe["id"],
-                produce_servings,
             )
-        except Exception:
-            _LOGGER.error(
-                "Failed to consume recipe #%s ingredients",
-                recipe["id"],
-                exc_info=True,
-            )
-        finally:
-            # Restore original desired_servings
-            if produce_servings != original_desired:
-                try:
+        else:
+            #    First, make sure desired_servings matches our produce_servings
+            #    so that recipes_pos_resolved returns correctly scaled amounts.
+            original_desired = recipe.get("desired_servings", base_servings)
+            try:
+                if produce_servings != original_desired:
                     await self._coordinator.update_recipe(
-                        recipe["id"], {"desired_servings": original_desired}
+                        recipe["id"], {"desired_servings": produce_servings}
                     )
-                except Exception:
-                    _LOGGER.warning(
-                        "Failed to restore desired_servings on recipe #%s",
-                        recipe["id"],
-                        exc_info=True,
-                    )
+
+                positions = await self._api_grocy.get_recipes_pos_resolved(
+                    recipe["id"]
+                )
+                consumed_count = 0
+                for pos in positions:
+                    # Skip positions that are check-only or have no stock
+                    if pos.get("only_check_single_unit_in_stock") == 1:
+                        continue
+                    stock_amount = float(pos.get("stock_amount", 0) or 0)
+                    if stock_amount <= 0:
+                        continue
+
+                    ingredient_amount = float(pos.get("recipe_amount", 0) or 0)
+                    if ingredient_amount <= 0:
+                        continue
+
+                    # Don't consume more than what's available
+                    amount_to_consume = min(ingredient_amount, stock_amount)
+
+                    try:
+                        await self._api_grocy.consume_stock_product(
+                            pos["product_id"],
+                            amount_to_consume,
+                            exact_amount=True,
+                            allow_subproduct_substitution=True,
+                            recipe_id=recipe["id"],
+                        )
+                        consumed_count += 1
+                    except Exception:
+                        _LOGGER.warning(
+                            "Failed to consume ingredient product #%s "
+                            "(%.2f of %.2f)",
+                            pos.get("product_id"),
+                            amount_to_consume,
+                            ingredient_amount,
+                            exc_info=True,
+                        )
+
+                _LOGGER.info(
+                    "Consumed %d/%d ingredient positions for recipe #%s "
+                    "(%d servings)",
+                    consumed_count,
+                    len(positions),
+                    recipe["id"],
+                    produce_servings,
+                )
+            except Exception:
+                _LOGGER.error(
+                    "Failed to consume recipe #%s ingredients",
+                    recipe["id"],
+                    exc_info=True,
+                )
+            finally:
+                # Restore original desired_servings
+                if produce_servings != original_desired:
+                    try:
+                        await self._coordinator.update_recipe(
+                            recipe["id"], {"desired_servings": original_desired}
+                        )
+                    except Exception:
+                        _LOGGER.warning(
+                            "Failed to restore desired_servings on recipe #%s",
+                            recipe["id"],
+                            exc_info=True,
+                        )
 
         # 2. Create stock entries — single call with stock_label_type=2
         #    to get separate entries with x-prefixed stock_ids (no merging).
