@@ -1967,50 +1967,55 @@ class ScanSession:
 
         # 2. Create stock entries — single call with stock_label_type=2
         #    to get separate entries with x-prefixed stock_ids (no merging).
-        best_before_days = product.get("default_best_before_days")
-        best_before_date: str | None = None
-        if best_before_days is not None and int(best_before_days) > 0:
-            d = dt.datetime.now() + dt.timedelta(days=int(best_before_days))
-            best_before_date = d.strftime("%Y-%m-%d")
+        if produce_amount > 0:
+            # Leftovers that should be added to stock
+            best_before_days = product.get("default_best_before_days")
+            best_before_date: str | None = None
+            if best_before_days is not None and int(best_before_days) > 0:
+                d = dt.datetime.now() + dt.timedelta(days=int(best_before_days))
+                best_before_date = d.strftime("%Y-%m-%d")
 
-        should_print = enable_printing and user_input.get("produce_print", False)
-        product_id = product["id"]
-        stock_data: dict[str, Any] = {
-            "amount": produce_amount,
-            "transaction_type": "self-production",
-            "location_id": produce_location_id,
-            "note": recipe["name"],
-            "stock_label_type": 2 if should_print else None, # Tell Grocy to print a "Label per unit"
-        }
-        if price_per_serving is not None:
-            stock_data["price"] = price_per_serving
-        if best_before_date:
-            stock_data["best_before_date"] = best_before_date
+            should_print = enable_printing and user_input.get("produce_print", False)
+            product_id = product["id"]
+            stock_data: dict[str, Any] = {
+                "amount": produce_amount,
+                "transaction_type": "self-production",
+                "location_id": produce_location_id,
+                "note": recipe["name"],
+                "stock_label_type": 2 if should_print else None, # Tell Grocy to print a "Label per unit"
+            }
+            if price_per_serving is not None:
+                stock_data["price"] = price_per_serving
+            if best_before_date:
+                stock_data["best_before_date"] = best_before_date
 
-        created_count = 0
-        try:
-            response = await self._coordinator.add_stock(product_id, stock_data)
-            # Response is a list of stock_log entries, one per unit
-            if isinstance(response, list):
-                created_count = f"{len(response)}x{produce_amount}"
-            else:
-                created_count = produce_amount
-            _LOGGER.info(
-                "Created %d stock entries for product #%s: %s",
-                created_count, product_id, response,
-            )
-        except Exception:
-            _LOGGER.error(
-                "Failed to create stock entries for product #%s",
-                product_id,
-                exc_info=True,
-            )
+            created_count = 0
+            try:
+                response = await self._coordinator.add_stock(product_id, stock_data)
+                # Response is a list of stock_log entries, one per unit
+                if isinstance(response, list):
+                    created_count = len(response)
+                else:
+                    created_count = produce_amount
+                _LOGGER.info(
+                    "Created %d stock entries for product #%s: %s",
+                    created_count, product_id, response,
+                )
+            except Exception:
+                _LOGGER.error(
+                    "Failed to create stock entries for product #%s",
+                    product_id,
+                    exc_info=True,
+                )
 
         self.barcode_queue.pop(0)
         self.barcode_results.append(
-            f"Produced {created_count}/{produce_amount} × {product.get('name')} "
-            f"from recipe '{recipe['name']}' ({produce_servings} servings)"
+            f"Produced {produce_servings} servings of recipe '{recipe['name']}'"
         )
+        if produce_amount > 0:
+            self.barcode_results.append(
+                f"Stocked {produce_amount} servings of recipe '{recipe['name']}'"
+            )
         return await self._step_scan_queue()
 
     async def _print_stock_entry_label(self, add_stock_response: Any) -> None:
