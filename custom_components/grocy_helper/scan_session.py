@@ -2095,6 +2095,13 @@ class ScanSession:
                 step_id=Step.SCAN_PROCESS,
                 fields=fields,
                 errors=errors,
+                description_placeholders={
+                    "name": product.get("name"),
+                    "recipe_info": (
+                        f"## Produce: {self.current_recipe['name']}\n"
+                        f"Base servings: {self.current_recipe['base_servings']}"
+                    ) if self.current_recipe else '',
+                },
             )
         return None
 
@@ -2165,4 +2172,11 @@ class ScanSession:
             step_id=Step.SCAN_PROCESS,
             fields=cached,
             errors=errors,
+            description_placeholders={
+                "name": self.current_product.get("name") if self.current_product else self.current_barcode,
+                "recipe_info": (
+                    f"## Produce: {self.current_recipe['name']}\n"
+                    f"Base servings: {self.current_recipe['base_servings']}"
+                ) if self.current_recipe else '',
+            },
         )
