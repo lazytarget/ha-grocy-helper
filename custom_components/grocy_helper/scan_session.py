@@ -1796,6 +1796,13 @@ class ScanSession:
         inp = self._produce_input
         enable_printing = self.scan_options.get(CONF_ENABLE_PRINTING, False)
         auto_print = self.scan_options.get(CONF_ENABLE_AUTO_PRINT, False)
+        default_stock_label_type = product.get('default_stock_label_type')
+        if enable_printing and auto_print and default_stock_label_type in [1, 2]:
+            _LOGGER.info(
+                "Integration has printing enabled but the Grocy product already has stock label type %s so it will auto-print. Therefore disabling printing in flow to omit duplicate prints.",
+                default_stock_label_type,
+            )
+            enable_printing = False # Will omit the 'produce_print' field and avoid any custom invokes for printing
 
         produce_consume_ingredients = inp.get("produce_consume_ingredients", True)
         produce_servings = inp["produce_servings"]
@@ -1874,7 +1881,6 @@ class ScanSession:
             )
 
         # ── Process: consume ingredients, create stock, print ───────
-        should_print = enable_printing and user_input.get("produce_print", False)
 
         # 1. Consume recipe ingredients ourselves (instead of ConsumeRecipe)
         #    so we keep full control over stock creation.
@@ -1973,7 +1979,7 @@ class ScanSession:
             "transaction_type": "self-production",
             "location_id": produce_location_id,
             "note": recipe["name"],
-            "stock_label_type": 2,
+            # "stock_label_type": 2,    # Commented away, instead print manually behind feature toggle or set 'default_stock_label_type' on product
         }
         if price_per_serving is not None:
             stock_data["price"] = price_per_serving
@@ -1993,6 +1999,7 @@ class ScanSession:
                 created_count, product_id, response,
             )
 
+            should_print = enable_printing and user_input.get("produce_print", False)
             if should_print and isinstance(response, list):
                 for entry in response:
                     await self._print_stock_entry_label([entry])
