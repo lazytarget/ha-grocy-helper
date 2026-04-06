@@ -1862,9 +1862,9 @@ class ScanSession:
             )
             summary_lines = [
                 f"## Produce: {recipe['name']}",
-                f"",
-                f"| Key | Value |",
-                f"|---|---|",
+                "",
+                "| Key | Value |",
+                "|---|---|",
                 f"| Consume ingredients | **{'Yes' if produce_consume_ingredients else 'No'}** |",
                 f"| Servings cooked | **{produce_servings}** |",
                 f"| Eaten now | **{eaten_servings}** |",
