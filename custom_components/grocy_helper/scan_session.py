@@ -68,6 +68,8 @@ from .utils import parse_int, transform_input, try_parse_int
 _LOGGER = logging.getLogger(__name__)
 
 
+RECIPE_PRODUCT_NAME_PREFIX = "Matlåda: "
+
 class ScanSession:
     """Framework-agnostic barcode scanning workflow session.
 
@@ -902,6 +904,7 @@ class ScanSession:
         new_recipe = self._recipe_builder.build_recipe_from_input(
             user_input, new_recipe
         )
+        # TODO: If URL was passed instead of name, then we should scrape recipe. Currently the idea is to use `recipe-buddy`
 
         # Create recipe
         recipe = await self._coordinator.create_recipe(new_recipe)
@@ -923,6 +926,7 @@ class ScanSession:
             _LOGGER.info("Sending print command for recipe: %s", recipe)
             await self._api_grocy.print_label_for_recipe(recipe["id"])
 
+        # TODO: Perhaps we abort the options flow here. Until we can invoke a scraper here, synchronously
         self.barcode_queue.insert(0, f"grcy:r:{self.current_recipe['id']}")
         return await self._step_scan_queue()
 
@@ -1152,7 +1156,6 @@ class ScanSession:
             suggested, creating_parent=False
         )
         aliases = self._get_aliases()
-        recipe_product_name_prefix = "Matlåda: "
         return FormRequest(
             step_id=Step.SCAN_ADD_PRODUCT,
             fields=fields,
@@ -1161,7 +1164,7 @@ class ScanSession:
                 "barcode": self.current_barcode,
                 "product_aliases": "\n".join([f"- {a.strip()}" for a in aliases if a]),
                 "lookup_output": self._format_lookup_output(),
-                "name_description": f"Can be prefixed with \"{recipe_product_name_prefix}\" for easier identification of cooked products",
+                "name_description": f"Can be prefixed with \"{RECIPE_PRODUCT_NAME_PREFIX}\" for easier identification of cooked products",
             },
             errors=errors,
         )
@@ -1215,7 +1218,7 @@ class ScanSession:
             description_placeholders={
                 "name": suggestions.get("name"),
                 "barcode": self.current_barcode,
-                "recipe_product_name_prefix": "Matlåda: ",
+                "recipe_product_name_prefix": RECIPE_PRODUCT_NAME_PREFIX,
             },
             errors=errors,
         )
