@@ -1973,13 +1973,14 @@ class ScanSession:
             d = dt.datetime.now() + dt.timedelta(days=int(best_before_days))
             best_before_date = d.strftime("%Y-%m-%d")
 
+        should_print = enable_printing and user_input.get("produce_print", False)
         product_id = product["id"]
         stock_data: dict[str, Any] = {
             "amount": produce_amount,
             "transaction_type": "self-production",
             "location_id": produce_location_id,
             "note": recipe["name"],
-            # "stock_label_type": 2,    # Commented away, instead print manually behind feature toggle or set 'default_stock_label_type' on product
+            "stock_label_type": 2 if should_print else None, # Tell Grocy to print a "Label per unit"
         }
         if price_per_serving is not None:
             stock_data["price"] = price_per_serving
@@ -1991,18 +1992,13 @@ class ScanSession:
             response = await self._coordinator.add_stock(product_id, stock_data)
             # Response is a list of stock_log entries, one per unit
             if isinstance(response, list):
-                created_count = len(response)
+                created_count = f"{len(response)}x{produce_amount}"
             else:
                 created_count = produce_amount
             _LOGGER.info(
                 "Created %d stock entries for product #%s: %s",
                 created_count, product_id, response,
             )
-
-            should_print = enable_printing and user_input.get("produce_print", False)
-            if should_print and isinstance(response, list):
-                for entry in response:
-                    await self._print_stock_entry_label([entry])
         except Exception:
             _LOGGER.error(
                 "Failed to create stock entries for product #%s",
