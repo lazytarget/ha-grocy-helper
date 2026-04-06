@@ -184,6 +184,11 @@ class GrocyRecipeFulfillment(TypedDict):
     need_fulfilled_with_shopping_list: bool
     missing_products_count: int
     costs: float
+    costs_per_serving: float
+    calories: float
+    due_scope: int
+    product_names_comma_separated: str | None
+    prices_incomplete: int
 
 
 class BarcodeBuddyScanRequest(TypedDict):
