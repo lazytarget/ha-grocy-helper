@@ -1,3 +1,5 @@
 pre-commit
 ruff
 yamllint
+pytest
+pytest-asyncio
