@@ -22,7 +22,9 @@
         "error": {
             "unknown": "Unknown error occured, please see the logs for additional information",
             "invalid_location": "Invalid location",
-            "location_is_freezer": "The selected location is a freezer"
+            "location_is_freezer": "The selected location is a freezer",
+            "produce_servings_min_1": "Servings must be at least 1",
+            "produce_amount_invalid": "Containers to store must be a valid number."
         },
         "step": {
             "init": {},
@@ -194,11 +196,6 @@
                     "produce_amount": "Number of containers/packages to store (e.g. Tupperware boxes). Remaining servings are assumed eaten now",
                     "produce_location_id": "Where the produced containers will be stored",
                     "produce_price": "Total ingredient cost. Will be divided by servings cooked to get per-serving price"
-                },
-                "error": {
-                    "produce_servings_non_negative": "Servings cooked must be 0 or greater.",
-                    "produce_amount_invalid": "Containers to store must be a valid number.",
-                    "produce_servings_min_1": "Servings must be at least 1"
                 }
             },
             "scan_process": {
