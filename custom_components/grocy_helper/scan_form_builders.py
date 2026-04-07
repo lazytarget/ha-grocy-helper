@@ -654,8 +654,6 @@ class ScanFormBuilder:
         self,
         product: dict,
         location_id: int | None,
-        printing_enabled: bool = False,
-        auto_print: bool = False,
         recipe_cost: float | None = None,
         base_servings: int = 1,
     ) -> list[FormField]:

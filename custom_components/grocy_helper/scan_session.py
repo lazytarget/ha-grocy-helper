@@ -452,8 +452,8 @@ class ScanSession:
 
         # First render - show form
         if user_input is None:
-            return self._show_match_product_form()
             # TODO: If about to create a Product for a Recipe, AND there is no matches, only the suggested "{prefix} {recipe_name}" alias, then SKIP matching form?
+            return self._show_match_product_form()
 
         # Process submitted form
         _LOGGER.info("match-product input: %s", user_input)
@@ -1694,7 +1694,7 @@ class ScanSession:
         self,
         user_input: dict[str, Any] | None,
         product: dict,
-        errors: dict[str, str],
+        errors: dict[str, str] = {},
     ) -> StepResult:
         """Handle produce input form (Form 1 of 2).
 
@@ -1706,7 +1706,7 @@ class ScanSession:
         recipe = self.current_recipe
 
         # ── First render: show produce input form ───────────────────
-        if user_input is None:
+        if user_input is None or errors:
             recipe_cost: float | None = None
             fulfillment_calories: float | None = None
             try:
@@ -1769,13 +1769,26 @@ class ScanSession:
                 errors=errors,
             )
 
+        # ── Validate submitted values before stashing ───────────────
+        produce_servings = int(user_input.get("produce_servings", 1))
+        produce_amount = int(user_input.get("produce_amount", 1))
+
+        if produce_servings < 0:
+            errors["produce_servings"] = "produce_servings_non_negative"
+        if produce_amount < 0 or produce_amount > produce_servings:
+            errors["produce_amount"] = "produce_amount_invalid"
+
+        if errors:
+            # Re-render form with the validation errors
+            return await self._handle_produce_flow(user_input, product, errors)
+
         # ── Stash submitted values and go to confirmation ───────────
         self._produce_input.update({
             "produce_consume_ingredients": bool(
                 user_input.get("produce_consume_ingredients", True)
             ),
-            "produce_servings": int(user_input.get("produce_servings", 1)),
-            "produce_amount": int(user_input.get("produce_amount", 1)),
+            "produce_servings": produce_servings,
+            "produce_amount": produce_amount,
             "produce_location_id": int(user_input["produce_location_id"]),
             "produce_price": user_input.get("produce_price"),
         })
@@ -1815,18 +1828,20 @@ class ScanSession:
 
         # ── Calculate summary values ────────────────────────────────
         base_servings = int(recipe.get("base_servings", 1) or 1)
-        eaten_servings = produce_servings - produce_amount
+        eaten_servings = max(0, produce_servings - produce_amount)
 
         # Price per serving
         price_per_serving: float | None = None
         price_per_serving_str = "—"
         if produce_price_total_str and str(produce_price_total_str).strip():
+            # TODO: Validate
             try:
                 total = float(produce_price_total_str)
                 price_per_serving = round(total / produce_servings, 2) if produce_servings > 0 else None
                 if price_per_serving is not None:
                     price_per_serving_str = f"{price_per_serving}"
             except (ValueError, ZeroDivisionError):
+                # TODO: Surface errors to user instead of silently ignoring
                 pass
 
         # Calories per serving: prefer product.calories, fall back to
@@ -1985,8 +2000,9 @@ class ScanSession:
                 "transaction_type": "self-production",
                 "location_id": produce_location_id,
                 "note": recipe["name"],
-                "stock_label_type": 2 if should_print else None, # Tell Grocy to print a "Label per unit"
             }
+            if should_print:
+                stock_data["stock_label_type"] = 2  # Tell Grocy to print a "Label per unit"
             if price_per_serving is not None:
                 stock_data["price"] = price_per_serving
             if best_before_date:
