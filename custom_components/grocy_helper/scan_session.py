@@ -261,6 +261,7 @@ class ScanSession:
             Step.SCAN_TRANSFER_START: self._step_transfer_start,
             Step.SCAN_TRANSFER_INPUT: self._step_transfer_input,
             Step.SCAN_CREATE_RECIPE: self._step_create_recipe,
+            Step.SCAN_PRODUCE: self._step_produce,
             Step.SCAN_PRODUCE_CONFIRM: self._step_produce_confirm,
             Step.SCAN_PROCESS: self._step_scan_process,
         }
@@ -959,7 +960,7 @@ class ScanSession:
 
         # ── Produce flow (recipe context) ───────────────────────────
         if in_purchase_mode and self.current_recipe:
-            return await self._handle_produce_flow(user_input, product, errors)
+            return await self._step_produce(user_input)
 
         # Extract input values
         price, best_before_in_days, shopping_location_id = (
@@ -1688,13 +1689,11 @@ class ScanSession:
         grams_per_pack = c["to_amount"]
         return kcal_per_gram * grams_per_pack
 
-    # ── Helpers for _step_scan_process ────────────────────────────────
+    # ── Produce flow ────────────────────────────────────────────────
 
-    async def _handle_produce_flow(
+    async def _step_produce(
         self,
         user_input: dict[str, Any] | None,
-        product: dict,
-        errors: dict[str, str] = {},
     ) -> StepResult:
         """Handle produce input form (Form 1 of 2).
 
@@ -1704,9 +1703,15 @@ class ScanSession:
         """
 
         recipe = self.current_recipe
+        errors: dict[str, str] = {}
+
+        await self._ensure_product_stock_loaded()
+        product = self.current_product or (self.current_product_stock_info or {}).get(
+            "product", {}
+        )
 
         # ── First render: show produce input form ───────────────────
-        if user_input is None or errors:
+        if user_input is None:
             recipe_cost: float | None = None
             fulfillment_calories: float | None = None
             try:
@@ -1757,7 +1762,7 @@ class ScanSession:
             }
 
             return FormRequest(
-                step_id=Step.SCAN_PROCESS,
+                step_id=Step.SCAN_PRODUCE,
                 fields=fields,
                 description_placeholders={
                     "name": product.get("name"),
@@ -1780,7 +1785,12 @@ class ScanSession:
 
         if errors:
             # Re-render form with the validation errors
-            return await self._handle_produce_flow(user_input, product, errors)
+            cached = self._cached_process_fields or []
+            return FormRequest(
+                step_id=Step.SCAN_PRODUCE,
+                fields=cached,
+                errors=errors,
+            )
 
         # ── Stash submitted values and go to confirmation ───────────
         self._produce_input.update({
@@ -2113,10 +2123,6 @@ class ScanSession:
                 errors=errors,
                 description_placeholders={
                     "name": product.get("name"),
-                    "recipe_info": (
-                        f"## Produce: {self.current_recipe['name']}\n"
-                        f"Base servings: {self.current_recipe['base_servings']}"
-                    ) if self.current_recipe else '',
                 },
             )
         return None

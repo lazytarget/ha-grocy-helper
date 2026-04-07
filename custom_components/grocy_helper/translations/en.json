@@ -178,7 +178,7 @@
                     "print": "Whether to print a label after creating the recipe."
                 }
             },
-            "scan_process": {
+            "scan_produce": {
                 "title": "Produce {name}",
                 "description": "{recipe_info}",
                 "data": {
@@ -186,10 +186,7 @@
                     "produce_servings": "Servings cooked",
                     "produce_amount": "Containers to store",
                     "produce_location_id": "Storage location",
-                    "produce_price": "Total ingredient cost",
-                    "price": "Price",
-                    "best_before_in_days": "Best before (days)",
-                    "shopping_location_id": "Shopping location"
+                    "produce_price": "Total ingredient cost"
                 },
                 "data_description": {
                     "produce_consume_ingredients": "Remove used ingredients from Grocy stock",
@@ -197,6 +194,17 @@
                     "produce_amount": "Number of containers/packages to store (e.g. Tupperware boxes). Remaining servings are assumed eaten now",
                     "produce_location_id": "Where the produced containers will be stored",
                     "produce_price": "Total ingredient cost. Will be divided by servings cooked to get per-serving price"
+                }
+            },
+            "scan_process": {
+                "title": "Purchase {name}",
+                "description": "",
+                "data": {
+                    "price": "Price",
+                    "best_before_in_days": "Best before (days)",
+                    "shopping_location_id": "Shopping location"
+                },
+                "data_description": {
                 }
             },
             "scan_produce_confirm": {

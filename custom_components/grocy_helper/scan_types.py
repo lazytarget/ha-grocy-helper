@@ -33,6 +33,7 @@ class Step(StrEnum):
     SCAN_UPDATE_PRODUCT_DETAILS = "scan_update_product_details"
     SCAN_TRANSFER_START = "scan_transfer_start"
     SCAN_TRANSFER_INPUT = "scan_transfer_input"
+    SCAN_PRODUCE = "scan_produce"
     SCAN_PRODUCE_CONFIRM = "scan_produce_confirm"
     SCAN_PROCESS = "scan_process"
 
