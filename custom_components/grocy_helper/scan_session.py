@@ -2155,18 +2155,16 @@ class ScanSession:
             request["amount"] = 1  # TODO: configurable amount
             # TODO: check barcode buddy current quantity context
             # TODO: introduce a field for manual input during scan (default to Barcode amount, then to 1). If not able to fetch override from BBuddy
-            if self.scan_options.get(CONF_ENABLE_PRINTING) and self.scan_options.get(CONF_ENABLE_AUTO_PRINT):
-                # Print the label for the newly added stock entry
-                request["stock_label_type"] = 2  # Tell Grocy to print a "Label per unit"
+
+            # TODO: If we want to print a stock entry label, uncomment rows below. Or set "default_stock_label_type" on the product
+            # if self.scan_options.get(CONF_ENABLE_PRINTING) and self.scan_options.get(CONF_ENABLE_AUTO_PRINT):
+            #     # Print the label for the newly added stock entry
+            #     request["stock_label_type"] = 2  # Tell Grocy to print a "Label per unit"
+            
             product_id = self.current_product_stock_info["product"]["id"]
             request.pop("barcode", None)  # Instead go by ´product_id´
             response = await self._coordinator.add_stock(product_id, request)
-            # response = ""   # TODO: set based on response from Grocy
-
-            # if self.scan_options.get(CONF_ENABLE_PRINTING) and self.scan_options.get(CONF_ENABLE_AUTO_PRINT):
-            #     # Print the label for the newly added stock entry
-            #     await self._print_stock_entry_label(response)
-
+            # TODO: Validate response
         else:
             # Call Barcode Buddy scan
             # TODO: make Barcode Buddy obsolete? Instead do everything via Grocy API?. Gives more control, and cuts of middlehand. But looses the BBuddy UI and it's contextual settings.
