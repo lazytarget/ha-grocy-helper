@@ -67,6 +67,7 @@ class API:
         GET_PRODUCT_BARCODE_BY_ID: Final = "api/objects/product_barcodes/%s"
         TRANSFER_STOCK_ENTRY: Final = "api/stock/products/%s/transfer"
         ADD_STOCK_PRODUCT: Final = "api/stock/products/%s/add"
+        CONSUME_STOCK_PRODUCT: Final = "api/stock/products/%s/consume"
         ADD_PRODUCT: Final = "api/objects/products"
         ADD_PRODUCT_BARCODE: Final = "api/objects/product_barcodes"
         UPDATE_PRODUCT: Final = "api/objects/products/%s"
@@ -75,6 +76,10 @@ class API:
         GET_RECIPES: Final = "api/objects/recipes"
         CREATE_RECIPE: Final = "api/objects/recipes"
         UPDATE_RECIPE: Final = "api/objects/recipes/%s"
+
+        GET_RECIPE_FULFILLMENT: Final = "api/recipes/%s/fulfillment"
+        GET_RECIPES_POS_RESOLVED: Final = "api/objects/recipes_pos_resolved"
+        CONSUME_RECIPE: Final = "api/recipes/%s/consume"
 
         PRINT_LABEL_FOR_PRODUCT: Final = "api/stock/products/%s/printlabel"
         PRINT_LABEL_FOR_STOCK_ENTRY: Final = "api/stock/entry/%s/printlabel"

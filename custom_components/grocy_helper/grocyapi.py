@@ -137,6 +137,14 @@ class GrocyAPI:
         response = await async_post(self._session, url, self._api_key, json_data=data)
         return response
 
+    async def consume_stock_product(
+        self, product_id: int, amount: float, **kwargs
+    ) -> list[dict]:
+        """Consume a product from stock."""
+        url = self.get_rest_url(API.URLs.CONSUME_STOCK_PRODUCT) % product_id
+        data: dict[str, Any] = {"amount": amount, **kwargs}
+        return await async_post(self._session, url, self._api_key, json_data=data)
+
     async def add_product(self, data: GrocyProduct) -> GrocyProduct:
         url = self.get_rest_url(API.URLs.ADD_PRODUCT)
         response = await async_post(self._session, url, self._api_key, json_data=data)
@@ -193,6 +201,19 @@ class GrocyAPI:
         url = self.get_rest_url(API.URLs.UPDATE_RECIPE) % recipe_id
         response = await async_put(self._session, url, self._api_key, json_data=data)
         return response
+
+    async def get_recipe_fulfillment(self, recipe_id: int) -> dict:
+        url = self.get_rest_url(API.URLs.GET_RECIPE_FULFILLMENT) % recipe_id
+        return await async_get(self._session, url, self._api_key)
+
+    async def get_recipes_pos_resolved(self, recipe_id: int) -> list[dict]:
+        url = self.get_rest_url(API.URLs.GET_RECIPES_POS_RESOLVED)
+        params = [("query[]", f"recipe_id={recipe_id}")]
+        return await async_get(self._session, url, self._api_key, params=params)
+
+    async def consume_recipe(self, recipe_id: int) -> None:
+        url = self.get_rest_url(API.URLs.CONSUME_RECIPE) % recipe_id
+        await async_post(self._session, url, self._api_key, json_data={})
 
     async def print_label_for_product(self, product_id: int) -> dict:
         url = self.get_rest_url(API.URLs.PRINT_LABEL_FOR_PRODUCT) % product_id
