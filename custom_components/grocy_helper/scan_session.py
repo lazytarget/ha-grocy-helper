@@ -1775,12 +1775,20 @@ class ScanSession:
             )
 
         # ── Validate submitted values before stashing ───────────────
-        produce_servings = int(user_input.get("produce_servings", 1))
-        produce_amount = int(user_input.get("produce_amount", 1))
+        produce_servings = try_parse_int(user_input.get("produce_servings"))
+        produce_amount = try_parse_int(user_input.get("produce_amount"))
 
-        if produce_servings < 0:
-            errors["produce_servings"] = "produce_servings_non_negative"
-        if produce_amount < 0 or produce_amount > produce_servings:
+        if produce_servings is None or produce_servings < 1:
+            errors["produce_servings"] = "produce_servings_min_1"
+        if (
+            produce_amount is None
+            or produce_amount < 0
+            or (
+                produce_servings is not None
+                and produce_servings >= 1
+                and produce_amount > produce_servings
+            )
+        ):
             errors["produce_amount"] = "produce_amount_invalid"
 
         if errors:
@@ -1790,6 +1798,14 @@ class ScanSession:
                 step_id=Step.SCAN_PRODUCE,
                 fields=cached,
                 errors=errors,
+                description_placeholders={
+                    "name": (
+                        product.get("name", "")
+                        if isinstance(product, dict)
+                        else getattr(product, "name", "")
+                    ),
+                    "recipe_info": getattr(recipe, "name", "") if recipe else "",
+                },
             )
 
         # ── Stash submitted values and go to confirmation ───────────
@@ -1879,10 +1895,15 @@ class ScanSession:
         #             default_stock_label_type,
         #         )
         #     enable_printing = False # Will omit the 'produce_print' field and avoid any custom invokes for printing
-        
-        if user_input is None:
-            _LOGGER.info(
-                "Integration has printing enabled AND the Grocy product already has stock label type %s so it should will auto-print. Verify print output, and check for duplicates!",
+
+        if (
+            user_input is None
+            and enable_printing
+            and auto_print
+            and default_stock_label_type in [1, 2]
+        ):
+            _LOGGER.debug(
+                "Integration has printing enabled and the Grocy product already has stock label type %s, so it will auto-print. Verify print output and check for duplicates.",
                 default_stock_label_type,
             )
 
