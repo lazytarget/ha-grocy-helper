@@ -1872,13 +1872,19 @@ class ScanSession:
         enable_printing = self.scan_options.get(CONF_ENABLE_PRINTING, False)
         auto_print = self.scan_options.get(CONF_ENABLE_AUTO_PRINT, False)
         default_stock_label_type = product.get('default_stock_label_type')
-        if enable_printing and auto_print and default_stock_label_type in [1, 2]:
-            if user_input is None:
-                _LOGGER.info(
-                    "Integration has printing enabled but the Grocy product already has stock label type %s so it will auto-print. Therefore disabling printing in flow to omit duplicate prints.",
-                    default_stock_label_type,
-                )
-            enable_printing = False # Will omit the 'produce_print' field and avoid any custom invokes for printing
+        # if enable_printing and auto_print and default_stock_label_type in [1, 2]:
+        #     if user_input is None:
+        #         _LOGGER.info(
+        #             "Integration has printing enabled but the Grocy product already has stock label type %s so it will auto-print. Therefore disabling printing in flow to omit duplicate prints.",
+        #             default_stock_label_type,
+        #         )
+        #     enable_printing = False # Will omit the 'produce_print' field and avoid any custom invokes for printing
+        
+        if user_input is None:
+            _LOGGER.info(
+                "Integration has printing enabled AND the Grocy product already has stock label type %s so it should will auto-print. Verify print output, and check for duplicates!",
+                default_stock_label_type,
+            )
 
         # ── First render: show confirmation form ────────────────────
         if user_input is None:
