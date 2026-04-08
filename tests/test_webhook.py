@@ -13,6 +13,8 @@ from custom_components.grocy_helper.webhook import (
     parse_webhook_payload,
     process_webhook_payload,
     WebhookError,
+    WebhookItemResult,
+    WebhookResponse,
 )
 
 from tests.conftest import FakeStore
@@ -29,16 +31,16 @@ def _make_queue() -> ScanQueue:
 
 
 def test_parse_single_barcode_string():
-    """Single barcode as 'barcode' string."""
+    """Single barcode as string."""
     result = parse_webhook_payload({"barcode": "1234567890123"})
     assert result.barcodes == ["1234567890123"]
     assert result.mode is None
 
 
 def test_parse_multiple_barcodes_array():
-    """Multiple barcodes as 'barcodes' array."""
+    """Multiple barcodes as array."""
     result = parse_webhook_payload(
-        {"barcodes": ["1234567890123", "9876543210987"]}
+        {"barcode": ["1234567890123", "9876543210987"]}
     )
     assert result.barcodes == ["1234567890123", "9876543210987"]
 
@@ -52,7 +54,7 @@ def test_parse_structured_barcode():
 def test_parse_mixed_array_structured_and_plain():
     """Array with both plain and structured barcodes."""
     result = parse_webhook_payload(
-        {"barcodes": ["1111111111111", "<2222222222222|q:3|u:st>"]}
+        {"barcode": ["1111111111111", "<2222222222222|q:3|u:st>"]}
     )
     assert result.barcodes == ["1111111111111", "2222222222222|q:3|u:st"]
 
@@ -63,14 +65,6 @@ def test_parse_with_explicit_mode():
         {"barcode": "1234567890123", "mode": "BBUDDY-P"}
     )
     assert result.mode == "BBUDDY-P"
-
-
-def test_parse_barcode_and_barcodes_combined():
-    """Both 'barcode' and 'barcodes' present — barcodes array takes priority."""
-    result = parse_webhook_payload(
-        {"barcode": "1111111111111", "barcodes": ["2222222222222", "3333333333333"]}
-    )
-    assert result.barcodes == ["2222222222222", "3333333333333"]
 
 
 def test_parse_barcode_string_stripped():
@@ -97,11 +91,11 @@ def test_parse_empty_barcode_raises():
 def test_parse_empty_barcodes_array_raises():
     """Empty barcodes array raises WebhookError."""
     with pytest.raises(WebhookError, match="empty"):
-        parse_webhook_payload({"barcodes": []})
+        parse_webhook_payload({"barcode": []})
 
 
 def test_parse_non_string_barcode_raises():
-    """Non-string barcode raises WebhookError."""
+    """Non-string/non-list barcode raises WebhookError."""
     with pytest.raises(WebhookError):
         parse_webhook_payload({"barcode": 12345})
 
@@ -123,8 +117,8 @@ async def test_process_single_barcode():
     )
 
     assert len(results) == 1
-    assert results[0]["barcode"] == "1234567890123"
-    assert results[0]["status"] == "queued"
+    assert results[0].barcode == "1234567890123"
+    assert results[0].status == "queued"
     assert len(queue.get_pending_items()) == 1
 
 
@@ -132,11 +126,11 @@ async def test_process_multiple_barcodes():
     """Multiple barcodes are all added to the queue."""
     queue = _make_queue()
     results = await process_webhook_payload(
-        queue, {"barcodes": ["111", "222", "333"]}
+        queue, {"barcode": ["111", "222", "333"]}
     )
 
     assert len(results) == 3
-    assert all(r["status"] == "queued" for r in results)
+    assert all(r.status == "queued" for r in results)
     assert len(queue.get_pending_items()) == 3
 
 
@@ -147,7 +141,7 @@ async def test_process_with_explicit_mode():
         queue, {"barcode": "111", "mode": "BBUDDY-C"}
     )
 
-    assert results[0]["status"] == "queued"
+    assert results[0].status == "queued"
     items = queue.get_pending_items()
     assert items[0].mode == SCAN_MODE.CONSUME
 
@@ -175,8 +169,8 @@ async def test_process_mode_barcode_switches_mode():
     )
 
     assert len(results) == 1
-    assert results[0]["status"] == "mode_switched"
-    assert results[0]["new_mode"] == SCAN_MODE.ADD_TO_SHOPPING_LIST
+    assert results[0].status == "mode_switched"
+    assert results[0].new_mode == SCAN_MODE.ADD_TO_SHOPPING_LIST
     assert queue.current_mode == SCAN_MODE.ADD_TO_SHOPPING_LIST
     assert len(queue.get_pending_items()) == 0
 
@@ -186,14 +180,14 @@ async def test_process_mode_barcode_in_array():
     queue = _make_queue()
     results = await process_webhook_payload(
         queue,
-        {"barcodes": ["BBUDDY-AS", "111", "222"]},
+        {"barcode": ["BBUDDY-AS", "111", "222"]},
     )
 
     assert len(results) == 3
-    assert results[0]["status"] == "mode_switched"
+    assert results[0].status == "mode_switched"
     # items after mode switch use the NEW mode
-    assert results[1]["status"] == "queued"
-    assert results[2]["status"] == "queued"
+    assert results[1].status == "queued"
+    assert results[2].status == "queued"
     items = queue.get_pending_items()
     assert all(i.mode == SCAN_MODE.ADD_TO_SHOPPING_LIST for i in items)
 
@@ -205,7 +199,7 @@ async def test_process_structured_barcode_metadata():
         queue, {"barcode": "<1234567890123|q:2|p:25.0|n:Test Product>"}
     )
 
-    assert results[0]["status"] == "queued"
+    assert results[0].status == "queued"
     items = queue.get_pending_items()
     assert items[0].barcode == "1234567890123"
     assert items[0].metadata == {"q": "2", "p": "25.0", "n": "Test Product"}
@@ -225,5 +219,52 @@ async def test_process_returns_item_id():
         queue, {"barcode": "111"}
     )
 
-    assert "item_id" in results[0]
-    assert results[0]["item_id"] == queue.get_pending_items()[0].id
+    assert results[0].item_id is not None
+    assert results[0].item_id == queue.get_pending_items()[0].id
+
+
+# ── Tests: Response serialization ───────────────────────────────────
+
+
+def test_webhook_item_result_to_dict_queued():
+    """Queued result serializes with item_id and mode, omits None fields."""
+    r = WebhookItemResult(
+        barcode="123", status="queued", item_id="abc-123", mode="BBUDDY-P"
+    )
+    d = r.to_dict()
+    assert d == {
+        "barcode": "123",
+        "status": "queued",
+        "item_id": "abc-123",
+        "mode": "BBUDDY-P",
+    }
+    assert "new_mode" not in d
+
+
+def test_webhook_item_result_to_dict_mode_switched():
+    """Mode-switched result serializes with new_mode, omits None fields."""
+    r = WebhookItemResult(
+        barcode="BBUDDY-AS", status="mode_switched", new_mode="BBUDDY-AS"
+    )
+    d = r.to_dict()
+    assert d == {
+        "barcode": "BBUDDY-AS",
+        "status": "mode_switched",
+        "new_mode": "BBUDDY-AS",
+    }
+    assert "item_id" not in d
+    assert "mode" not in d
+
+
+def test_webhook_response_to_dict():
+    """WebhookResponse serializes all results."""
+    results = [
+        WebhookItemResult(barcode="123", status="queued", item_id="a", mode="BBUDDY-P"),
+        WebhookItemResult(barcode="BBUDDY-AS", status="mode_switched", new_mode="BBUDDY-AS"),
+    ]
+    resp = WebhookResponse(status="ok", results=results)
+    d = resp.to_dict()
+    assert d["status"] == "ok"
+    assert len(d["results"]) == 2
+    assert d["results"][0]["status"] == "queued"
+    assert d["results"][1]["status"] == "mode_switched"

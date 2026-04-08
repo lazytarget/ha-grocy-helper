@@ -17,7 +17,7 @@ from .coordinator import GrocyHelperCoordinator
 from .grocyapi import GrocyAPI
 from .barcodebuddyapi import BarcodeBuddyAPI, BarcodeBuddyAPI_Fake
 from .queue import ScanQueue
-from .webhook import process_webhook_payload, WebhookError
+from .webhook import process_webhook_payload, WebhookError, WebhookResponse
 
 from .const import (
     DEFAULT_SCAN_INTERVAL,
@@ -141,9 +141,8 @@ def _build_webhook_handler(coordinator: GrocyHelperCoordinator):
                 {"error": "Internal error"}, status=500
             )
 
-        return web.json_response(
-            {"status": "ok", "results": results}
-        )
+        response = WebhookResponse(status="ok", results=results)
+        return web.json_response(response.to_dict())
 
     return _handle_webhook
 

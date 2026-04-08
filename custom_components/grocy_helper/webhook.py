@@ -25,12 +25,53 @@ class WebhookError(Exception):
     """Raised when webhook payload validation fails."""
 
 
-@dataclass
-class ParsedPayload:
-    """Result of parsing a webhook request body."""
+# ── Request / Response types ─────────────────────────────────────────
 
-    barcodes: list[str] = field(default_factory=list)
+
+@dataclass
+class WebhookRequest:
+    """Parsed and validated webhook request."""
+
+    barcodes: list[str]
     mode: str | None = None
+
+
+@dataclass
+class WebhookItemResult:
+    """Result of processing a single barcode from the webhook."""
+
+    barcode: str
+    status: str  # "queued" | "mode_switched"
+    item_id: str | None = None
+    mode: str | None = None
+    new_mode: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {"barcode": self.barcode, "status": self.status}
+        if self.item_id is not None:
+            d["item_id"] = self.item_id
+        if self.mode is not None:
+            d["mode"] = self.mode
+        if self.new_mode is not None:
+            d["new_mode"] = self.new_mode
+        return d
+
+
+@dataclass
+class WebhookResponse:
+    """Full webhook response."""
+
+    status: str  # "ok"
+    results: list[WebhookItemResult]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "results": [r.to_dict() for r in self.results],
+        }
+
+
+# ── Parsing helpers ──────────────────────────────────────────────────
 
 
 def _strip_angle_brackets(barcode: str) -> str:
@@ -44,38 +85,36 @@ def _strip_angle_brackets(barcode: str) -> str:
     return barcode
 
 
-def parse_webhook_payload(data: dict[str, Any]) -> ParsedPayload:
+def parse_webhook_payload(data: dict[str, Any]) -> WebhookRequest:
     """Validate and parse a webhook JSON payload.
 
-    Accepts::
+    The ``barcode`` field accepts either a single string or an array
+    of strings::
 
         {"barcode": "123"}
+        {"barcode": ["123", "456"]}
         {"barcode": "<123|q:2|p:25.0>"}
-        {"barcodes": ["123", "456"]}
         {"barcode": "123", "mode": "BBUDDY-P"}
-
-    When both ``barcode`` and ``barcodes`` are present, the array
-    takes priority.
 
     Raises
     ------
     WebhookError
         On validation failure (missing/empty barcode, invalid mode).
     """
-    barcodes_raw: list[str] | None = None
+    if "barcode" not in data:
+        raise WebhookError("Payload must contain a 'barcode' field (string or array of strings)")
 
-    if "barcodes" in data:
-        val = data["barcodes"]
-        if not isinstance(val, list):
-            raise WebhookError("'barcodes' must be an array of strings")
-        barcodes_raw = val
-    elif "barcode" in data:
-        val = data["barcode"]
-        if not isinstance(val, str):
-            raise WebhookError("'barcode' must be a string")
+    val = data["barcode"]
+
+    # Normalize to list
+    if isinstance(val, str):
         barcodes_raw = [val]
+    elif isinstance(val, list):
+        barcodes_raw = val
     else:
-        raise WebhookError("Payload must contain 'barcode' (string) or 'barcodes' (array)")
+        raise WebhookError(
+            f"'barcode' must be a string or array of strings, got {type(val).__name__}"
+        )
 
     # Strip and validate
     cleaned: list[str] = []
@@ -100,7 +139,7 @@ def parse_webhook_payload(data: dict[str, Any]) -> ParsedPayload:
                 f"Invalid mode '{mode}'. Valid modes: {sorted(_VALID_MODES)}"
             )
 
-    return ParsedPayload(barcodes=cleaned, mode=mode)
+    return WebhookRequest(barcodes=cleaned, mode=mode)
 
 
 def _parse_structured_barcode(barcode_str: str) -> tuple[str, dict[str, str]]:
@@ -122,10 +161,13 @@ def _parse_structured_barcode(barcode_str: str) -> tuple[str, dict[str, str]]:
     return barcode, metadata
 
 
+# ── Processing ───────────────────────────────────────────────────────
+
+
 async def process_webhook_payload(
     queue: ScanQueue,
     data: dict[str, Any],
-) -> list[dict[str, Any]]:
+) -> list[WebhookItemResult]:
     """Parse a webhook payload and add barcodes to the queue.
 
     Parameters
@@ -137,8 +179,7 @@ async def process_webhook_payload(
 
     Returns
     -------
-    A list of per-barcode result dicts, each containing at minimum
-    ``barcode`` and ``status`` (``"queued"`` or ``"mode_switched"``).
+    A list of ``WebhookItemResult`` per barcode.
 
     Raises
     ------
@@ -146,7 +187,7 @@ async def process_webhook_payload(
         On payload validation failure.
     """
     parsed = parse_webhook_payload(data)
-    results: list[dict[str, Any]] = []
+    results: list[WebhookItemResult] = []
 
     for raw_barcode in parsed.barcodes:
         barcode, metadata = _parse_structured_barcode(raw_barcode)
@@ -159,17 +200,17 @@ async def process_webhook_payload(
 
         if item is None:
             # Mode switch occurred
-            results.append({
-                "barcode": barcode,
-                "status": "mode_switched",
-                "new_mode": queue.current_mode.value,
-            })
+            results.append(WebhookItemResult(
+                barcode=barcode,
+                status="mode_switched",
+                new_mode=queue.current_mode.value,
+            ))
         else:
-            results.append({
-                "barcode": barcode,
-                "status": "queued",
-                "item_id": item.id,
-                "mode": item.mode,
-            })
+            results.append(WebhookItemResult(
+                barcode=barcode,
+                status="queued",
+                item_id=item.id,
+                mode=item.mode,
+            ))
 
     return results
