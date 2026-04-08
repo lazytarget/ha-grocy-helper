@@ -385,9 +385,8 @@ class FakeBarcodeBuddyAPI:
         self.mode = mode
 
     async def post_scan(self, request: dict) -> dict:
-        raise NotImplementedError(
-            f"FakeBarcodeBuddyAPI does not implement scan for mode {self.mode}"
-        )
+        """Simulate a BBuddy scan.  Returns a simple success response."""
+        return {"result": "OK", "barcode": request.get("barcode", "")}
 
 
 # ── Fake Coordinator ────────────────────────────────────────────────
