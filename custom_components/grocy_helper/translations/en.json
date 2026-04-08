@@ -32,10 +32,22 @@
                 "menu_options": {
                     "add_product": "Add product [WIP]",
                     "add_recipe": "Add recipe [WIP]",
-                    "scan": "Scan barcodes [WIP]"
+                    "scan": "Scan barcodes [WIP]",
+                    "scan_start": "Scan barcodes",
+                    "handle_queue": "Handle Queue"
                 },
                 "title": "Choose titl",
                 "description": "Select the type of group sensor you want to create. Choose domain based group if you want to group all entities of a specific domain, or create a sensor summing all your energy sensor. Choose standard group otherwise"
+            },
+            "handle_queue": {
+                "title": "Handle Queue",
+                "description": "Pending: {pending_count} | Failed: {failed_count}\n\n{items}",
+                "data": {
+                    "confirm": "Process all items"
+                },
+                "data_description": {
+                    "confirm": "Process all pending and failed queue items through the scan workflow"
+                }
             },
             "add_recipe": {
                 "data": {

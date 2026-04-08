@@ -58,11 +58,13 @@ from .scan_state_manager import ScanStateManager
 from .scan_types import (
     AbortResult,
     CompletedResult,
+    FieldType,
     FormField,
     FormRequest,
     Step,
     StepResult,
 )
+from .queue import QueueStatus
 from .utils import parse_int, transform_input, try_parse_int
 
 _LOGGER = logging.getLogger(__name__)
@@ -171,6 +173,10 @@ class ScanSession:
         # Stashed produce-input between form 1 and confirm form
         self._produce_input: dict[str, Any] = {}
 
+        # Handle Queue: maps barcode → queue item ID for status tracking
+        self._queue_item_ids: dict[str, str] = {}
+        self._queue_ref: Any = None  # ScanQueue reference
+
     # ── public helpers ───────────────────────────────────────────────
 
     @property
@@ -264,6 +270,7 @@ class ScanSession:
             Step.SCAN_PRODUCE: self._step_produce,
             Step.SCAN_PRODUCE_CONFIRM: self._step_produce_confirm,
             Step.SCAN_PROCESS: self._step_scan_process,
+            Step.HANDLE_QUEUE: self._step_handle_queue,
         }
         handler = handlers.get(step_id)
         if handler is None:
@@ -273,6 +280,75 @@ class ScanSession:
     # =================================================================
     # Step handlers
     # =================================================================
+
+    # ── handle_queue ─────────────────────────────────────────────────
+
+    async def _step_handle_queue(self, user_input: dict[str, Any] | None) -> StepResult:
+        """Show pending queue items and process them on confirmation."""
+
+        queue = getattr(self._coordinator, "queue", None)
+        if queue is None:
+            return AbortResult(reason="No queue available")
+
+        pending = queue.get_pending_items()
+        failed = queue.get_failed_items()
+        all_items = pending + failed
+
+        if not all_items:
+            return AbortResult(reason="No pending or failed items in queue")
+
+        if user_input is None:
+            # Build summary items text
+            item_lines = []
+            for item in all_items:
+                status = "⚠ FAILED" if item.status.value == "failed" else "pending"
+                item_lines.append(f"• {item.barcode} ({item.mode}) [{status}]")
+
+            return FormRequest(
+                step_id=Step.HANDLE_QUEUE,
+                fields=[
+                    FormField(
+                        key="confirm",
+                        field_type=FieldType.BOOLEAN,
+                        required=False,
+                        default=True,
+                        description="Process all pending items",
+                    ),
+                ],
+                description_placeholders={
+                    "pending_count": str(len(pending)),
+                    "failed_count": str(len(failed)),
+                    "items": "\n".join(item_lines),
+                },
+            )
+
+        # ── user submitted the form ─────────────────────────────────
+        # Reset failed items back to pending for reprocessing
+        for item in failed:
+            item.status = QueueStatus.PENDING
+            item.error = None
+
+        # Use the first item's mode as scan mode
+        first_mode = all_items[0].mode if all_items else SCAN_MODE.PURCHASE
+        self.barcode_scan_mode = first_mode
+
+        # Populate session barcode_queue from queue items
+        self.barcode_queue = []
+        self.barcode_results = []
+        self._queue_item_ids = {}
+        self._queue_ref = queue
+
+        for item in all_items:
+            self.barcode_queue.append(item.barcode)
+            self._queue_item_ids[item.barcode] = item.id
+
+        _LOGGER.info(
+            "Handle Queue: processing %d items (mode=%s)",
+            len(self.barcode_queue),
+            self.barcode_scan_mode,
+        )
+
+        return await self._step_scan_queue()
 
     # ── scan_start ───────────────────────────────────────────────────
 
@@ -2204,10 +2280,14 @@ class ScanSession:
 
     async def _handle_scan_success(self, response: dict | None = None) -> StepResult:
         """Handle successful scan."""
-        self.barcode_queue.pop(0)
+        barcode = self.barcode_queue.pop(0)
         if response:
             # TODO: handle responses with HTML-tags (warning/error messages)
             self.barcode_results.append(str(response))
+
+        # Mark queue item as resolved if processing from Handle Queue
+        await self._mark_queue_item_resolved(barcode, str(response) if response else "OK")
+
         # Re-run process method until queue is empty...
         return await self._step_scan_queue()
 
@@ -2228,3 +2308,12 @@ class ScanSession:
                 ) if self.current_recipe else '',
             },
         )
+
+    async def _mark_queue_item_resolved(self, barcode: str, result_text: str) -> None:
+        """Mark a queue item as resolved if processing from Handle Queue."""
+        if self._queue_ref is None:
+            return
+        item_id = self._queue_item_ids.get(barcode)
+        if item_id:
+            await self._queue_ref.async_mark_resolved(item_id, result_text)
+            _LOGGER.info("Queue item %s resolved for barcode %s", item_id, barcode)

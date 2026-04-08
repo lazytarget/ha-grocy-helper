@@ -36,6 +36,7 @@ class Step(StrEnum):
     SCAN_PRODUCE = "scan_produce"
     SCAN_PRODUCE_CONFIRM = "scan_produce_confirm"
     SCAN_PROCESS = "scan_process"
+    HANDLE_QUEUE = "handle_queue"
 
 
 # ---------------------------------------------------------------------------

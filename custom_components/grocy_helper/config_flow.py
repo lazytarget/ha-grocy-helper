@@ -82,6 +82,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 
 MAIN_MENU = [
     Step.SCAN_START,
+    Step.HANDLE_QUEUE,
     # Step.SCAN_CREATE_RECIPE,
 ]
 
@@ -290,6 +291,8 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     return await self.async_step_main_menu(user_input)
                 if form == "scan_start":
                     return await self.async_step_scan_start()
+                if form == "handle_queue":
+                    return await self.async_step_handle_queue()
             return self.async_abort(reason="No operation chosen")
 
         schema = vol.Schema(
@@ -403,6 +406,13 @@ class GrocyOptionsFlowHandler(OptionsFlow):
     ) -> FlowResult:
         return self._to_flow_result(
             await self._session.handle_step(Step.SCAN_PROCESS, user_input)
+        )
+
+    async def async_step_handle_queue(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        return self._to_flow_result(
+            await self._session.handle_step(Step.HANDLE_QUEUE, user_input)
         )
 
     # ── result conversion ───────────────────────────────────────────
