@@ -81,8 +81,8 @@ async def async_try_auto_resolve(
     )
 
     try:
-        # Kick off the session — the first call with user_input=None
-        # returns the SCAN_START form; we immediately submit it.
+        # Kick off the session — SCAN_START accepts user_input directly
+        # (no preliminary None call needed for headless operation).
         result: StepResult = await session.handle_step(
             Step.SCAN_START,
             {"barcodes": barcode, "mode": str(mode)},

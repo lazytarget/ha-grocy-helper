@@ -272,3 +272,35 @@ async def test_handle_queue_multiple_items_processed():
 
     assert isinstance(result, CompletedResult)
     assert len(queue.get_pending_items()) == 0
+
+
+async def test_handle_queue_duplicate_barcodes_both_resolved():
+    """Two queue items with the same barcode are both resolved independently."""
+    grocy_api = FakeGrocyAPI()
+    product = make_product(id=42, name="Milk")
+    grocy_api.register_product(product, barcodes=["111"])
+
+    queue = await _make_queue_with_items(["111", "111"])
+    items = queue.get_pending_items()
+    assert len(items) == 2
+    item_id_1 = items[0].id
+    item_id_2 = items[1].id
+    assert item_id_1 != item_id_2  # unique UUIDs
+
+    session = _make_session_with_queue(
+        queue, grocy_api=grocy_api, products=[product]
+    )
+
+    await session.handle_step(Step.HANDLE_QUEUE, None)
+    result = await session.handle_step(Step.HANDLE_QUEUE, {"confirm": True})
+    result = await _drive_to_completion(session, result)
+
+    assert isinstance(result, CompletedResult)
+    assert len(queue.get_pending_items()) == 0
+
+    # Both items should be resolved
+    resolved = [i for i in queue._items if i.status == QueueStatus.RESOLVED]
+    assert len(resolved) == 2
+    resolved_ids = {i.id for i in resolved}
+    assert item_id_1 in resolved_ids
+    assert item_id_2 in resolved_ids

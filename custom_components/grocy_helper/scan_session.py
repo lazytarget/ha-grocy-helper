@@ -173,8 +173,9 @@ class ScanSession:
         # Stashed produce-input between form 1 and confirm form
         self._produce_input: dict[str, Any] = {}
 
-        # Handle Queue: maps barcode → queue item ID for status tracking
-        self._queue_item_ids: dict[str, str] = {}
+        # Handle Queue: ordered list of (barcode, item_id) for status tracking.
+        # A list (not a dict) so duplicate barcodes are handled correctly.
+        self._queue_item_ids: list[tuple[str, str]] = []
         self._queue_ref: Any = None  # ScanQueue reference
 
     # ── public helpers ───────────────────────────────────────────────
@@ -312,7 +313,7 @@ class ScanSession:
                         field_type=FieldType.BOOLEAN,
                         required=False,
                         default=True,
-                        description="Process all pending items",
+                        description="Process all pending and failed items",
                     ),
                 ],
                 description_placeholders={
@@ -323,24 +324,43 @@ class ScanSession:
             )
 
         # ── user submitted the form ─────────────────────────────────
-        # Reset failed items back to pending for reprocessing
+        # Reset failed items back to pending for reprocessing and persist
         for item in failed:
             item.status = QueueStatus.PENDING
             item.error = None
+        try:
+            await queue._async_save()
+        except Exception:
+            _LOGGER.exception("Failed to persist queue status reset")
+            return AbortResult(reason="Failed to persist queue state")
 
-        # Use the first item's mode as scan mode
-        first_mode = all_items[0].mode if all_items else SCAN_MODE.PURCHASE
-        self.barcode_scan_mode = first_mode
+        # Use the first item's mode as scan mode (convert string → enum)
+        raw_mode = all_items[0].mode if all_items else None
+        if isinstance(raw_mode, SCAN_MODE):
+            self.barcode_scan_mode = raw_mode
+        elif raw_mode:
+            try:
+                self.barcode_scan_mode = SCAN_MODE(raw_mode)
+            except ValueError:
+                _LOGGER.warning(
+                    "Handle Queue: invalid stored scan mode %r, falling back to %s",
+                    raw_mode,
+                    SCAN_MODE.PURCHASE,
+                )
+                self.barcode_scan_mode = SCAN_MODE.PURCHASE
+        else:
+            self.barcode_scan_mode = SCAN_MODE.PURCHASE
 
-        # Populate session barcode_queue from queue items
+        # Populate session barcode_queue from queue items.
+        # Use a list of (barcode, item_id) tuples to handle duplicate barcodes.
         self.barcode_queue = []
         self.barcode_results = []
-        self._queue_item_ids = {}
+        self._queue_item_ids = []
         self._queue_ref = queue
 
         for item in all_items:
             self.barcode_queue.append(item.barcode)
-            self._queue_item_ids[item.barcode] = item.id
+            self._queue_item_ids.append((item.barcode, item.id))
 
         _LOGGER.info(
             "Handle Queue: processing %d items (mode=%s)",
@@ -2310,10 +2330,16 @@ class ScanSession:
         )
 
     async def _mark_queue_item_resolved(self, barcode: str, result_text: str) -> None:
-        """Mark a queue item as resolved if processing from Handle Queue."""
+        """Mark a queue item as resolved if processing from Handle Queue.
+
+        Pops the first matching (barcode, item_id) tuple so that duplicate
+        barcodes are resolved one at a time in queue order.
+        """
         if self._queue_ref is None:
             return
-        item_id = self._queue_item_ids.get(barcode)
-        if item_id:
-            await self._queue_ref.async_mark_resolved(item_id, result_text)
-            _LOGGER.info("Queue item %s resolved for barcode %s", item_id, barcode)
+        for i, (bc, item_id) in enumerate(self._queue_item_ids):
+            if bc == barcode:
+                self._queue_item_ids.pop(i)
+                await self._queue_ref.async_mark_resolved(item_id, result_text)
+                _LOGGER.info("Queue item %s resolved for barcode %s", item_id, barcode)
+                return

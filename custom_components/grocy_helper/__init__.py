@@ -18,6 +18,7 @@ from .grocyapi import GrocyAPI
 from .barcodebuddyapi import BarcodeBuddyAPI, BarcodeBuddyAPI_Fake
 from .queue import ScanQueue
 from .webhook import process_webhook_payload, WebhookError, WebhookResponse
+from .auto_resolver import async_try_auto_resolve
 
 from .const import (
     DEFAULT_SCAN_INTERVAL,
@@ -82,7 +83,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_config_entry_first_refresh()
 
     # ── Persistent scan queue ──────────────────────────────────────
-    store = Store(hass, STORAGE_VERSION_QUEUE, STORAGE_KEY_QUEUE)
+    store = Store(hass, STORAGE_VERSION_QUEUE, f"{STORAGE_KEY_QUEUE}.{entry.entry_id}")
     queue = ScanQueue(store=store)
     await queue.async_load()
     coordinator.queue = queue
@@ -121,7 +122,12 @@ def _build_webhook_handler(coordinator: GrocyHelperCoordinator):
     async def _handle_webhook(
         hass: HomeAssistant, webhook_id: str, request: web.Request
     ) -> web.Response:
-        """Handle incoming webhook requests."""
+        """Handle incoming webhook requests.
+
+        Queues barcodes first, then attempts auto-resolve for each
+        queued item.  Items that cannot be auto-resolved remain in the
+        queue for manual processing via Handle Queue.
+        """
         try:
             data = await request.json()
         except Exception:
@@ -140,6 +146,44 @@ def _build_webhook_handler(coordinator: GrocyHelperCoordinator):
             return web.json_response(
                 {"error": "Internal error"}, status=500
             )
+
+        # Attempt auto-resolve for each queued item
+        for item_result in results:
+            if item_result.status != "queued" or item_result.item_id is None:
+                continue
+            try:
+                resolve_result = await async_try_auto_resolve(
+                    coordinator=coordinator,
+                    api_bbuddy=coordinator._api_bbuddy,
+                    config_entry_data=coordinator._entry.data,
+                    barcode=item_result.barcode,
+                    mode=item_result.mode or coordinator.queue.current_mode.value,
+                )
+                if resolve_result.success:
+                    await coordinator.queue.async_mark_resolved(
+                        item_result.item_id,
+                        resolve_result.result_text or "auto-resolved",
+                    )
+                    item_result.status = "auto_resolved"
+                    _LOGGER.info(
+                        "Auto-resolved barcode %s", item_result.barcode
+                    )
+                elif resolve_result.needs_manual:
+                    _LOGGER.info(
+                        "Barcode %s needs manual processing: %s",
+                        item_result.barcode,
+                        resolve_result.error,
+                    )
+                else:
+                    await coordinator.queue.async_mark_failed(
+                        item_result.item_id,
+                        resolve_result.error or "Auto-resolve failed",
+                    )
+                    item_result.status = "failed"
+            except Exception:
+                _LOGGER.exception(
+                    "Auto-resolve error for barcode %s", item_result.barcode
+                )
 
         response = WebhookResponse(status="ok", results=results)
         return web.json_response(response.to_dict())

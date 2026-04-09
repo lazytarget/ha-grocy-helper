@@ -81,20 +81,41 @@ class ScanQueue:
         if data is None:
             return
 
-        self._current_mode = SCAN_MODE(data.get("current_mode", SCAN_MODE.PURCHASE))
-        self._items = [
-            QueueItem(
-                id=raw["id"],
-                barcode=raw["barcode"],
-                mode=raw["mode"],
-                added_at=raw["added_at"],
-                status=QueueStatus(raw["status"]),
-                error=raw.get("error"),
-                result=raw.get("result"),
-                metadata=raw.get("metadata", {}),
+        raw_mode = data.get("current_mode", SCAN_MODE.PURCHASE)
+        try:
+            self._current_mode = SCAN_MODE(raw_mode)
+        except ValueError:
+            _LOGGER.warning(
+                "Invalid persisted scan mode %r; falling back to %s",
+                raw_mode,
+                SCAN_MODE.PURCHASE,
             )
-            for raw in data.get("items", [])
-        ]
+            self._current_mode = SCAN_MODE.PURCHASE
+
+        self._items = []
+        for raw in data.get("items", []):
+            try:
+                status = QueueStatus(raw["status"])
+            except (ValueError, KeyError):
+                _LOGGER.warning(
+                    "Invalid persisted queue item status %r for item %r; skipping",
+                    raw.get("status"),
+                    raw.get("id"),
+                )
+                continue
+
+            self._items.append(
+                QueueItem(
+                    id=raw["id"],
+                    barcode=raw["barcode"],
+                    mode=raw["mode"],
+                    added_at=raw["added_at"],
+                    status=status,
+                    error=raw.get("error"),
+                    result=raw.get("result"),
+                    metadata=raw.get("metadata", {}),
+                )
+            )
 
     async def async_add(
         self,
@@ -187,8 +208,13 @@ class ScanQueue:
 
     async def _async_save(self) -> None:
         """Persist current state to the store."""
+        items = []
+        for item in self._items:
+            serialized = asdict(item)
+            serialized["status"] = item.status.value
+            items.append(serialized)
         data = {
             "current_mode": self._current_mode.value,
-            "items": [asdict(item) for item in self._items],
+            "items": items,
         }
         await self._store.async_save(data)

@@ -36,8 +36,8 @@
                     "scan_start": "Scan barcodes",
                     "handle_queue": "Handle Queue"
                 },
-                "title": "Choose titl",
-                "description": "Select the type of group sensor you want to create. Choose domain based group if you want to group all entities of a specific domain, or create a sensor summing all your energy sensor. Choose standard group otherwise"
+                "title": "Choose action",
+                "description": "Select what you want to do in Grocy Helper."
             },
             "handle_queue": {
                 "title": "Handle Queue",

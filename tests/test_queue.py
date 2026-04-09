@@ -260,3 +260,65 @@ async def test_save_called_on_status_change(fake_store: FakeStore):
 
     data = await fake_store.async_load()
     assert data["items"][0]["status"] == QueueStatus.RESOLVED.value
+
+
+# ── Serialization / Resilience ──────────────────────────────────────
+
+
+async def test_enum_serialization_round_trip(fake_store: FakeStore):
+    """Enums are serialized as strings, not enum instances."""
+    queue = ScanQueue(store=fake_store)
+    await queue.async_add("111")
+    await queue.async_mark_resolved(
+        queue._items[0].id, "OK"
+    )
+
+    raw = await fake_store.async_load()
+    # current_mode must be a plain string
+    assert isinstance(raw["current_mode"], str)
+    # item status must be a plain string
+    assert isinstance(raw["items"][0]["status"], str)
+
+    # Must round-trip correctly
+    queue2 = ScanQueue(store=fake_store)
+    await queue2.async_load()
+    assert queue2.current_mode == SCAN_MODE.PURCHASE
+    assert queue2._items[0].status == QueueStatus.RESOLVED
+
+
+async def test_load_invalid_mode_falls_back(fake_store: FakeStore):
+    """Invalid persisted mode falls back to PURCHASE."""
+    await fake_store.async_save({
+        "current_mode": "INVALID_MODE",
+        "items": [],
+    })
+    queue = ScanQueue(store=fake_store)
+    await queue.async_load()
+    assert queue.current_mode == SCAN_MODE.PURCHASE
+
+
+async def test_load_invalid_item_status_skipped(fake_store: FakeStore):
+    """Items with invalid status are skipped during load."""
+    await fake_store.async_save({
+        "current_mode": SCAN_MODE.PURCHASE.value,
+        "items": [
+            {
+                "id": "good",
+                "barcode": "111",
+                "mode": SCAN_MODE.PURCHASE.value,
+                "added_at": "2025-01-01T00:00:00+00:00",
+                "status": "pending",
+            },
+            {
+                "id": "bad",
+                "barcode": "222",
+                "mode": SCAN_MODE.PURCHASE.value,
+                "added_at": "2025-01-01T00:00:00+00:00",
+                "status": "UNKNOWN_STATUS",
+            },
+        ],
+    })
+    queue = ScanQueue(store=fake_store)
+    await queue.async_load()
+    assert len(queue._items) == 1
+    assert queue._items[0].id == "good"
