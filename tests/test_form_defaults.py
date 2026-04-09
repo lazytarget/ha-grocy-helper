@@ -86,13 +86,28 @@ class TestBestBeforeDefault:
         assert field.suggested_value == "7"
 
     def test_default_set_when_zero(self):
-        """A 0-day best-before is a valid Grocy setting (means 'no expiry')."""
+        """0 means 'expires today' in Grocy — suspicious, needs manual review.
+
+        default should be None (not auto-fillable) but suggested_value
+        should still show '0' so the user sees the current value.
+        """
         product = make_product(default_best_before_days=0)
         fields = _build_fields(product=product, best_before_in_days=0)
         field = _get_field(fields, "best_before_in_days")
 
         assert field is not None
-        assert field.default == "0"
+        assert field.default is None  # NOT auto-fillable
+        assert field.suggested_value == "0"  # shown as hint
+
+    def test_default_set_when_negative_one(self):
+        """-1 means 'never expires' in Grocy — valid, auto-resolvable."""
+        product = make_product(default_best_before_days=-1)
+        fields = _build_fields(product=product, best_before_in_days=-1)
+        field = _get_field(fields, "best_before_in_days")
+
+        assert field is not None
+        assert field.default == "-1"
+        assert field.suggested_value == "-1"
 
     def test_no_default_when_none(self):
         """When best_before_in_days is None, no default is set."""

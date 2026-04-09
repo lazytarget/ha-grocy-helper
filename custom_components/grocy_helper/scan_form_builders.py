@@ -593,13 +593,21 @@ class ScanFormBuilder:
                 if best_before_in_days is not None
                 else None
             )
+            # default is only set when the value is trustworthy:
+            # >0 = configured days, -1 = never expires.
+            # 0 = "expires today" (Grocy default) — suspicious, needs review.
+            bb_default = (
+                bb_str
+                if best_before_in_days is not None and best_before_in_days != 0
+                else None
+            )
             fields.append(
                 FormField(
                     key="best_before_in_days",
                     field_type=FieldType.TEXT,
                     required=False,
                     suggested_value=bb_str,
-                    default=bb_str,
+                    default=bb_default,
                 ),
             )
 
