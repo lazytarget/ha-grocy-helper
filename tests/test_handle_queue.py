@@ -6,10 +6,9 @@ and feeds them into the normal scan workflow.
 
 from __future__ import annotations
 
-import pytest
 
 from custom_components.grocy_helper.const import SCAN_MODE
-from custom_components.grocy_helper.queue import QueueItem, QueueStatus, ScanQueue
+from custom_components.grocy_helper.queue import QueueStatus, ScanQueue
 from custom_components.grocy_helper.scan_session import ScanSession
 from custom_components.grocy_helper.scan_types import (
     AbortResult,

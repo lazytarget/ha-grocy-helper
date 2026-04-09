@@ -5,7 +5,6 @@ Written BEFORE the implementation (TDD).
 
 from __future__ import annotations
 
-import pytest
 
 from custom_components.grocy_helper.const import SCAN_MODE
 from custom_components.grocy_helper.queue import QueueStatus, ScanQueue
@@ -124,6 +123,7 @@ async def test_get_failed_items():
 
     failed = queue.get_failed_items()
     assert len(failed) == 1
+    assert failed[0].id != item1.id
     assert failed[0].id == item2.id
     assert failed[0].error == "something broke"
 

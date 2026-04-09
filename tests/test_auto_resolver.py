@@ -5,7 +5,6 @@ Written BEFORE the implementation (TDD).
 
 from __future__ import annotations
 
-import pytest
 
 from custom_components.grocy_helper.auto_resolver import (
     AutoResolveResult,
@@ -13,7 +12,6 @@ from custom_components.grocy_helper.auto_resolver import (
     _validate_product_config,
 )
 from custom_components.grocy_helper.const import SCAN_MODE
-from custom_components.grocy_helper.scan_types import Step
 
 from tests.conftest import (
     FakeBarcodeBuddyAPI,
@@ -21,7 +19,6 @@ from tests.conftest import (
     FakeGrocyAPI,
     make_master_data,
     make_product,
-    make_product_barcode,
 )
 
 

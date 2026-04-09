@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 
 from custom_components.grocy_helper.const import SCAN_MODE
-from custom_components.grocy_helper.queue import QueueStatus, ScanQueue
+from custom_components.grocy_helper.queue import ScanQueue
 from custom_components.grocy_helper.webhook import (
     parse_webhook_payload,
     process_webhook_payload,
@@ -151,7 +151,7 @@ async def test_process_without_mode_uses_queue_current_mode():
     queue = _make_queue()
     queue._current_mode = SCAN_MODE.ADD_TO_SHOPPING_LIST
 
-    results = await process_webhook_payload(
+    await process_webhook_payload(
         queue, {"barcode": "111"}
     )
 

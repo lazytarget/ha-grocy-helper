@@ -6,7 +6,6 @@ Verifies that `build_scan_process_fields` sets `default` alongside
 
 from __future__ import annotations
 
-import pytest
 
 from custom_components.grocy_helper.scan_form_builders import ScanFormBuilder
 from custom_components.grocy_helper.scan_types import FormField

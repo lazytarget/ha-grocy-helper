@@ -8,7 +8,6 @@ same data-merging logic used in each branch.
 
 from __future__ import annotations
 
-import pytest
 
 from custom_components.grocy_helper.const import (
     CONF_BBUDDY_API_KEY,

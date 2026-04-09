@@ -5,7 +5,6 @@ from tests.conftest import (
     FakeGrocyAPI,
     FakeBarcodeBuddyAPI,
     FakeStore,
-    make_master_data,
     make_product,
 )
 
