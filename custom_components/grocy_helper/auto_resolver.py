@@ -85,7 +85,7 @@ async def async_try_auto_resolve(
         # (no preliminary None call needed for headless operation).
         result: StepResult = await session.handle_step(
             Step.SCAN_START,
-            {"barcodes": barcode, "mode": str(mode)},
+            {"barcodes": barcode, "mode": mode.value if isinstance(mode, SCAN_MODE) else str(mode)},
         )
 
         # ── Product config quality gate ─────────────────────────────

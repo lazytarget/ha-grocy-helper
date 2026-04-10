@@ -324,6 +324,9 @@ class ScanSession:
             )
 
         # ── user submitted the form ─────────────────────────────────
+        if not user_input.get("confirm", False):
+            return AbortResult(reason="Queue processing cancelled")
+
         # Reset failed items back to pending for reprocessing and persist
         for item in failed:
             item.status = QueueStatus.PENDING
