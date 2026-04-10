@@ -11,7 +11,7 @@ from custom_components.grocy_helper.auto_resolver import (
     async_try_auto_resolve,
     _validate_product_config,
 )
-from custom_components.grocy_helper.const import CONF_ENABLE_PRICES, SCAN_MODE
+from custom_components.grocy_helper.const import CONF_ENABLE_PRICES, CONF_ENABLE_SHOPPING_LOCATIONS, SCAN_MODE
 
 from tests.conftest import (
     FakeBarcodeBuddyAPI,
@@ -243,8 +243,7 @@ async def test_scan_options_disable_forms_for_faster_resolve():
         mode=SCAN_MODE.PURCHASE,
         scan_options={
             CONF_ENABLE_PRICES: False,
-            "input_bestBeforeInDays": False,
-            "input_shoppingLocationId": False,
+            CONF_ENABLE_SHOPPING_LOCATIONS: False,
         },
     )
 

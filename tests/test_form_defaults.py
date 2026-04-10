@@ -7,7 +7,7 @@ Verifies that `build_scan_process_fields` sets `default` alongside
 from __future__ import annotations
 
 
-from custom_components.grocy_helper.const import CONF_ENABLE_PRICES
+from custom_components.grocy_helper.const import CONF_ENABLE_PRICES, CONF_ENABLE_SHOPPING_LOCATIONS
 from custom_components.grocy_helper.scan_form_builders import ScanFormBuilder
 from custom_components.grocy_helper.scan_types import FormField
 
@@ -46,8 +46,7 @@ def _build_fields(
     if scan_options is None:
         scan_options = {
             CONF_ENABLE_PRICES: True,
-            "input_bestBeforeInDays": True,
-            "input_shoppingLocationId": True,
+            CONF_ENABLE_SHOPPING_LOCATIONS: True,
         }
 
     return builder.build_scan_process_fields(
@@ -127,17 +126,16 @@ class TestBestBeforeDefault:
         assert field.suggested_value == "14"
         assert field.default == "14"
 
-    def test_field_not_shown_when_option_disabled(self):
-        """When input_bestBeforeInDays is False, field is not emitted."""
+    def test_field_always_shown(self):
+        """best_before_in_days is always emitted (no toggle)."""
         fields = _build_fields(
             best_before_in_days=5,
             scan_options={
                 CONF_ENABLE_PRICES: True,
-                "input_bestBeforeInDays": False,
-                "input_shoppingLocationId": True,
+                CONF_ENABLE_SHOPPING_LOCATIONS: True,
             },
         )
-        assert _get_field(fields, "best_before_in_days") is None
+        assert _get_field(fields, "best_before_in_days") is not None
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -203,12 +201,11 @@ class TestShoppingLocationDefault:
         assert field.default is None
 
     def test_field_not_shown_when_option_disabled(self):
-        """When input_shoppingLocationId is False, field is not emitted."""
+        """When CONF_ENABLE_SHOPPING_LOCATIONS is False, field is not emitted."""
         fields = _build_fields(
             scan_options={
                 CONF_ENABLE_PRICES: True,
-                "input_bestBeforeInDays": True,
-                "input_shoppingLocationId": False,
+                CONF_ENABLE_SHOPPING_LOCATIONS: False,
             },
         )
         assert _get_field(fields, "shopping_location_id") is None
@@ -255,8 +252,7 @@ class TestPriceNoDefault:
         fields = _build_fields(
             scan_options={
                 CONF_ENABLE_PRICES: False,
-                "input_bestBeforeInDays": True,
-                "input_shoppingLocationId": True,
+                CONF_ENABLE_SHOPPING_LOCATIONS: True,
             },
         )
         assert _get_field(fields, "price") is None
@@ -266,8 +262,7 @@ class TestPriceNoDefault:
         fields = _build_fields(
             scan_options={
                 CONF_ENABLE_PRICES: True,
-                "input_bestBeforeInDays": True,
-                "input_shoppingLocationId": True,
+                CONF_ENABLE_SHOPPING_LOCATIONS: True,
             },
         )
         assert _get_field(fields, "price") is not None
