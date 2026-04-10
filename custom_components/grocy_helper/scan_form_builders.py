@@ -582,7 +582,7 @@ class ScanFormBuilder:
         masterdata = self._masterdata
         fields: list[FormField] = []
 
-        if price is None and scan_options.get(CONF_ENABLE_PRICES) and not current_recipe:
+        if price is None and scan_options.get(CONF_ENABLE_PRICES, True) and not current_recipe:
             fields.append(
                 FormField(
                     key="price",
@@ -617,7 +617,7 @@ class ScanFormBuilder:
 
         if (
             shopping_location_id is None
-            and scan_options.get(CONF_ENABLE_SHOPPING_LOCATIONS)
+            and scan_options.get(CONF_ENABLE_SHOPPING_LOCATIONS, True)
             and not current_recipe
         ):
             shopping_locations = sorted(
@@ -844,14 +844,14 @@ class ScanFormBuilder:
                     field_type=FieldType.BOOLEAN,
                     required=False,
                     default=None, # Allow for clearing the value
-                    suggested_value=suggested.get(CONF_ENABLE_PRICES),
+                    suggested_value=suggested.get(CONF_ENABLE_PRICES, True),
                 ),
                 FormField(
                     key=CONF_ENABLE_SHOPPING_LOCATIONS,
                     field_type=FieldType.BOOLEAN,
                     required=False,
                     default=None, # Allow for clearing the value
-                    suggested_value=suggested.get(CONF_ENABLE_SHOPPING_LOCATIONS),
+                    suggested_value=suggested.get(CONF_ENABLE_SHOPPING_LOCATIONS, True),
                 ),
                 FormField(
                     key=CONF_ENABLE_CALORIES,
