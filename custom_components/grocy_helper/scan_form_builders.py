@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from .coordinator import GrocyHelperCoordinator
-from .const import CONF_DEFAULT_LOCATION_FREEZER, CONF_DEFAULT_LOCATION_FRIDGE, CONF_DEFAULT_LOCATION_RECIPE_RESULT, CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT, CONF_ENABLE_AUTO_PRINT, CONF_ENABLE_PRINTING, DEV_CONST, SCAN_MODE
+from .const import CONF_DEFAULT_LOCATION_FREEZER, CONF_DEFAULT_LOCATION_FRIDGE, CONF_DEFAULT_LOCATION_RECIPE_RESULT, CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT, CONF_ENABLE_AUTO_PRINT, CONF_ENABLE_PRICES, CONF_ENABLE_PRINTING, DEV_CONST, SCAN_MODE
 from .grocytypes import GrocyMasterData, GrocyProduct
 from .scan_types import FieldType, FormField, NumberMode, SelectMode, SelectOption
 
@@ -577,7 +577,7 @@ class ScanFormBuilder:
         masterdata = self._masterdata
         fields: list[FormField] = []
 
-        if price is None and scan_options.get("input_price") and not current_recipe:
+        if price is None and scan_options.get(CONF_ENABLE_PRICES) and not current_recipe:
             fields.append(
                 FormField(
                     key="price",
@@ -668,6 +668,7 @@ class ScanFormBuilder:
         location_id: int | None,
         recipe_cost: float | None = None,
         base_servings: int = 1,
+        scan_options: dict[str, Any] | None = None,
     ) -> list[FormField]:
         """Build input fields for the produce form (recipe → stock entries).
 
@@ -727,7 +728,8 @@ class ScanFormBuilder:
             ),
         ]
 
-        if recipe_cost is not None:
+        prices_enabled = (scan_options or {}).get(CONF_ENABLE_PRICES, True)
+        if recipe_cost is not None and prices_enabled:
             fields.append(
                 FormField(
                     key="produce_price",
@@ -832,6 +834,13 @@ class ScanFormBuilder:
                     required=False,
                     default=None, # Allow for clearing the value
                     suggested_value=suggested.get(CONF_ENABLE_AUTO_PRINT),
+                ),
+                FormField(
+                    key=CONF_ENABLE_PRICES,
+                    field_type=FieldType.BOOLEAN,
+                    required=False,
+                    default=None, # Allow for clearing the value
+                    suggested_value=suggested.get(CONF_ENABLE_PRICES),
                 ),
             ]
         )
