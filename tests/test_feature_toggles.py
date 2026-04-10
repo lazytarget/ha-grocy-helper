@@ -63,6 +63,13 @@ class TestCaloriesToggle:
         )
         assert _get_field(fields, "calories_per_100") is not None
 
+    def test_calories_shown_when_key_missing_from_options(self):
+        """When scan_options is present but CONF_ENABLE_CALORIES key is absent, defaults to shown."""
+        fields = _build_details_fields(
+            scan_options={"some_other_option": True},
+        )
+        assert _get_field(fields, "calories_per_100") is not None
+
     def test_calories_hidden_when_disabled(self):
         """When CONF_ENABLE_CALORIES is False, calories_per_100 is not emitted."""
         fields = _build_details_fields(
