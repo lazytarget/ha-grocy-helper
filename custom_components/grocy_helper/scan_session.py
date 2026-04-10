@@ -38,7 +38,7 @@ from typing import Any
 
 from .barcodebuddyapi import BarcodeBuddyAPI
 from .coordinator import GrocyHelperCoordinator
-from .const import CONF_DEFAULT_LOCATION_FREEZER, CONF_DEFAULT_LOCATION_FRIDGE, CONF_DEFAULT_LOCATION_RECIPE_RESULT, CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT, CONF_ENABLE_AUTO_PRINT, CONF_ENABLE_PRICES, CONF_ENABLE_PRINTING, CONF_ENABLE_SHOPPING_LOCATIONS, SCAN_MODE
+from .const import CONF_DEFAULT_LOCATION_FREEZER, CONF_DEFAULT_LOCATION_FRIDGE, CONF_DEFAULT_LOCATION_RECIPE_RESULT, CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT, CONF_ENABLE_AUTO_PRINT, CONF_ENABLE_CALORIES, CONF_ENABLE_PRICES, CONF_ENABLE_PRINTING, CONF_ENABLE_SHOPPING_LOCATIONS, SCAN_MODE
 from .grocytypes import (
     BarcodeLookup,
     ExtendedGrocyProductStockInfo,
@@ -119,6 +119,7 @@ class ScanSession:
             CONF_ENABLE_AUTO_PRINT: bool(config_entry_data.get(CONF_ENABLE_AUTO_PRINT, False)),
             CONF_ENABLE_PRICES: bool(config_entry_data.get(CONF_ENABLE_PRICES, True)),
             CONF_ENABLE_SHOPPING_LOCATIONS: bool(config_entry_data.get(CONF_ENABLE_SHOPPING_LOCATIONS, True)),
+            CONF_ENABLE_CALORIES: bool(config_entry_data.get(CONF_ENABLE_CALORIES, True)),
             "input_product_details_during_provision": True,
             # TODO: Enable detailed Barcode details; defaults for: [shopping_location_id, qu_id, amount] for specific Barcode
             # Whether the "add_product_barcode" form should be shown for manual input during the creation of a recipe produced product.
@@ -869,7 +870,7 @@ class ScanSession:
             product_updates["default_best_before_days_after_thawing"] = int(val)
 
         # Calculate calories per pack if possible
-        if kcal:
+        if kcal and self.scan_options.get(CONF_ENABLE_CALORIES, True):
             calories = await self._calculate_calories_per_pack(
                 product, kcal, product_quantity_unit_as_liquid
             )
@@ -1695,7 +1696,7 @@ class ScanSession:
     ) -> FormRequest:
         """Show form for updating product details."""
         fields = self._form_builder.build_update_product_details_fields(
-            user_input, product
+            user_input, product, scan_options=self.scan_options
         )
         aliases = self._get_aliases()
         plc = {
