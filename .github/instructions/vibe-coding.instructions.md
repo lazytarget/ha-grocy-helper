@@ -32,19 +32,65 @@ When the user says "vibe-coding", "vibe coding", or references this workflow, fo
 
 When the user asks to review and address PR comments:
 
-1. **Fetch comments** — Use `github-pull-request_activePullRequest` to read all unresolved review comments.
-2. **Analyze all comments** — Categorize each comment (bug fix, test request, copy fix, question, etc.) and plan the minimal correct fix.
+1. **Fetch comments once** — Use `github-pull-request_activePullRequest` to understand context, then fetch PR review comments with a single `gh api` call (`--paginate`) and derive pending top-level comments locally. Ignore any threads that have been resolved.
+2. **Analyze all comments** — Categorize each comment (bug fix, test request, copy fix, question, etc.) and plan the minimal correct fix. Be critical of the comments and only apply those that are valid and actionable.
 3. **Implement fixes** — Apply all fixes, add tests where requested, run the full test suite.
 4. **Commit & push** — Single commit with a descriptive message listing all addressed issues. Push to the PR branch.
-5. **Reply to each comment** — Use `gh api` to post replies on each review thread explaining what was done. Use this batch pattern:
+5. **Reply to each pending top-level comment exactly once** — Before posting, filter out comments that already have replies and de-duplicate the reply list by `id`.
+
+### Efficient CLI Pattern (minimize `gh api` calls)
+
+- Use one read call for all review comments on the PR, including replies.
+- Compute pending top-level comment IDs from that dataset.
+- Post only those IDs.
 
 ```powershell
-$replies = @(
-  @{ id = <comment_id>; body = "Fixed in <sha>. <explanation>" },
-  @{ id = <comment_id>; body = "Fixed in <sha>. <explanation>" }
+$owner = "<owner>"
+$repo = "<repo>"
+$pr = <pr_number>
+
+# 1) Single fetch: includes top-level comments and replies.
+$all = gh api "repos/$owner/$repo/pulls/$pr/comments" --paginate | ConvertFrom-Json
+
+$topLevel = @($all | Where-Object { -not $_.in_reply_to_id })
+$repliedToIds = @(
+  $all |
+    Where-Object { $_.in_reply_to_id } |
+    ForEach-Object { [int64]$_.in_reply_to_id } |
+    Select-Object -Unique
 )
+
+# Pending = top-level comments that do not yet have a reply.
+$pending = @(
+  $topLevel |
+    Where-Object { $repliedToIds -notcontains [int64]$_.id }
+)
+
+Write-Output "Top-level: $($topLevel.Count), pending: $($pending.Count)"
+```
+
+### Duplicate-Reply Guardrails
+
+- Never reply to IDs outside `$pending`.
+- Build `$replies` from `$pending` and then de-duplicate by `id`.
+- Skip any reply with empty body.
+
+```powershell
+# Build replies from pending comments only.
+$replies = @(
+  # @{ id = <pending_comment_id>; body = "Fixed in <sha>. <explanation>" }
+)
+
+# Enforce uniqueness by id (prevents accidental duplicate posts).
+$replies = $replies | Group-Object id | ForEach-Object { $_.Group[0] }
+
+$posted = @{}
 foreach ($r in $replies) {
-  $result = gh api "repos/<owner>/<repo>/pulls/<pr>/comments/$($r.id)/replies" -f "body=$($r.body)" 2>&1 | ConvertFrom-Json
+  if ($posted.ContainsKey([string]$r.id)) { continue }
+  if ([string]::IsNullOrWhiteSpace($r.body)) { continue }
+
+  $result = gh api "repos/$owner/$repo/pulls/$pr/comments/$($r.id)/replies" -f "body=$($r.body)" 2>&1 | ConvertFrom-Json
+  $posted[[string]$r.id] = $true
   Write-Output "Replied to $($r.id) -> $($result.id)"
 }
 ```
