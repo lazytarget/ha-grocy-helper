@@ -1,5 +1,8 @@
 # Grocy Helper for Home Assistant
 
+> **⚠ Early development — use at your own risk.**
+> This project is under active development. Breaking changes are imminent. APIs, configuration schemas, and queue behavior may change between versions without migration paths.
+
 **Manage your entire Grocy inventory from Home Assistant — by scanning barcodes.**
 
 Grocy Helper bridges [Grocy](https://grocy.info) and [Home Assistant](https://www.home-assistant.io) into a single, streamlined barcode-scanning workflow. Scan a product, and the integration figures out the rest: look up or create the product, fill in sensible defaults, and record the transaction in Grocy — all from a Home Assistant menu.
@@ -81,9 +84,11 @@ Additional options are available under the integration's **Configure** menu:
 
 ## How to Use
 
-### Manual Scanning (Options Flow)
+### Manual Scanning (Options Flow UI)
 
-Open the integration's options menu in Home Assistant:
+Grocy Helper uses Home Assistant's **Options Flow** as its primary user interface. There is no separate dashboard or panel — all interaction happens through the integration's configuration menu, which presents step-by-step forms for scanning, product creation, and queue management.
+
+To start scanning:
 
 1. Go to **Settings → Devices & Services → Grocy Helper → Configure**
 2. Choose **Scan barcodes** from the main menu
@@ -112,7 +117,7 @@ The integration registers a **webhook endpoint** with Home Assistant. Any HTTP c
 { "barcode": "<3392590205420|q:2|p:25.0>" }
 ```
 
-**Structured barcodes** let you embed quantity (`q:`), price (`p:`), and notes (`n:`) directly in the barcode string, separated by pipes. Angle brackets are optional.
+**Structured barcodes** let you embed quantity (`q:`), price (`p:`), and name (`n:`) directly in the barcode string, separated by pipes. Angle brackets are optional.
 
 #### Response
 
@@ -168,6 +173,12 @@ Because scanning works over a webhook, you can trigger it from almost anything:
 | System | Role |
 |--------|------|
 | [Grocy](https://grocy.info) | Inventory management backend (required) |
-| [Barcode Buddy](https://github.com/Forceu/barcodebuddy) | Barcode lookup and mode management (optional, will be removed) |
+| [Barcode Buddy](https://github.com/Forceu/barcodebuddy) | Barcode lookup and mode management (optional, being phased out) |
 | [Home Assistant](https://www.home-assistant.io) | UI, automations, webhook host (required) |
 | Niimbot label printers | Print labels via Grocy webhook (optional) |
+
+## Credits & Acknowledgments
+
+This project was heavily inspired by [Barcode Buddy](https://github.com/Forceu/barcodebuddy). The initial implementation used Barcode Buddy's simple API endpoints as a shortcut to get up and running quickly with custom scanning workflows on top of Grocy. Many of the core ideas — mode switching via barcodes and the general scan-then-act pattern — originated from or were influenced by Barcode Buddy's design.
+
+The integration is gradually moving away from the Barcode Buddy dependency and implementing Grocy API calls directly, but the debt of inspiration remains. If you're looking for a standalone barcode scanning solution for Grocy (without Home Assistant), Barcode Buddy is an excellent choice.
