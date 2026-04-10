@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from .coordinator import GrocyHelperCoordinator
-from .const import CONF_DEFAULT_LOCATION_FREEZER, CONF_DEFAULT_LOCATION_FRIDGE, CONF_DEFAULT_LOCATION_RECIPE_RESULT, CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT, CONF_ENABLE_AUTO_PRINT, CONF_ENABLE_PRICES, CONF_ENABLE_PRINTING, CONF_ENABLE_SHOPPING_LOCATIONS, DEV_CONST, SCAN_MODE
+from .const import CONF_DEFAULT_LOCATION_FREEZER, CONF_DEFAULT_LOCATION_FRIDGE, CONF_DEFAULT_LOCATION_RECIPE_RESULT, CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT, CONF_ENABLE_AUTO_PRINT, CONF_ENABLE_CALORIES, CONF_ENABLE_PRICES, CONF_ENABLE_PRINTING, CONF_ENABLE_SHOPPING_LOCATIONS, DEV_CONST, SCAN_MODE
 from .grocytypes import GrocyMasterData, GrocyProduct
 from .scan_types import FieldType, FormField, NumberMode, SelectMode, SelectOption
 
@@ -355,6 +355,7 @@ class ScanFormBuilder:
         self,
         suggested: dict[str, Any],
         product: GrocyProduct,
+        scan_options: dict[str, Any] | None = None,
     ) -> list[FormField]:
         """Build fields for the update-product-details form."""
 
@@ -398,15 +399,19 @@ class ScanFormBuilder:
                 options=qu_options,
                 select_mode=SelectMode.DROPDOWN,
             ),
-            # TODO: 'calories_per_100' could probably be hidden for Products produced by Recipes? As those should instead Summarize the Ingredients
-            FormField(
-                key="calories_per_100",
-                field_type=FieldType.NUMBER,
-                required=False,
-                suggested_value=suggested.get("calories_per_100"),
-                step=1,
-            ),
         ]
+
+        calories_enabled = (scan_options or {}).get(CONF_ENABLE_CALORIES, True)
+        if calories_enabled:
+            fields.append(
+                FormField(
+                    key="calories_per_100",
+                    field_type=FieldType.NUMBER,
+                    required=False,
+                    suggested_value=suggested.get("calories_per_100"),
+                    step=1,
+                ),
+            )
 
         if not product.get("should_not_be_frozen", 0):
             fields.extend(
@@ -847,6 +852,13 @@ class ScanFormBuilder:
                     required=False,
                     default=None, # Allow for clearing the value
                     suggested_value=suggested.get(CONF_ENABLE_SHOPPING_LOCATIONS),
+                ),
+                FormField(
+                    key=CONF_ENABLE_CALORIES,
+                    field_type=FieldType.BOOLEAN,
+                    required=False,
+                    default=None, # Allow for clearing the value
+                    suggested_value=suggested.get(CONF_ENABLE_CALORIES),
                 ),
             ]
         )
