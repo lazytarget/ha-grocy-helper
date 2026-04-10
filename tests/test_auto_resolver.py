@@ -11,7 +11,7 @@ from custom_components.grocy_helper.auto_resolver import (
     async_try_auto_resolve,
     _validate_product_config,
 )
-from custom_components.grocy_helper.const import SCAN_MODE
+from custom_components.grocy_helper.const import CONF_ENABLE_PRICES, CONF_ENABLE_SHOPPING_LOCATIONS, SCAN_MODE
 
 from tests.conftest import (
     FakeBarcodeBuddyAPI,
@@ -242,10 +242,28 @@ async def test_scan_options_disable_forms_for_faster_resolve():
         barcode="7340011492900",
         mode=SCAN_MODE.PURCHASE,
         scan_options={
-            "input_price": False,
-            "input_bestBeforeInDays": False,
-            "input_shoppingLocationId": False,
+            CONF_ENABLE_PRICES: False,
+            CONF_ENABLE_SHOPPING_LOCATIONS: False,
         },
+    )
+
+    assert result.success is True
+
+
+async def test_auto_resolve_simpler_with_prices_disabled():
+    """When CONF_ENABLE_PRICES is False in config_entry_data, the
+    auto-resolver has no price field to fill — simpler auto-resolve."""
+    grocy_api = FakeGrocyAPI()
+    bbuddy_api = FakeBarcodeBuddyAPI()
+    coordinator = FakeCoordinator(grocy_api=grocy_api, bbuddy_api=bbuddy_api)
+    _setup_known_product(grocy_api, coordinator)
+
+    result = await async_try_auto_resolve(
+        coordinator=coordinator,
+        api_bbuddy=bbuddy_api,
+        config_entry_data={CONF_ENABLE_PRICES: False},
+        barcode="7340011492900",
+        mode=SCAN_MODE.PURCHASE,
     )
 
     assert result.success is True

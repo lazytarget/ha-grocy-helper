@@ -30,7 +30,9 @@ from .const import (
     CONF_DEFAULT_LOCATION_RECIPE_RESULT,
     CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT,
     CONF_ENABLE_AUTO_PRINT,
+    CONF_ENABLE_PRICES,
     CONF_ENABLE_PRINTING,
+    CONF_ENABLE_SHOPPING_LOCATIONS,
     DOMAIN,
     CONF_GROCY_API_URL,
     CONF_GROCY_API_KEY,
@@ -191,6 +193,8 @@ class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT: '',
                     CONF_ENABLE_PRINTING: False,
                     CONF_ENABLE_AUTO_PRINT: False,
+                    CONF_ENABLE_PRICES: True,
+                    CONF_ENABLE_SHOPPING_LOCATIONS: True,
                 },
                 str_keys=[],
             )

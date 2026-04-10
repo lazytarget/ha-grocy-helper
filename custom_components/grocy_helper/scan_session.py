@@ -38,7 +38,7 @@ from typing import Any
 
 from .barcodebuddyapi import BarcodeBuddyAPI
 from .coordinator import GrocyHelperCoordinator
-from .const import CONF_DEFAULT_LOCATION_FREEZER, CONF_DEFAULT_LOCATION_FRIDGE, CONF_DEFAULT_LOCATION_RECIPE_RESULT, CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT, CONF_ENABLE_AUTO_PRINT, CONF_ENABLE_PRINTING, SCAN_MODE
+from .const import CONF_DEFAULT_LOCATION_FREEZER, CONF_DEFAULT_LOCATION_FRIDGE, CONF_DEFAULT_LOCATION_RECIPE_RESULT, CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT, CONF_ENABLE_AUTO_PRINT, CONF_ENABLE_PRICES, CONF_ENABLE_PRINTING, CONF_ENABLE_SHOPPING_LOCATIONS, SCAN_MODE
 from .grocytypes import (
     BarcodeLookup,
     ExtendedGrocyProductStockInfo,
@@ -117,9 +117,8 @@ class ScanSession:
         self.scan_option_defaults = {
             CONF_ENABLE_PRINTING: bool(config_entry_data.get(CONF_ENABLE_PRINTING, False)),
             CONF_ENABLE_AUTO_PRINT: bool(config_entry_data.get(CONF_ENABLE_AUTO_PRINT, False)),
-            "input_price": True,
-            "input_bestBeforeInDays": True,
-            "input_shoppingLocationId": True,
+            CONF_ENABLE_PRICES: bool(config_entry_data.get(CONF_ENABLE_PRICES, True)),
+            CONF_ENABLE_SHOPPING_LOCATIONS: bool(config_entry_data.get(CONF_ENABLE_SHOPPING_LOCATIONS, True)),
             "input_product_details_during_provision": True,
             # TODO: Enable detailed Barcode details; defaults for: [shopping_location_id, qu_id, amount] for specific Barcode
             # Whether the "add_product_barcode" form should be shown for manual input during the creation of a recipe produced product.
@@ -1852,6 +1851,7 @@ class ScanSession:
                 location_id=default_location,
                 recipe_cost=recipe_cost,
                 base_servings=base_servings,
+                scan_options=self.scan_options,
             )
             self._cached_process_fields = fields
 
