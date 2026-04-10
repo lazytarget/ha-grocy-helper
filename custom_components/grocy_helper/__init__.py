@@ -155,7 +155,7 @@ def _build_webhook_handler(coordinator: GrocyHelperCoordinator):
                 resolve_result = await async_try_auto_resolve(
                     coordinator=coordinator,
                     api_bbuddy=coordinator._api_bbuddy,
-                    config_entry_data=coordinator._entry.data,
+                    config_entry_data=coordinator._config_entry.data,
                     barcode=item_result.barcode,
                     mode=item_result.mode or coordinator.queue.current_mode.value,
                 )

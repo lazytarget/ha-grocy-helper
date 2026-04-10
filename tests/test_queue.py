@@ -56,6 +56,28 @@ async def test_add_item_with_explicit_mode():
     assert item.mode == SCAN_MODE.CONSUME
 
 
+async def test_add_item_with_explicit_mode_string_value():
+    """A valid mode passed as a raw string is stored unchanged."""
+    queue = _make_queue()
+    raw_mode = "BBUDDY-C"
+
+    item = await queue.async_add("1234567890123", mode=raw_mode)
+
+    assert item is not None
+    assert item.mode == raw_mode
+
+
+async def test_add_item_with_invalid_mode_string_value():
+    """An invalid mode string is accepted and stored as-is."""
+    queue = _make_queue()
+    raw_mode = "INVALID-MODE"
+
+    item = await queue.async_add("1234567890123", mode=raw_mode)
+
+    assert item is not None
+    assert item.mode == raw_mode
+
+
 async def test_add_item_with_metadata():
     """Structured metadata is stored on the queue item."""
     queue = _make_queue()

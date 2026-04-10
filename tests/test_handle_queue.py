@@ -114,6 +114,38 @@ async def test_handle_queue_empty_aborts():
     assert "no" in result.reason.lower() or "empty" in result.reason.lower()
 
 
+async def test_handle_queue_missing_queue_attribute_aborts():
+    """Handle Queue when coordinator lacks queue attribute aborts."""
+    queue = await _make_queue_with_items([])
+    session = _make_session_with_queue(queue)
+
+    # Remove the queue attribute to simulate misconfigured coordinator
+    delattr(session._coordinator, "queue")
+
+    result = await session.handle_step(Step.HANDLE_QUEUE, None)
+
+    assert isinstance(result, AbortResult)
+    assert result.reason == "No queue available"
+
+
+async def test_handle_queue_confirm_false_aborts():
+    """Submitting Handle Queue with confirm=False aborts without processing."""
+    queue = await _make_queue_with_items(["111"])
+    session = _make_session_with_queue(queue)
+
+    # Show form
+    result = await session.handle_step(Step.HANDLE_QUEUE, None)
+    assert isinstance(result, FormRequest)
+
+    # Submit with confirm=False — should abort
+    result = await session.handle_step(Step.HANDLE_QUEUE, {"confirm": False})
+    assert isinstance(result, AbortResult)
+    assert "cancelled" in result.reason.lower()
+
+    # Items should remain pending
+    assert len(queue.get_pending_items()) == 1
+
+
 async def test_handle_queue_feeds_barcodes_to_session():
     """Submitting Handle Queue populates session barcode_queue."""
     grocy_api = FakeGrocyAPI()

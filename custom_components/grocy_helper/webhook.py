@@ -41,7 +41,7 @@ class WebhookItemResult:
     """Result of processing a single barcode from the webhook."""
 
     barcode: str
-    status: str  # "queued" | "mode_switched"
+    status: str  # "queued" | "mode_switched" | "auto_resolved" | "failed"
     item_id: str | None = None
     mode: str | None = None
     new_mode: str | None = None
