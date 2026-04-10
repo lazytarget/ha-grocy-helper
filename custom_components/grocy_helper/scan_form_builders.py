@@ -588,16 +588,26 @@ class ScanFormBuilder:
             )
 
         if scan_options.get("input_bestBeforeInDays"):
+            bb_str = (
+                str(best_before_in_days)
+                if best_before_in_days is not None
+                else None
+            )
+            # default is only set when the value is trustworthy:
+            # >0 = configured days, -1 = never expires.
+            # 0 = "expires today" (Grocy default) — suspicious, needs review.
+            bb_default = (
+                bb_str
+                if best_before_in_days is not None and best_before_in_days != 0
+                else None
+            )
             fields.append(
                 FormField(
                     key="best_before_in_days",
                     field_type=FieldType.TEXT,
                     required=False,
-                    suggested_value=(
-                        str(best_before_in_days)
-                        if best_before_in_days is not None
-                        else None
-                    ),
+                    suggested_value=bb_str,
+                    default=bb_default,
                 ),
             )
 
@@ -632,14 +642,16 @@ class ScanFormBuilder:
                     ),
                 )
 
+            sl_value = (
+                str(shopping_location_id) if shopping_location_id else None
+            )
             fields.append(
                 FormField(
                     key="shopping_location_id",
                     field_type=FieldType.SELECT,
                     required=False,
-                    suggested_value=(
-                        str(shopping_location_id) if shopping_location_id else None
-                    ),
+                    suggested_value=sl_value,
+                    default=sl_value,
                     options=[
                         SelectOption(value=str(loc["id"]), label=loc["name"])
                         for loc in shopping_locations
