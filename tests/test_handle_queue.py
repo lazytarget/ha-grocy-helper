@@ -303,3 +303,58 @@ async def test_handle_queue_duplicate_barcodes_both_resolved():
     resolved_ids = {i.id for i in resolved}
     assert item_id_1 in resolved_ids
     assert item_id_2 in resolved_ids
+
+
+# ── Tests: Queue isolation from manual scans ────────────────────────
+
+
+async def test_manual_scan_does_not_resolve_queued_item():
+    """A manual scan via SCAN_START must NOT resolve a pending queue item
+    with the same barcode.
+
+    Scenario: barcode "111" is queued via webhook but fails auto-resolve
+    (e.g. product config needs review).  The user then manually scans
+    the same barcode through the normal SCAN_START flow.  The queue item
+    must stay PENDING — it represents a separate scan intent.
+    """
+    grocy_api = FakeGrocyAPI()
+    product = make_product(id=42, name="Milk")
+    grocy_api.register_product(product, barcodes=["111"])
+
+    # Create a queue with one pending item
+    queue = await _make_queue_with_items(["111"])
+    item_id = queue.get_pending_items()[0].id
+
+    # Create a session that has the queue on the coordinator,
+    # but enter via SCAN_START (manual scan), NOT Handle Queue.
+    bbuddy_api = FakeBarcodeBuddyAPI()
+    coordinator = FakeCoordinator(
+        grocy_api=grocy_api,
+        bbuddy_api=bbuddy_api,
+        master_data=make_master_data(products=[product]),
+    )
+    coordinator.queue = queue
+
+    session = ScanSession(
+        coordinator=coordinator,
+        api_bbuddy=bbuddy_api,
+        config_entry_data={},
+    )
+
+    # Manual scan: SCAN_START → submit barcode
+    result = await session.handle_step(Step.SCAN_START, None)
+    assert isinstance(result, FormRequest)
+
+    result = await session.handle_step(
+        Step.SCAN_START,
+        {"barcodes": "111", "mode": SCAN_MODE.PURCHASE},
+    )
+    # Drive through any intermediate forms to completion
+    result = await _drive_to_completion(session, result)
+    assert isinstance(result, CompletedResult)
+
+    # The queue item must still be PENDING — manual scan is independent
+    pending = queue.get_pending_items()
+    assert len(pending) == 1
+    assert pending[0].id == item_id
+    assert pending[0].status == QueueStatus.PENDING
