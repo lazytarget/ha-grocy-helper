@@ -203,6 +203,7 @@ def make_master_data(
         "products": products or [],
         "product_groups": [],
         "recipes": recipes or [],
+        "product_presets": None,
         "known_qu": WELL_KNOWN_QU,
         **overrides,
     }
@@ -224,6 +225,7 @@ class FakeGrocyAPI:
         self._stock_by_id: dict[int, ExtendedGrocyProductStockInfo] = {}
         self._added_stock: list[tuple[int, dict]] = []
         self._next_product_id: int = 100
+        self._user_settings: dict[str, Any] = {}
 
     def register_product(
         self,
@@ -266,6 +268,9 @@ class FakeGrocyAPI:
 
     async def get_recipes(self):
         return []
+
+    async def get_user_settings(self):
+        return self._user_settings
 
     async def get_stock_product_by_barcode(self, barcode: str):
         return self._stock_by_barcode.get(barcode)

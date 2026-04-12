@@ -9,6 +9,7 @@ from .grocytypes import (
     GrocyAddProductQuantityUnitConversion,
     GrocyAddStockProduct,
     GrocyLocation,
+    GrocyProductPresets,
     GrocyProduct,
     ExtendedGrocyProductStockInfo,
     GrocyProductBarcode,
@@ -20,6 +21,58 @@ from .grocytypes import (
     GrocyStockEntry,
 )
 from .http_requests import async_get, async_post, async_put
+from .utils import try_parse_int
+
+
+def _parse_positive_int_or_none(value: Any) -> int | None:
+    success, parsed = try_parse_int(value)
+    if not success or parsed <= 0:
+        return None
+    return parsed
+
+
+def _parse_due_days_or_none(value: Any) -> int | None:
+    success, parsed = try_parse_int(value)
+    if not success:
+        return None
+    if parsed == -1 or parsed > 0:
+        return parsed
+    return None
+
+
+def _parse_bool_or_none(value: Any) -> bool | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return bool(value)
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"1", "true", "yes", "on"}:
+            return True
+        if lowered in {"0", "false", "no", "off", ""}:
+            return False
+    return bool(value)
+
+
+def parse_product_presets(settings: dict[str, Any]) -> GrocyProductPresets:
+    """Extract product preset defaults from Grocy user settings."""
+    return {
+        "location_id": _parse_positive_int_or_none(
+            settings.get("product_presets_location_id")
+        ),
+        "product_group_id": _parse_positive_int_or_none(
+            settings.get("product_presets_product_group_id")
+        ),
+        "qu_id": _parse_positive_int_or_none(settings.get("product_presets_qu_id")),
+        "default_best_before_days": _parse_due_days_or_none(
+            settings.get("product_presets_default_due_days")
+        ),
+        "treat_opened_as_out_of_stock": _parse_bool_or_none(
+            settings.get("product_presets_treat_opened_as_out_of_stock")
+        ),
+    }
 
 
 class GrocyAPI:
@@ -190,6 +243,10 @@ class GrocyAPI:
 
     async def get_recipes(self) -> list[GrocyRecipe]:
         url = self.get_rest_url(API.URLs.GET_RECIPES)
+        return await async_get(self._session, url, self._api_key)
+
+    async def get_user_settings(self) -> dict[str, Any]:
+        url = self.get_rest_url(API.URLs.GET_USER_SETTINGS)
         return await async_get(self._session, url, self._api_key)
 
     async def create_recipe(self, data: GrocyRecipe):

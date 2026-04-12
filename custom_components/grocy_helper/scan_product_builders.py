@@ -92,6 +92,9 @@ class ProductDataBuilder:
         product["should_not_be_frozen"] = (
             1 if user_input.get("should_not_be_frozen", False) else 0
         )
+        product["treat_opened_as_out_of_stock"] = (
+            1 if user_input.get("treat_opened_as_out_of_stock", False) else 0
+        )
 
         # Optional fields
         if val := user_input.get("default_consume_location_id"):

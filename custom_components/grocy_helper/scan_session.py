@@ -1243,6 +1243,7 @@ class ScanSession:
                 "product_group_id",
                 "location_id",
                 "should_not_be_frozen",
+                "treat_opened_as_out_of_stock",
                 "default_best_before_days",
                 "default_best_before_days_after_open",
                 "qu_id_stock",
@@ -1412,7 +1413,16 @@ class ScanSession:
 
     def _get_product_defaults(self) -> dict[str, Any]:
         """Get the default values for products."""
-        return self.scan_options.get("defaults_for_product", {}).copy()
+        defaults = self.scan_options.get("defaults_for_product", {}).copy()
+
+        if product_presets := self._coordinator.data.get("product_presets"):
+            defaults |= {
+                key: value
+                for key, value in product_presets.items()
+                if value is not None
+            }
+
+        return defaults
 
     def _get_recipe_product_defaults(self) -> dict[str, Any]:
         """Get the default values for recipe products."""
