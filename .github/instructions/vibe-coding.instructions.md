@@ -28,6 +28,17 @@ When the user says "vibe-coding", "vibe coding", or references this workflow, fo
 - Test files live in `tests/` directory
 - Shared fixtures and fakes in `tests/conftest.py`
 
+## PR Creation Verification
+
+When creating a PR via `gh pr create`, treat command output as the source of truth.
+
+- Consider PR creation **successful** if stdout contains:
+  - `Creating pull request for ...`
+  - and a GitHub PR URL (for example `https://github.com/<owner>/<repo>/pull/<id>`)
+- If both markers are present, **do not retry** PR creation, even if the terminal reports a non-zero exit code.
+- After success, report the PR URL/ID back to the user and stop creating PRs.
+- If no URL is printed, then treat it as a real failure and investigate/retry.
+
 ## PR Review Process
 
 When the user asks to review and address PR comments:
