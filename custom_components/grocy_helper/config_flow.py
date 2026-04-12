@@ -89,6 +89,8 @@ MAIN_MENU = [
     # Step.SCAN_CREATE_RECIPE,
 ]
 
+CHOOSE_FORM_KEY = "choose_form"
+
 
 class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for ICA."""
@@ -286,13 +288,13 @@ class GrocyOptionsFlowHandler(OptionsFlow):
     ) -> FlowResult:
         """Handle the initial step (menu or auto-select)."""
         errors: dict[str, str] = {}
-        _LOGGER.debug("Options flow - data: %s", self.config_entry.data)
+        _LOGGER.debug("Options flow - scan options: %s", self._session.scan_options)
 
         if user_input is None and len(MAIN_MENU) == 1:
-            user_input = {"choose-form": MAIN_MENU[0]}
+            user_input = {CHOOSE_FORM_KEY: MAIN_MENU[0]}
 
         if user_input is not None:
-            if form := user_input.get("choose-form"):
+            if form := user_input.get(CHOOSE_FORM_KEY):
                 if form == "main_menu":
                     return await self.async_step_main_menu(user_input)
                 if form == "scan_start":
@@ -301,12 +303,19 @@ class GrocyOptionsFlowHandler(OptionsFlow):
                     return await self.async_step_handle_queue()
             return self.async_abort(reason="No operation chosen")
 
+        pending_count, failed_count = self._get_queue_counts(self._session._coordinator)
+        handle_queue_label = f"Handle Queue ({pending_count} pending / {failed_count} failed)"
+        menu_options = [
+            selector.SelectOptionDict(value=Step.SCAN_START, label="Scan barcodes"),
+            selector.SelectOptionDict(value=Step.HANDLE_QUEUE, label=handle_queue_label),
+        ]
+
         schema = vol.Schema(
             {
-                vol.Required("choose-form"): selector.SelectSelector(
+                vol.Required(CHOOSE_FORM_KEY): selector.SelectSelector(
                     selector.SelectSelectorConfig(
-                        options=MAIN_MENU,
-                        mode=selector.SelectSelectorMode.DROPDOWN,
+                        options=menu_options,
+                        mode=selector.SelectSelectorMode.LIST,
                         multiple=False,
                     )
                 ),
@@ -315,8 +324,20 @@ class GrocyOptionsFlowHandler(OptionsFlow):
         return self.async_show_form(
             step_id="init",
             data_schema=schema,
+            description_placeholders={
+                "pending_count": str(pending_count),
+                "failed_count": str(failed_count),
+            },
             errors=errors,
         )
+
+    @staticmethod
+    def _get_queue_counts(coordinator: GrocyHelperCoordinator) -> tuple[int, int]:
+        """Return (pending_count, failed_count) for queue preview in init menu."""
+        queue = getattr(coordinator, "queue", None)
+        if queue is None:
+            return (0, 0)
+        return (len(queue.get_pending_items()), len(queue.get_failed_items()))
 
     async def async_step_main_menu(self, _user_input: dict[str, Any]):  # noqa: ARG002
         """Handle the group choice step."""
