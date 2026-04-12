@@ -16,6 +16,7 @@ from custom_components.grocy_helper.scan_types import (
     FormRequest,
     Step,
 )
+from custom_components.grocy_helper.webhook import process_webhook_payload
 
 from tests.conftest import (
     FakeBarcodeBuddyAPI,
@@ -390,3 +391,40 @@ async def test_manual_scan_does_not_resolve_queued_item():
     assert len(pending) == 1
     assert pending[0].id == item_id
     assert pending[0].status == QueueStatus.PENDING
+
+
+async def test_handle_queue_preserves_item_mode_after_later_mode_switches():
+    """Queued items keep their original mode even if queue current_mode changes later.
+
+    Repro sequence:
+    1) webhook mode-switch to OPEN (BBUDDY-O)
+    2) webhook barcode queued without explicit mode -> item mode should be OPEN
+    3) webhook mode-switch to ADD_TO_SHOPPING_LIST (BBUDDY-AS)
+    4) Handle Queue should process queued item with OPEN mode, not current_mode
+    """
+    queue = await _make_queue_with_items([])
+
+    # 1) mode-switch to OPEN
+    await process_webhook_payload(queue, {"barcode": SCAN_MODE.OPEN.value})
+    assert queue.current_mode == SCAN_MODE.OPEN
+
+    # 2) queue a barcode without explicit mode (captures OPEN)
+    await process_webhook_payload(queue, {"barcode": "1234567890"})
+    pending = queue.get_pending_items()
+    assert len(pending) == 1
+    assert pending[0].mode == SCAN_MODE.OPEN.value
+
+    # 3) switch mode again afterwards
+    await process_webhook_payload(
+        queue, {"barcode": SCAN_MODE.ADD_TO_SHOPPING_LIST.value}
+    )
+    assert queue.current_mode == SCAN_MODE.ADD_TO_SHOPPING_LIST
+
+    # 4) Handle Queue should use item's stored mode (OPEN)
+    session = _make_session_with_queue(queue)
+    result = await session.handle_step(Step.HANDLE_QUEUE, None)
+    assert isinstance(result, FormRequest)
+
+    result = await session.handle_step(Step.HANDLE_QUEUE, {"confirm": True})
+    assert isinstance(result, (FormRequest, CompletedResult))
+    assert session.barcode_scan_mode == SCAN_MODE.OPEN
