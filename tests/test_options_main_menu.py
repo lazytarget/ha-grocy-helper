@@ -68,3 +68,13 @@ async def test_init_menu_uses_list_selector_and_queue_label():
     queue_option = next(opt for opt in options if opt["value"] == Step.HANDLE_QUEUE)
     assert "1 pending" in queue_option["label"]
     assert "0 failed" in queue_option["label"]
+
+
+async def test_init_dispatches_with_string_selector_value():
+    """String selector values should dispatch to SCAN_START correctly."""
+    flow = await _make_flow_with_queue([])
+
+    result = await flow.async_step_init({"choose_form": Step.SCAN_START.value})
+
+    assert result["type"] == "form"
+    assert result["step_id"] == Step.SCAN_START

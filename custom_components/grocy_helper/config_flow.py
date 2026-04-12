@@ -295,19 +295,28 @@ class GrocyOptionsFlowHandler(OptionsFlow):
 
         if user_input is not None:
             if form := user_input.get(CHOOSE_FORM_KEY):
-                if form == "main_menu":
+                selected_step: Step | None = None
+                if isinstance(form, Step):
+                    selected_step = form
+                elif isinstance(form, str):
+                    try:
+                        selected_step = Step(form)
+                    except ValueError:
+                        selected_step = None
+
+                if selected_step == Step.MAIN_MENU:
                     return await self.async_step_main_menu(user_input)
-                if form == "scan_start":
+                if selected_step == Step.SCAN_START:
                     return await self.async_step_scan_start()
-                if form == "handle_queue":
+                if selected_step == Step.HANDLE_QUEUE:
                     return await self.async_step_handle_queue()
             return self.async_abort(reason="No operation chosen")
 
         pending_count, failed_count = self._get_queue_counts(self._session._coordinator)
         handle_queue_label = f"Handle Queue ({pending_count} pending / {failed_count} failed)"
         menu_options = [
-            selector.SelectOptionDict(value=Step.SCAN_START, label="Scan barcodes"),
-            selector.SelectOptionDict(value=Step.HANDLE_QUEUE, label=handle_queue_label),
+            selector.SelectOptionDict(value=Step.SCAN_START.value, label="Scan barcodes"),
+            selector.SelectOptionDict(value=Step.HANDLE_QUEUE.value, label=handle_queue_label),
         ]
 
         schema = vol.Schema(
