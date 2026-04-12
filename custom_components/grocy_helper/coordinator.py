@@ -13,6 +13,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .grocyapi import GrocyAPI
+from .grocyapi import parse_product_presets
 from .barcodebuddyapi import BarcodeBuddyAPI
 from .grocytypes import (
     BarcodeLookup,
@@ -82,6 +83,10 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
             recipes = await self._api_grocy.get_recipes()
             _LOGGER.debug("Loaded recipes: %s", len(recipes))
 
+            user_settings = await self._api_grocy.get_user_settings()
+            product_presets = parse_product_presets(user_settings)
+            _LOGGER.debug("Loaded product presets: %s", product_presets)
+
             masterdata: GrocyMasterData = {
                 "locations": locations,
                 "shopping_locations": shopping_locations,
@@ -89,6 +94,7 @@ class GrocyHelperCoordinator(DataUpdateCoordinator[GrocyMasterData]):
                 "products": products,
                 "product_groups": product_groups,
                 "recipes": recipes,
+                "product_presets": product_presets,
                 "known_qu": {
                     "Piece": next(
                         (qu for qu in quantity_units if qu["name"] == "Piece"), None

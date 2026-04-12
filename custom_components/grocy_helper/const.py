@@ -82,6 +82,7 @@ class API:
         GET_RECIPES: Final = "api/objects/recipes"
         CREATE_RECIPE: Final = "api/objects/recipes"
         UPDATE_RECIPE: Final = "api/objects/recipes/%s"
+        GET_USER_SETTINGS: Final = "api/user/settings"
 
         GET_RECIPE_FULFILLMENT: Final = "api/recipes/%s/fulfillment"
         GET_RECIPES_POS_RESOLVED: Final = "api/objects/recipes_pos_resolved"

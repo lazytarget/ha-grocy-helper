@@ -191,6 +191,14 @@ class GrocyRecipeFulfillment(TypedDict):
     prices_incomplete: int
 
 
+class GrocyProductPresets(TypedDict):
+    location_id: int | None
+    product_group_id: int | None
+    qu_id: int | None
+    default_best_before_days: int | None
+    treat_opened_as_out_of_stock: bool | None
+
+
 class BarcodeBuddyScanRequest(TypedDict):
     barcode: str
     price: float | None
@@ -218,6 +226,7 @@ class GrocyMasterData(TypedDict):
     products: list[GrocyProduct]
     product_groups: list[GrocyProductGroup]
     recipes: list[GrocyRecipe]
+    product_presets: GrocyProductPresets | None
     known_qu: dict[str, GrocyQuantityUnit | None]
 
 
