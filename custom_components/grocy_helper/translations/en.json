@@ -101,6 +101,7 @@
                     "product_group_id": "Product group",
                     "location_id": "Default storage location",
                     "should_not_be_frozen": "Should not be frozen?",
+                    "treat_opened_as_out_of_stock": "Treat opened as out of stock?",
                     "default_best_before_days": "Default best before days",
                     "default_best_before_days_after_open": "Default best before days after open",
                     "qu_id_stock": "Stock unit",
@@ -111,6 +112,7 @@
                 "data_description": {
                     "name": "{name_description}",
                     "location_id": "Where any new and unopened products are usually stored",
+                    "treat_opened_as_out_of_stock": "When enabled, an opened product is treated as unavailable in stock workflows until specifically consumed/open-handled",
                     "qu_id_stock": "99% of cases this should be Piece/Pack (the one which sounds more appropriate)",
                     "qu_id_purchase": "Should be same as ´qu_id_consume´",
                     "qu_id_consume": "Should be same as ´qu_id_purchase´",

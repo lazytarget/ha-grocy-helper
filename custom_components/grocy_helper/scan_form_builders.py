@@ -234,6 +234,14 @@ class ScanFormBuilder:
                         default=suggested.get("should_not_be_frozen", False),
                     ),
                     FormField(
+                        key="treat_opened_as_out_of_stock",
+                        field_type=FieldType.BOOLEAN,
+                        required=False,
+                        default=suggested.get(
+                            "treat_opened_as_out_of_stock", False
+                        ),
+                    ),
+                    FormField(
                         key="default_best_before_days",
                         field_type=FieldType.NUMBER,
                         required=False,
