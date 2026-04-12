@@ -5,7 +5,7 @@ import logging
 
 from aiohttp import web
 
-from homeassistant.components import webhook
+from homeassistant.components import webhook as ha_webhook
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.const import CONF_SCAN_INTERVAL
@@ -95,11 +95,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # ── Webhook registration ─────────────────────────────────────
     webhook_id = entry.data.get("webhook_id")
     if not webhook_id:
-        webhook_id = webhook.async_generate_id()
+        webhook_id = ha_webhook.async_generate_id()
         new_data = {**entry.data, "webhook_id": webhook_id}
         hass.config_entries.async_update_entry(entry, data=new_data)
 
-    webhook.async_register(
+    ha_webhook.async_register(
         hass,
         DOMAIN,
         "Grocy Helper Scan",
@@ -195,7 +195,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     # Unregister webhook
     if webhook_id := entry.data.get("webhook_id"):
-        webhook.async_unregister(hass, webhook_id)
+        ha_webhook.async_unregister(hass, webhook_id)
 
     # if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
     #     hass.data[DOMAIN].pop(entry.entry_id)
