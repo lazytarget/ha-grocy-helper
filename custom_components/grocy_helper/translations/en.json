@@ -27,7 +27,16 @@
             "produce_amount_invalid": "Containers to store must be a valid number."
         },
         "step": {
-            "init": {},
+            "init": {
+                "title": "Choose action",
+                "description": "Select what you want to do in Grocy Helper.\n\nQueue preview: Pending {pending_count} | Failed {failed_count}",
+                "data": {
+                    "choose_form": "Action"
+                },
+                "data_description": {
+                    "choose_form": "Pick one action to continue"
+                }
+            },
             "main_menu": {
                 "menu_options": {
                     "add_product": "Add product [WIP]",
