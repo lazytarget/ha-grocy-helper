@@ -901,7 +901,7 @@ class ScanFormBuilder:
                     field_type=FieldType.BOOLEAN,
                     required=False,
                     default=None,  # Allow for clearing the value
-                    suggested_value=suggested.get(CONF_ENABLE_CALORIES),
+                    suggested_value=suggested.get(CONF_ENABLE_CALORIES, True),
                 ),
             ]
         )

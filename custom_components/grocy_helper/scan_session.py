@@ -33,6 +33,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import logging
+import math
 import re
 from typing import Any
 
@@ -1841,7 +1842,7 @@ class ScanSession:
             c["to_qu_name"],
         )
         grams_per_pack = c["to_amount"]
-        return kcal_per_gram * grams_per_pack
+        return math.ceil(kcal_per_gram * grams_per_pack)
 
     # ── Produce flow ────────────────────────────────────────────────
 
