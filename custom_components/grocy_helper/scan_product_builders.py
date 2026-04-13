@@ -412,12 +412,17 @@ class ProductDataBuilder:
 
         # TODO: fill in info from ICA
 
-        kcal = user_input.get("calories_per_100") or (
-            current_product_openfoodfacts or {}
-        ).get("nutriments", {}).get("energy_kcal_100g")
-        user_input["calories_per_100"] = kcal
-        if kcal:
+        kcal = user_input.get("calories_per_100")
+        nutriments = (current_product_openfoodfacts or {}).get("nutriments", {})
+        if kcal is None:
+            # OFF currently exposes the kcal value through the same field,
+            # while the product quantity unit determines whether this means
+            # per 100g or per 100ml.
+            kcal = nutriments.get("energy_kcal_100g")
+
+        if kcal is not None:
             kcal = float(kcal)
+        user_input["calories_per_100"] = kcal
 
         return (
             product_quantity,

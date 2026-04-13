@@ -906,11 +906,11 @@ class ScanSession:
             product_updates["default_best_before_days_after_thawing"] = int(val)
 
         # Calculate calories per pack if possible
-        if kcal and self.scan_options.get(CONF_ENABLE_CALORIES, True):
+        if kcal is not None and self.scan_options.get(CONF_ENABLE_CALORIES, True):
             calories = await self._calculate_calories_per_pack(
                 product, kcal, product_quantity_unit_as_liquid
             )
-            if calories:
+            if calories is not None:
                 product_updates["calories"] = calories
 
         # Apply updates
