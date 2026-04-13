@@ -284,3 +284,48 @@ class TestAllTogglesDisabled:
             "barcode": "1234567890123",
             "bestBeforeInDays": 5,
         }
+
+
+class TestCaloriesToggleWithOpenFoodFacts:
+    """CONF_ENABLE_CALORIES=False should suppress calorie side effects even with OFF data."""
+
+    async def test_off_calories_do_not_trigger_updates_when_disabled(self):
+        """OFF kcal data should not call calorie calculation nor persist calories."""
+
+        class CapturingCoordinator(FakeCoordinator):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.product_updates: list[dict] = []
+
+            async def update_product(self, product_id: int, changes: dict) -> dict:
+                self.product_updates.append(changes)
+                return {}
+
+        grocy_api = FakeGrocyAPI()
+        bbuddy_api = FakeBarcodeBuddyAPI()
+        coordinator = CapturingCoordinator(grocy_api=grocy_api, bbuddy_api=bbuddy_api)
+
+        product = make_product(id=42, name="Milk")
+        session = ScanSession(
+            coordinator=coordinator,
+            api_bbuddy=bbuddy_api,
+            scan_options={CONF_ENABLE_CALORIES: False},
+            config_entry_data={},
+        )
+        session._state.set_stock_info(make_stock_info(product=product, barcodes=[]))
+        session._state.current_product_openfoodfacts = {
+            "nutriments": {"energy_kcal_100g": 88}
+        }
+        session._step_add_product_parent = AsyncMock(
+            return_value=CompletedResult(summary="ok")
+        )
+        session._calculate_calories_per_pack = AsyncMock(return_value=321)
+
+        result = await session._step_update_product_details(
+            {"default_consume_location_id": "2"}
+        )
+
+        assert isinstance(result, CompletedResult)
+        session._calculate_calories_per_pack.assert_not_awaited()
+        assert coordinator.product_updates
+        assert all("calories" not in update for update in coordinator.product_updates)
