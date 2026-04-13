@@ -305,6 +305,61 @@ class TestCalorieMissingConversion:
         for update in coordinator.product_updates:
             assert "calories" not in update
 
+
+class TestCalorieZeroValue:
+    """Zero-calorie values should be persisted, not dropped as falsy."""
+
+    async def test_zero_kcal_is_written_as_zero(self):
+        """OFF kcal=0 with valid conversion should update Grocy calories to 0."""
+        grocy_api = FakeGrocyAPI()
+        bbuddy_api = FakeBarcodeBuddyAPI()
+
+        class CapturingCoordinator(FakeCoordinator):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.product_updates: list[dict] = []
+
+            async def update_product(self, product_id: int, changes: dict) -> dict:
+                self.product_updates.append(changes)
+                return {}
+
+        coordinator = CapturingCoordinator(
+            grocy_api=grocy_api,
+            bbuddy_api=bbuddy_api,
+            master_data=make_master_data(),
+        )
+
+        product = make_product(id=47, name="Sparkling Water", qu_id=1)
+        session = ScanSession(
+            coordinator=coordinator,
+            api_bbuddy=bbuddy_api,
+            scan_options={CONF_ENABLE_CALORIES: True},
+            config_entry_data={},
+        )
+        session._state.set_stock_info(make_stock_info(product=product, barcodes=[]))
+        session._state.current_product_openfoodfacts = {
+            "product_quantity": 1000,
+            "product_quantity_unit": "ml",
+            "nutriments": {"energy_kcal_100g": 0},
+        }
+        session._step_add_product_parent = AsyncMock(
+            return_value=CompletedResult(summary="ok")
+        )
+        session._convert_quantity = AsyncMock(
+            return_value={
+                "from_amount": 1,
+                "from_qu_name": "Piece",
+                "to_amount": 500,
+                "to_qu_name": "ml",
+            }
+        )
+
+        result = await session._step_update_product_details({})
+
+        assert isinstance(result, CompletedResult)
+        assert coordinator.product_updates
+        assert coordinator.product_updates[-1].get("calories") == 0
+
     async def test_liquid_basis_without_conversion_skips_calories(self):
         """100ml basis without stock->ml conversion must not write calories."""
         grocy_api = FakeGrocyAPI()
