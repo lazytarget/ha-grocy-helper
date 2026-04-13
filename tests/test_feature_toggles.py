@@ -9,7 +9,9 @@ from __future__ import annotations
 from unittest.mock import AsyncMock
 
 from custom_components.grocy_helper.const import (
+    CONF_ENABLE_AUTO_PRINT,
     CONF_ENABLE_CALORIES,
+    CONF_ENABLE_PRINTING,
     CONF_ENABLE_PRICES,
     CONF_ENABLE_SHOPPING_LOCATIONS,
     SCAN_MODE,
@@ -329,3 +331,208 @@ class TestCaloriesToggleWithOpenFoodFacts:
         session._calculate_calories_per_pack.assert_not_awaited()
         assert coordinator.product_updates
         assert all("calories" not in update for update in coordinator.product_updates)
+
+
+class TestPrintToggleCombinations:
+    """CONF_ENABLE_PRINTING/CONF_ENABLE_AUTO_PRINT behavior in produce confirm."""
+
+    def _make_produce_session(
+        self,
+        *,
+        enable_printing: bool,
+        auto_print: bool,
+        default_stock_label_type: int = 0,
+    ) -> ScanSession:
+        grocy_api = FakeGrocyAPI()
+        bbuddy_api = FakeBarcodeBuddyAPI()
+        coordinator = FakeCoordinator(grocy_api=grocy_api, bbuddy_api=bbuddy_api)
+
+        product = make_product(
+            id=42,
+            name="Recipe Product",
+            default_stock_label_type=default_stock_label_type,
+        )
+        session = ScanSession(
+            coordinator=coordinator,
+            api_bbuddy=bbuddy_api,
+            scan_options={
+                CONF_ENABLE_PRINTING: enable_printing,
+                CONF_ENABLE_AUTO_PRINT: auto_print,
+            },
+            config_entry_data={},
+        )
+        session._state.current_recipe = {"id": 12, "name": "Soup", "base_servings": 4}
+        session._state.set_stock_info(make_stock_info(product=product, barcodes=[]))
+        session._produce_input = {
+            "produce_consume_ingredients": False,
+            "produce_servings": 4,
+            "produce_amount": 2,
+            "produce_location_id": 1,
+            "produce_price": "40",
+            "fulfillment_calories": 800,
+        }
+        session.barcode_queue = ["grcy:r:12"]
+        return session
+
+    async def test_produce_confirm_field_defaults_when_printing_and_auto_print_enabled(self):
+        """Form includes produce_print=True default when both toggles are enabled."""
+        session = self._make_produce_session(
+            enable_printing=True,
+            auto_print=True,
+            default_stock_label_type=1,
+        )
+
+        result = await session._step_produce_confirm(user_input=None)
+
+        assert result.step_id == "scan_produce_confirm"
+        produce_print = _get_field(result.fields, "produce_print")
+        assert produce_print is not None
+        assert produce_print.default is True
+
+    async def test_produce_confirm_field_present_but_false_when_auto_print_disabled(self):
+        """Form includes produce_print field with default=False when auto-print is off."""
+        session = self._make_produce_session(
+            enable_printing=True,
+            auto_print=False,
+            default_stock_label_type=1,
+        )
+
+        result = await session._step_produce_confirm(user_input=None)
+
+        assert result.step_id == "scan_produce_confirm"
+        produce_print = _get_field(result.fields, "produce_print")
+        assert produce_print is not None
+        assert produce_print.default is False
+
+    async def test_produce_confirm_field_absent_when_printing_disabled(self):
+        """Form omits produce_print entirely when printing is disabled."""
+        session = self._make_produce_session(
+            enable_printing=False,
+            auto_print=True,
+            default_stock_label_type=1,
+        )
+
+        result = await session._step_produce_confirm(user_input=None)
+
+        assert result.step_id == "scan_produce_confirm"
+        assert _get_field(result.fields, "produce_print") is None
+
+    async def test_produce_confirm_applies_stock_label_type_when_printing_enabled_and_selected(self):
+        """Submission sets stock_label_type=2 only when printing is enabled and selected."""
+        captured: dict[str, dict] = {}
+
+        class CapturingCoordinator(FakeCoordinator):
+            async def add_stock(self, product_id: int, data: dict) -> dict:
+                captured["stock_data"] = data
+                return [{"id": 1}]
+
+        grocy_api = FakeGrocyAPI()
+        bbuddy_api = FakeBarcodeBuddyAPI()
+        coordinator = CapturingCoordinator(grocy_api=grocy_api, bbuddy_api=bbuddy_api)
+        product = make_product(id=42, name="Recipe Product", default_stock_label_type=1)
+
+        session = ScanSession(
+            coordinator=coordinator,
+            api_bbuddy=bbuddy_api,
+            scan_options={CONF_ENABLE_PRINTING: True, CONF_ENABLE_AUTO_PRINT: True},
+            config_entry_data={},
+        )
+        session._state.current_recipe = {"id": 12, "name": "Soup", "base_servings": 4}
+        session._state.set_stock_info(make_stock_info(product=product, barcodes=[]))
+        session._produce_input = {
+            "produce_consume_ingredients": False,
+            "produce_servings": 4,
+            "produce_amount": 2,
+            "produce_location_id": 1,
+            "produce_price": "40",
+            "fulfillment_calories": 800,
+        }
+        session.barcode_queue = ["grcy:r:12"]
+        session._step_scan_queue = AsyncMock(return_value=CompletedResult(summary="ok"))
+
+        result = await session._step_produce_confirm(
+            user_input={"produce_print": True}
+        )
+
+        assert isinstance(result, CompletedResult)
+        assert captured["stock_data"]["stock_label_type"] == 2
+
+    async def test_produce_confirm_no_stock_label_type_when_auto_print_disabled(self):
+        """Submission does not set stock_label_type when produce_print is false."""
+        captured: dict[str, dict] = {}
+
+        class CapturingCoordinator(FakeCoordinator):
+            async def add_stock(self, product_id: int, data: dict) -> dict:
+                captured["stock_data"] = data
+                return [{"id": 1}]
+
+        grocy_api = FakeGrocyAPI()
+        bbuddy_api = FakeBarcodeBuddyAPI()
+        coordinator = CapturingCoordinator(grocy_api=grocy_api, bbuddy_api=bbuddy_api)
+        product = make_product(id=42, name="Recipe Product", default_stock_label_type=1)
+
+        session = ScanSession(
+            coordinator=coordinator,
+            api_bbuddy=bbuddy_api,
+            scan_options={CONF_ENABLE_PRINTING: True, CONF_ENABLE_AUTO_PRINT: False},
+            config_entry_data={},
+        )
+        session._state.current_recipe = {"id": 12, "name": "Soup", "base_servings": 4}
+        session._state.set_stock_info(make_stock_info(product=product, barcodes=[]))
+        session._produce_input = {
+            "produce_consume_ingredients": False,
+            "produce_servings": 4,
+            "produce_amount": 2,
+            "produce_location_id": 1,
+            "produce_price": "40",
+            "fulfillment_calories": 800,
+        }
+        session.barcode_queue = ["grcy:r:12"]
+        session._step_scan_queue = AsyncMock(return_value=CompletedResult(summary="ok"))
+
+        result = await session._step_produce_confirm(
+            user_input={"produce_print": False}
+        )
+
+        assert isinstance(result, CompletedResult)
+        assert "stock_label_type" not in captured["stock_data"]
+
+    async def test_produce_confirm_no_stock_label_type_when_printing_disabled(self):
+        """Submission ignores produce_print when printing is disabled."""
+        captured: dict[str, dict] = {}
+
+        class CapturingCoordinator(FakeCoordinator):
+            async def add_stock(self, product_id: int, data: dict) -> dict:
+                captured["stock_data"] = data
+                return [{"id": 1}]
+
+        grocy_api = FakeGrocyAPI()
+        bbuddy_api = FakeBarcodeBuddyAPI()
+        coordinator = CapturingCoordinator(grocy_api=grocy_api, bbuddy_api=bbuddy_api)
+        product = make_product(id=42, name="Recipe Product", default_stock_label_type=1)
+
+        session = ScanSession(
+            coordinator=coordinator,
+            api_bbuddy=bbuddy_api,
+            scan_options={CONF_ENABLE_PRINTING: False, CONF_ENABLE_AUTO_PRINT: True},
+            config_entry_data={},
+        )
+        session._state.current_recipe = {"id": 12, "name": "Soup", "base_servings": 4}
+        session._state.set_stock_info(make_stock_info(product=product, barcodes=[]))
+        session._produce_input = {
+            "produce_consume_ingredients": False,
+            "produce_servings": 4,
+            "produce_amount": 2,
+            "produce_location_id": 1,
+            "produce_price": "40",
+            "fulfillment_calories": 800,
+        }
+        session.barcode_queue = ["grcy:r:12"]
+        session._step_scan_queue = AsyncMock(return_value=CompletedResult(summary="ok"))
+
+        result = await session._step_produce_confirm(
+            user_input={"produce_print": True}
+        )
+
+        assert isinstance(result, CompletedResult)
+        assert "stock_label_type" not in captured["stock_data"]
