@@ -123,4 +123,8 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+# Custom non-committed Notes, roadmap, documentation, AI utils, etc.
+._local/
+._local-ln/
+.ai/
 .ai-local/
