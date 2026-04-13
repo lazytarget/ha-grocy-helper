@@ -1892,19 +1892,15 @@ class ScanSession:
             )
 
         # ── Validate submitted values before stashing ───────────────
-        produce_servings = try_parse_int(user_input.get("produce_servings"))
-        produce_amount = try_parse_int(user_input.get("produce_amount"))
+        _ok_s, produce_servings = try_parse_int(user_input.get("produce_servings"))
+        _ok_a, produce_amount = try_parse_int(user_input.get("produce_amount"))
 
-        if produce_servings is None or produce_servings < 1:
+        if not _ok_s or produce_servings < 1:
             errors["produce_servings"] = "produce_servings_min_1"
         if (
-            produce_amount is None
+            not _ok_a
             or produce_amount < 0
-            or (
-                produce_servings is not None
-                and produce_servings >= 1
-                and produce_amount > produce_servings
-            )
+            or (_ok_s and produce_servings >= 1 and produce_amount > produce_servings)
         ):
             errors["produce_amount"] = "produce_amount_invalid"
 
