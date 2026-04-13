@@ -10,7 +10,9 @@ from unittest.mock import AsyncMock
 
 from custom_components.grocy_helper.const import (
     CONF_ENABLE_CALORIES,
+    CONF_ENABLE_PRICES,
     CONF_ENABLE_SHOPPING_LOCATIONS,
+    SCAN_MODE,
 )
 from custom_components.grocy_helper.scan_form_builders import ScanFormBuilder
 from custom_components.grocy_helper.scan_session import ScanSession
@@ -23,6 +25,7 @@ from tests.conftest import (
     FakeGrocyAPI,
     make_master_data,
     make_product,
+    make_stock_info,
 )
 
 
@@ -65,6 +68,36 @@ def _build_create_barcode_fields(
     return builder.build_create_barcode_fields(
         suggested=suggested or {},
         scan_options=scan_options,
+    )
+
+
+def _build_scan_process_fields(
+    product: dict | None = None,
+    price: str | None = None,
+    best_before_in_days: int | None = None,
+    shopping_location_id: str | None = None,
+    scan_options: dict | None = None,
+) -> list[FormField]:
+    """Build scan-process fields using a FakeCoordinator."""
+    grocy_api = FakeGrocyAPI()
+    master = make_master_data(
+        shopping_locations=[
+            {"id": 3, "name": "Coop"},
+            {"id": 7, "name": "ICA"},
+        ]
+    )
+    coordinator = FakeCoordinator(grocy_api=grocy_api, master_data=master)
+    builder = ScanFormBuilder(coordinator)
+
+    return builder.build_scan_process_fields(
+        _product=product or make_product(),
+        price=price,
+        best_before_in_days=best_before_in_days,
+        shopping_location_id=shopping_location_id,
+        scan_options=scan_options or {},
+        current_recipe=None,
+        current_product_stock_info=None,
+        current_barcode=None,
     )
 
 
@@ -178,3 +211,76 @@ class TestShoppingLocationsToggle:
         assert captured["barcode"]["shopping_location_id"] is None
         assert captured["barcode"]["qu_id"] == "1"
         assert captured["barcode"]["amount"] == 2
+
+
+class TestAllTogglesDisabled:
+    """Disabling prices, shopping locations, and calories yields minimal forms."""
+
+    ALL_DISABLED = {
+        CONF_ENABLE_PRICES: False,
+        CONF_ENABLE_SHOPPING_LOCATIONS: False,
+        CONF_ENABLE_CALORIES: False,
+    }
+
+    def test_scan_process_renders_only_best_before_field(self):
+        """With all toggles off, SCAN_PROCESS keeps only essential fields."""
+        fields = _build_scan_process_fields(
+            best_before_in_days=5,
+            scan_options=self.ALL_DISABLED,
+        )
+
+        keys = [field.key for field in fields]
+        assert keys == ["best_before_in_days"]
+
+    def test_update_details_hides_calories_but_keeps_core_fields(self):
+        """With all toggles off, update-details hides calories and keeps core fields."""
+        fields = _build_details_fields(scan_options=self.ALL_DISABLED)
+
+        assert _get_field(fields, "calories_per_100") is None
+        assert _get_field(fields, "default_consume_location_id") is not None
+        assert _get_field(fields, "product_quantity") is not None
+        assert _get_field(fields, "qu_id_product") is not None
+
+    async def test_scan_process_ignores_stale_price_and_store_when_disabled(self):
+        """Submitted gated values are ignored when all related toggles are disabled."""
+        captured: dict[str, dict] = {}
+
+        class CapturingBarcodeBuddyAPI(FakeBarcodeBuddyAPI):
+            async def post_scan(self, request: dict) -> dict:
+                captured["request"] = request
+                return {"result": "OK", "barcode": request.get("barcode", "")}
+
+        grocy_api = FakeGrocyAPI()
+        bbuddy_api = CapturingBarcodeBuddyAPI()
+        coordinator = FakeCoordinator(grocy_api=grocy_api, bbuddy_api=bbuddy_api)
+
+        product = make_product(id=42, name="Milk", default_best_before_days=5)
+        stock_info = make_stock_info(product=product, barcodes=[])
+        grocy_api.register_product(product, barcodes=["1234567890123"])
+
+        session = ScanSession(
+            coordinator=coordinator,
+            api_bbuddy=bbuddy_api,
+            scan_options=self.ALL_DISABLED,
+            config_entry_data={},
+        )
+        session.current_barcode = "1234567890123"
+        session.barcode_scan_mode = SCAN_MODE.PURCHASE
+        session._state.set_stock_info(stock_info)
+        session._handle_scan_success = AsyncMock(
+            return_value=CompletedResult(summary="ok")
+        )
+
+        result = await session._step_scan_process(
+            {
+                "price": "19.95",
+                "best_before_in_days": "5",
+                "shopping_location_id": "7",
+            }
+        )
+
+        assert isinstance(result, CompletedResult)
+        assert captured["request"] == {
+            "barcode": "1234567890123",
+            "bestBeforeInDays": 5,
+        }

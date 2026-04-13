@@ -2221,7 +2221,11 @@ class ScanSession:
     ) -> tuple[str | None, int | None, str | None]:
         """Extract input values for scan process."""
         # TODO: Input default price from Recipe (cost of ingredients)
-        price = user_input.get("price") if user_input else None
+        price = (
+            user_input.get("price")
+            if user_input and self.scan_options.get(CONF_ENABLE_PRICES, True)
+            else None
+        )
         best_before_in_days = (
             user_input.get(
                 "best_before_in_days", product.get("default_best_before_days")
@@ -2230,7 +2234,10 @@ class ScanSession:
             else product.get("default_best_before_days")
         )
         shopping_location_id = (
-            user_input.get("shopping_location_id") if user_input else None
+            user_input.get("shopping_location_id")
+            if user_input
+            and self.scan_options.get(CONF_ENABLE_SHOPPING_LOCATIONS, True)
+            else None
         )
         return price, best_before_in_days, shopping_location_id
 
