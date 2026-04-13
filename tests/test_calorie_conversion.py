@@ -256,3 +256,95 @@ class TestCalorieUnsupportedBasis:
 
         assert isinstance(result, CompletedResult)
         assert not coordinator.product_updates
+
+
+class TestCalorieMissingConversion:
+    """Supported OFF basis with missing QU conversion should not write calories."""
+
+    async def test_weight_basis_without_conversion_skips_calories(self):
+        """100g basis without stock->g conversion must not write calories."""
+        grocy_api = FakeGrocyAPI()
+        bbuddy_api = FakeBarcodeBuddyAPI()
+
+        class CapturingCoordinator(FakeCoordinator):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.product_updates: list[dict] = []
+
+            async def update_product(self, product_id: int, changes: dict) -> dict:
+                self.product_updates.append(changes)
+                return {}
+
+        coordinator = CapturingCoordinator(
+            grocy_api=grocy_api,
+            bbuddy_api=bbuddy_api,
+            master_data=make_master_data(),
+        )
+
+        product = make_product(id=45, name="Granola", qu_id=1)
+        session = ScanSession(
+            coordinator=coordinator,
+            api_bbuddy=bbuddy_api,
+            scan_options={CONF_ENABLE_CALORIES: True},
+            config_entry_data={},
+        )
+        session._state.set_stock_info(make_stock_info(product=product, barcodes=[]))
+        session._state.current_product_openfoodfacts = {
+            "product_quantity": 100,
+            "product_quantity_unit": "g",
+            "nutriments": {"energy_kcal_100g": 410},
+        }
+        session._step_add_product_parent = AsyncMock(
+            return_value=CompletedResult(summary="ok")
+        )
+        session._convert_quantity = AsyncMock(return_value=None)
+
+        result = await session._step_update_product_details({})
+
+        assert isinstance(result, CompletedResult)
+        for update in coordinator.product_updates:
+            assert "calories" not in update
+
+    async def test_liquid_basis_without_conversion_skips_calories(self):
+        """100ml basis without stock->ml conversion must not write calories."""
+        grocy_api = FakeGrocyAPI()
+        bbuddy_api = FakeBarcodeBuddyAPI()
+
+        class CapturingCoordinator(FakeCoordinator):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.product_updates: list[dict] = []
+
+            async def update_product(self, product_id: int, changes: dict) -> dict:
+                self.product_updates.append(changes)
+                return {}
+
+        coordinator = CapturingCoordinator(
+            grocy_api=grocy_api,
+            bbuddy_api=bbuddy_api,
+            master_data=make_master_data(),
+        )
+
+        product = make_product(id=46, name="Juice", qu_id=1)
+        session = ScanSession(
+            coordinator=coordinator,
+            api_bbuddy=bbuddy_api,
+            scan_options={CONF_ENABLE_CALORIES: True},
+            config_entry_data={},
+        )
+        session._state.set_stock_info(make_stock_info(product=product, barcodes=[]))
+        session._state.current_product_openfoodfacts = {
+            "product_quantity": 1000,
+            "product_quantity_unit": "ml",
+            "nutriments": {"energy_kcal_100g": 46},
+        }
+        session._step_add_product_parent = AsyncMock(
+            return_value=CompletedResult(summary="ok")
+        )
+        session._convert_quantity = AsyncMock(return_value=None)
+
+        result = await session._step_update_product_details({})
+
+        assert isinstance(result, CompletedResult)
+        for update in coordinator.product_updates:
+            assert "calories" not in update
