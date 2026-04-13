@@ -107,10 +107,13 @@ class BarcodeBuddyAPI:
 
 class BarcodeBuddyAPI_Fake:
     """Class to integrate with a "FAKE"."""
+
     mode: int = 0
 
     def __init__(self) -> None:
-        self.mode: int = self.convert_scan_mode_to_bbuddy_mode(DEV_CONST.get("default_scan_mode", SCAN_MODE.CONSUME_SPOILED))
+        self.mode: int = self.convert_scan_mode_to_bbuddy_mode(
+            DEV_CONST.get("default_scan_mode", SCAN_MODE.CONSUME_SPOILED)
+        )
 
     def convert_scan_mode_to_bbuddy_mode(self, mode: SCAN_MODE) -> int:
         if mode == SCAN_MODE.SCAN_BBUDDY:
@@ -135,7 +138,7 @@ class BarcodeBuddyAPI_Fake:
     def convert_bbuddy_mode_to_scan_mode(self, bb_mode: int) -> SCAN_MODE | None:
         if bb_mode == -1:
             return SCAN_MODE.SCAN_BBUDDY
-        
+
         if bb_mode == 0:
             return SCAN_MODE.CONSUME
         elif bb_mode == 1:

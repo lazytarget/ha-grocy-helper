@@ -4,7 +4,7 @@ from enum import StrEnum
 from typing import Final
 
 DOMAIN: Final = "grocy_helper"
-DEFAULT_SCAN_INTERVAL: Final = 5    # minutes
+DEFAULT_SCAN_INTERVAL: Final = 5  # minutes
 
 CONF_GROCY_API_URL: Final = "GROCY_API_URL"
 CONF_GROCY_API_KEY: Final = "GROCY_API_KEY"
@@ -16,7 +16,9 @@ CONF_DEFAULT_LOCATION: Final = "DEFAULT_LOCATION"
 CONF_DEFAULT_LOCATION_FRIDGE: Final = "DEFAULT_LOCATION_FRIDGE"
 CONF_DEFAULT_LOCATION_FREEZER: Final = "DEFAULT_LOCATION_FREEZER"
 CONF_DEFAULT_LOCATION_RECIPE_RESULT: Final = "DEFAULT_LOCATION_RECIPE_RESULT"
-CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT: Final = "DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT"
+CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT: Final = (
+    "DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT"
+)
 CONF_ENABLE_PRINTING: Final = "ENABLE_PRINTING"
 CONF_ENABLE_AUTO_PRINT: Final = "ENABLE_AUTO_PRINT"
 CONF_ENABLE_PRICES: Final = "ENABLE_PRICES"
@@ -25,6 +27,7 @@ CONF_ENABLE_CALORIES: Final = "ENABLE_CALORIES"
 
 STORAGE_KEY_QUEUE: Final = "grocy_helper.queue"
 STORAGE_VERSION_QUEUE: Final = 1
+
 
 class SCAN_MODE(StrEnum):
     # BBuddy
@@ -41,6 +44,7 @@ class SCAN_MODE(StrEnum):
     TRANSFER = "TRANSFER"
     PROVISION = "PROVISION-BARCODE"
 
+
 class ApiException(Exception):
     def __init__(self, status_code, error_message):
         # message = f"{status_code}: {error_message}"
@@ -52,9 +56,14 @@ class ApiException(Exception):
     status_code: int
     error_message: str
 
+
 class ServiceCalls(StrEnum):
     """Services for the Grocy-helper integration"""
-    RESOLVE_QUANTITY_UNIT_CONVERSION_FOR_PRODUCT = "resolve_quantity_unit_conversion_for_product"
+
+    RESOLVE_QUANTITY_UNIT_CONVERSION_FOR_PRODUCT = (
+        "resolve_quantity_unit_conversion_for_product"
+    )
+
 
 class API:
     class URLs:
@@ -63,7 +72,9 @@ class API:
         GET_LOCATIONS: Final = "api/objects/locations"
         GET_SHOPPING_LOCATIONS: Final = "api/objects/shopping_locations"
         GET_QUANTITYUNITS: Final = "api/objects/quantity_units"
-        GET_QUANTITY_UNIT_CONVERSIONS_RESOLVED: Final = "api/objects/quantity_unit_conversions_resolved"
+        GET_QUANTITY_UNIT_CONVERSIONS_RESOLVED: Final = (
+            "api/objects/quantity_unit_conversions_resolved"
+        )
         GET_PRODUCTS: Final = "api/objects/products"
         GET_PRODUCT_BY_ID: Final = "api/objects/products/%s"
         GET_STOCK_PRODUCT_BY_ID: Final = "api/stock/products/%s"
@@ -77,7 +88,9 @@ class API:
         ADD_PRODUCT: Final = "api/objects/products"
         ADD_PRODUCT_BARCODE: Final = "api/objects/product_barcodes"
         UPDATE_PRODUCT: Final = "api/objects/products/%s"
-        ADD_PRODUCT_QUANTITY_UNIT_CONVERSION: Final = "api/objects/quantity_unit_conversions"
+        ADD_PRODUCT_QUANTITY_UNIT_CONVERSION: Final = (
+            "api/objects/quantity_unit_conversions"
+        )
         GET_PRODUCT_GROUPS: Final = "api/objects/product_groups"
         GET_RECIPES: Final = "api/objects/recipes"
         CREATE_RECIPE: Final = "api/objects/recipes"
@@ -95,6 +108,7 @@ class API:
         BBUDDY_SCAN: Final = "api/action/scan"
         BBUDDY_GET_MODE: Final = "api/state/getmode"
         BBUDDY_SET_MODE: Final = "api/state/setmode"
+
 
 class OpenFoodFacts:
     APIv2 = "https://world.openfoodfacts.org/api/v2/product/{}.json"
@@ -114,6 +128,7 @@ class OpenFoodFacts:
         "nutriments",
         "nutriments_estimated",
     ]
+
 
 # TODO: Conditional check if development env
 DEV_CONST = {

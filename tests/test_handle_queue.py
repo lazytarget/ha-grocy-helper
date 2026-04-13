@@ -154,9 +154,7 @@ async def test_handle_queue_feeds_barcodes_to_session():
     grocy_api.register_product(product, barcodes=["111"])
 
     queue = await _make_queue_with_items(["111"])
-    session = _make_session_with_queue(
-        queue, grocy_api=grocy_api, products=[product]
-    )
+    session = _make_session_with_queue(queue, grocy_api=grocy_api, products=[product])
 
     # First call shows the form
     result = await session.handle_step(Step.HANDLE_QUEUE, None)
@@ -170,7 +168,9 @@ async def test_handle_queue_feeds_barcodes_to_session():
     assert isinstance(result, (FormRequest, CompletedResult))
 
 
-async def _drive_to_completion(session: ScanSession, result) -> CompletedResult | AbortResult:
+async def _drive_to_completion(
+    session: ScanSession, result
+) -> CompletedResult | AbortResult:
     """Drive a ScanSession through forms until completion/abort.
 
     When a FormRequest is returned, submits empty values for all fields (the
@@ -200,9 +200,7 @@ async def test_handle_queue_processes_known_products():
     grocy_api.register_product(product, barcodes=["7340011492900"])
 
     queue = await _make_queue_with_items(["7340011492900"])
-    session = _make_session_with_queue(
-        queue, grocy_api=grocy_api, products=[product]
-    )
+    session = _make_session_with_queue(queue, grocy_api=grocy_api, products=[product])
 
     # Show form
     await session.handle_step(Step.HANDLE_QUEUE, None)
@@ -223,9 +221,7 @@ async def test_handle_queue_marks_resolved_on_success():
     queue = await _make_queue_with_items(["7340011492900"])
     item_id = queue.get_pending_items()[0].id
 
-    session = _make_session_with_queue(
-        queue, grocy_api=grocy_api, products=[product]
-    )
+    session = _make_session_with_queue(queue, grocy_api=grocy_api, products=[product])
 
     await session.handle_step(Step.HANDLE_QUEUE, None)
     result = await session.handle_step(Step.HANDLE_QUEUE, {"confirm": True})
@@ -247,9 +243,7 @@ async def test_handle_queue_uses_item_mode():
 
     # Queue items were added in CONSUME mode
     queue = await _make_queue_with_items(["111"], mode=SCAN_MODE.CONSUME)
-    session = _make_session_with_queue(
-        queue, grocy_api=grocy_api, products=[product]
-    )
+    session = _make_session_with_queue(queue, grocy_api=grocy_api, products=[product])
 
     await session.handle_step(Step.HANDLE_QUEUE, None)
     result = await session.handle_step(Step.HANDLE_QUEUE, {"confirm": True})
@@ -270,9 +264,7 @@ async def test_handle_queue_includes_failed_items():
     pending = queue.get_pending_items()
     await queue.async_mark_failed(pending[0].id, "Timeout")
 
-    session = _make_session_with_queue(
-        queue, grocy_api=grocy_api, products=[product]
-    )
+    session = _make_session_with_queue(queue, grocy_api=grocy_api, products=[product])
 
     # Show form — should include the failed item
     result = await session.handle_step(Step.HANDLE_QUEUE, None)
@@ -294,9 +286,7 @@ async def test_handle_queue_multiple_items_processed():
     grocy_api.register_product(p2, barcodes=["222"])
 
     queue = await _make_queue_with_items(["111", "222"])
-    session = _make_session_with_queue(
-        queue, grocy_api=grocy_api, products=[p1, p2]
-    )
+    session = _make_session_with_queue(queue, grocy_api=grocy_api, products=[p1, p2])
 
     await session.handle_step(Step.HANDLE_QUEUE, None)
     result = await session.handle_step(Step.HANDLE_QUEUE, {"confirm": True})
@@ -319,9 +309,7 @@ async def test_handle_queue_duplicate_barcodes_both_resolved():
     item_id_2 = items[1].id
     assert item_id_1 != item_id_2  # unique UUIDs
 
-    session = _make_session_with_queue(
-        queue, grocy_api=grocy_api, products=[product]
-    )
+    session = _make_session_with_queue(queue, grocy_api=grocy_api, products=[product])
 
     await session.handle_step(Step.HANDLE_QUEUE, None)
     result = await session.handle_step(Step.HANDLE_QUEUE, {"confirm": True})

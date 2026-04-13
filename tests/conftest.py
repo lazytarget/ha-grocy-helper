@@ -235,9 +235,7 @@ class FakeGrocyAPI:
     ) -> None:
         """Register a product so barcode/id lookups find it."""
         barcode_objects = [
-            make_product_barcode(
-                id=i + 1, product_id=product["id"], barcode=bc
-            )
+            make_product_barcode(id=i + 1, product_id=product["id"], barcode=bc)
             for i, bc in enumerate(barcodes or [])
         ]
         info = make_stock_info(
@@ -252,7 +250,10 @@ class FakeGrocyAPI:
     # ── API methods (async, matching GrocyAPI interface) ────────────
 
     async def get_locations(self):
-        return [make_location(id=1, name="Fridge"), make_location(id=2, name="Freezer", is_freezer=1)]
+        return [
+            make_location(id=1, name="Fridge"),
+            make_location(id=2, name="Freezer", is_freezer=1),
+        ]
 
     async def get_shopping_locations(self):
         return []

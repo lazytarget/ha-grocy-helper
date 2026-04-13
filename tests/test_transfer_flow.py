@@ -8,7 +8,11 @@ from __future__ import annotations
 from unittest.mock import AsyncMock
 
 from custom_components.grocy_helper.scan_session import ScanSession
-from custom_components.grocy_helper.scan_types import AbortResult, CompletedResult, FormRequest
+from custom_components.grocy_helper.scan_types import (
+    AbortResult,
+    CompletedResult,
+    FormRequest,
+)
 
 from tests.conftest import (
     FakeBarcodeBuddyAPI,

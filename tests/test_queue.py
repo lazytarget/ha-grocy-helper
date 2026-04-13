@@ -291,9 +291,7 @@ async def test_enum_serialization_round_trip(fake_store: FakeStore):
     """Enums are serialized as strings, not enum instances."""
     queue = ScanQueue(store=fake_store)
     await queue.async_add("111")
-    await queue.async_mark_resolved(
-        queue._items[0].id, "OK"
-    )
+    await queue.async_mark_resolved(queue._items[0].id, "OK")
 
     raw = await fake_store.async_load()
     # current_mode must be a plain string
@@ -310,10 +308,12 @@ async def test_enum_serialization_round_trip(fake_store: FakeStore):
 
 async def test_load_invalid_mode_falls_back(fake_store: FakeStore):
     """Invalid persisted mode falls back to PURCHASE."""
-    await fake_store.async_save({
-        "current_mode": "INVALID_MODE",
-        "items": [],
-    })
+    await fake_store.async_save(
+        {
+            "current_mode": "INVALID_MODE",
+            "items": [],
+        }
+    )
     queue = ScanQueue(store=fake_store)
     await queue.async_load()
     assert queue.current_mode == SCAN_MODE.PURCHASE
@@ -321,25 +321,27 @@ async def test_load_invalid_mode_falls_back(fake_store: FakeStore):
 
 async def test_load_invalid_item_status_skipped(fake_store: FakeStore):
     """Items with invalid status are skipped during load."""
-    await fake_store.async_save({
-        "current_mode": SCAN_MODE.PURCHASE.value,
-        "items": [
-            {
-                "id": "good",
-                "barcode": "111",
-                "mode": SCAN_MODE.PURCHASE.value,
-                "added_at": "2025-01-01T00:00:00+00:00",
-                "status": "pending",
-            },
-            {
-                "id": "bad",
-                "barcode": "222",
-                "mode": SCAN_MODE.PURCHASE.value,
-                "added_at": "2025-01-01T00:00:00+00:00",
-                "status": "UNKNOWN_STATUS",
-            },
-        ],
-    })
+    await fake_store.async_save(
+        {
+            "current_mode": SCAN_MODE.PURCHASE.value,
+            "items": [
+                {
+                    "id": "good",
+                    "barcode": "111",
+                    "mode": SCAN_MODE.PURCHASE.value,
+                    "added_at": "2025-01-01T00:00:00+00:00",
+                    "status": "pending",
+                },
+                {
+                    "id": "bad",
+                    "barcode": "222",
+                    "mode": SCAN_MODE.PURCHASE.value,
+                    "added_at": "2025-01-01T00:00:00+00:00",
+                    "status": "UNKNOWN_STATUS",
+                },
+            ],
+        }
+    )
     queue = ScanQueue(store=fake_store)
     await queue.async_load()
     assert len(queue._items) == 1
@@ -352,26 +354,28 @@ async def test_load_invalid_item_status_skipped(fake_store: FakeStore):
 async def test_load_item_missing_required_field_is_skipped(fake_store: FakeStore):
     """Items with missing required fields (id/barcode/mode/added_at)
     are skipped gracefully, not crashing the whole load."""
-    await fake_store.async_save({
-        "current_mode": SCAN_MODE.PURCHASE.value,
-        "items": [
-            {
-                # missing "id" — required field
-                "barcode": "111",
-                "mode": SCAN_MODE.PURCHASE.value,
-                "added_at": "2025-01-01T00:00:00+00:00",
-                "status": "pending",
-            },
-            {
-                # good item
-                "id": "good-item",
-                "barcode": "222",
-                "mode": SCAN_MODE.PURCHASE.value,
-                "added_at": "2025-01-01T00:00:00+00:00",
-                "status": "pending",
-            },
-        ],
-    })
+    await fake_store.async_save(
+        {
+            "current_mode": SCAN_MODE.PURCHASE.value,
+            "items": [
+                {
+                    # missing "id" — required field
+                    "barcode": "111",
+                    "mode": SCAN_MODE.PURCHASE.value,
+                    "added_at": "2025-01-01T00:00:00+00:00",
+                    "status": "pending",
+                },
+                {
+                    # good item
+                    "id": "good-item",
+                    "barcode": "222",
+                    "mode": SCAN_MODE.PURCHASE.value,
+                    "added_at": "2025-01-01T00:00:00+00:00",
+                    "status": "pending",
+                },
+            ],
+        }
+    )
     queue = ScanQueue(store=fake_store)
     await queue.async_load()
 
@@ -382,18 +386,20 @@ async def test_load_item_missing_required_field_is_skipped(fake_store: FakeStore
 
 async def test_load_item_missing_barcode_is_skipped(fake_store: FakeStore):
     """Item missing 'barcode' field is skipped gracefully."""
-    await fake_store.async_save({
-        "current_mode": SCAN_MODE.PURCHASE.value,
-        "items": [
-            {
-                "id": "no-barcode",
-                # missing "barcode"
-                "mode": SCAN_MODE.PURCHASE.value,
-                "added_at": "2025-01-01T00:00:00+00:00",
-                "status": "pending",
-            },
-        ],
-    })
+    await fake_store.async_save(
+        {
+            "current_mode": SCAN_MODE.PURCHASE.value,
+            "items": [
+                {
+                    "id": "no-barcode",
+                    # missing "barcode"
+                    "mode": SCAN_MODE.PURCHASE.value,
+                    "added_at": "2025-01-01T00:00:00+00:00",
+                    "status": "pending",
+                },
+            ],
+        }
+    )
     queue = ScanQueue(store=fake_store)
     await queue.async_load()
     assert len(queue._items) == 0
@@ -401,25 +407,27 @@ async def test_load_item_missing_barcode_is_skipped(fake_store: FakeStore):
 
 async def test_load_item_missing_mode_is_skipped(fake_store: FakeStore):
     """Item missing 'mode' field is skipped gracefully."""
-    await fake_store.async_save({
-        "current_mode": SCAN_MODE.PURCHASE.value,
-        "items": [
-            {
-                "id": "no-mode",
-                "barcode": "222",
-                # missing "mode"
-                "added_at": "2025-01-01T00:00:01+00:00",
-                "status": "pending",
-            },
-            {
-                "id": "good-item",
-                "barcode": "333",
-                "mode": SCAN_MODE.PURCHASE.value,
-                "added_at": "2025-01-01T00:00:02+00:00",
-                "status": "pending",
-            },
-        ],
-    })
+    await fake_store.async_save(
+        {
+            "current_mode": SCAN_MODE.PURCHASE.value,
+            "items": [
+                {
+                    "id": "no-mode",
+                    "barcode": "222",
+                    # missing "mode"
+                    "added_at": "2025-01-01T00:00:01+00:00",
+                    "status": "pending",
+                },
+                {
+                    "id": "good-item",
+                    "barcode": "333",
+                    "mode": SCAN_MODE.PURCHASE.value,
+                    "added_at": "2025-01-01T00:00:02+00:00",
+                    "status": "pending",
+                },
+            ],
+        }
+    )
     queue = ScanQueue(store=fake_store)
     await queue.async_load()
 
@@ -429,25 +437,27 @@ async def test_load_item_missing_mode_is_skipped(fake_store: FakeStore):
 
 async def test_load_item_missing_added_at_is_skipped(fake_store: FakeStore):
     """Item missing 'added_at' field is skipped gracefully."""
-    await fake_store.async_save({
-        "current_mode": SCAN_MODE.PURCHASE.value,
-        "items": [
-            {
-                "id": "no-added-at",
-                "barcode": "444",
-                "mode": SCAN_MODE.PURCHASE.value,
-                # missing "added_at"
-                "status": "pending",
-            },
-            {
-                "id": "good-item",
-                "barcode": "555",
-                "mode": SCAN_MODE.PURCHASE.value,
-                "added_at": "2025-01-01T00:00:03+00:00",
-                "status": "pending",
-            },
-        ],
-    })
+    await fake_store.async_save(
+        {
+            "current_mode": SCAN_MODE.PURCHASE.value,
+            "items": [
+                {
+                    "id": "no-added-at",
+                    "barcode": "444",
+                    "mode": SCAN_MODE.PURCHASE.value,
+                    # missing "added_at"
+                    "status": "pending",
+                },
+                {
+                    "id": "good-item",
+                    "barcode": "555",
+                    "mode": SCAN_MODE.PURCHASE.value,
+                    "added_at": "2025-01-01T00:00:03+00:00",
+                    "status": "pending",
+                },
+            ],
+        }
+    )
     queue = ScanQueue(store=fake_store)
     await queue.async_load()
 
@@ -491,6 +501,7 @@ async def test_store_save_failure_propagates_from_add():
 
     queue = ScanQueue(store=BrokenStore())
     import pytest
+
     with pytest.raises(OSError, match="Disk full"):
         await queue.async_add("111")
 
@@ -511,6 +522,7 @@ async def test_store_save_failure_propagates_from_mark_resolved():
                 raise OSError("Disk full")
 
     import pytest
+
     store = BrokenOnSecondSave()
     queue = ScanQueue(store=store)
     item = await queue.async_add("111")  # first save succeeds
@@ -535,6 +547,7 @@ async def test_store_save_failure_propagates_from_mark_failed():
                 raise OSError("Disk full")
 
     import pytest
+
     store = BrokenOnSecondSave()
     queue = ScanQueue(store=store)
     item = await queue.async_add("111")  # first save succeeds

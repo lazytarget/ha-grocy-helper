@@ -142,7 +142,9 @@ class TestHandleScanError:
         """When _execute_scan_action raises, _step_scan_process returns a FormRequest."""
         session = _make_process_session()
         # Arrange: executing the scan action raises an error
-        session._execute_scan_action = AsyncMock(side_effect=RuntimeError("network error"))
+        session._execute_scan_action = AsyncMock(
+            side_effect=RuntimeError("network error")
+        )
         # Stub the BBuddy mode setter so it doesn't fail
         session._set_bbuddy_mode = AsyncMock()
         # Stub _show_scan_process_form to return None so we reach execute
@@ -163,7 +165,9 @@ class TestAddProductLocationValidation:
 
     def test_validate_product_location_passes_for_normal_location(self):
         """Non-freezer product in non-freezer location returns empty errors."""
-        from custom_components.grocy_helper.scan_product_builders import ProductDataBuilder
+        from custom_components.grocy_helper.scan_product_builders import (
+            ProductDataBuilder,
+        )
 
         master = make_master_data(
             locations=[
@@ -180,9 +184,13 @@ class TestAddProductLocationValidation:
 
         assert errors == {}
 
-    def test_validate_product_location_fails_for_freezer_when_should_not_be_frozen(self):
+    def test_validate_product_location_fails_for_freezer_when_should_not_be_frozen(
+        self,
+    ):
         """Product with should_not_be_frozen=1 placed in freezer → location_is_freezer."""
-        from custom_components.grocy_helper.scan_product_builders import ProductDataBuilder
+        from custom_components.grocy_helper.scan_product_builders import (
+            ProductDataBuilder,
+        )
 
         master = make_master_data(
             locations=[
@@ -202,7 +210,9 @@ class TestAddProductLocationValidation:
 
     def test_validate_product_location_passes_frozen_in_freezer(self):
         """Product that CAN be frozen placed in freezer → no error."""
-        from custom_components.grocy_helper.scan_product_builders import ProductDataBuilder
+        from custom_components.grocy_helper.scan_product_builders import (
+            ProductDataBuilder,
+        )
 
         master = make_master_data(
             locations=[

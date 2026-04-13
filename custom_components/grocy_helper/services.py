@@ -55,6 +55,7 @@ def setup_global_services(hass: HomeAssistant) -> None:
     if not hass.services.has_service(
         DOMAIN, ServiceCalls.RESOLVE_QUANTITY_UNIT_CONVERSION_FOR_PRODUCT
     ):
+
         async def execute(
             call: ServiceCall,
         ) -> ServiceCallResponse[GrocyQuantityUnitConversionResult] | None:

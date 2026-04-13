@@ -98,7 +98,11 @@ async def async_post(
 
     headers = create_headers(
         auth_key=auth_key,
-        with_content=content_type if content_type else bool(data) if isinstance(data, Dict) else content_type,
+        with_content=content_type
+        if content_type
+        else bool(data)
+        if isinstance(data, Dict)
+        else content_type,
         request_id=request_id,
     )
     # if content_type:
@@ -122,7 +126,7 @@ async def async_post(
             headers=headers,
             # data=json.dumps(data) if data else None,
             data=data,
-            params=params
+            params=params,
         )
 
     if response.status == 200:
@@ -177,7 +181,11 @@ async def async_put(
 
     headers = create_headers(
         auth_key=auth_key,
-        with_content=content_type if content_type else bool(data) if isinstance(data, Dict) else content_type,
+        with_content=content_type
+        if content_type
+        else bool(data)
+        if isinstance(data, Dict)
+        else content_type,
         request_id=request_id,
     )
     # if content_type:
@@ -201,7 +209,7 @@ async def async_put(
             headers=headers,
             # data=json.dumps(data) if data else None,
             data=data,
-            params=params
+            params=params,
         )
 
     if response.status == 200:

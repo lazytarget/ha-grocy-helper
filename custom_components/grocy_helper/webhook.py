@@ -102,7 +102,9 @@ def parse_webhook_payload(data: dict[str, Any]) -> WebhookRequest:
         On validation failure (missing/empty barcode, invalid mode).
     """
     if "barcode" not in data:
-        raise WebhookError("Payload must contain a 'barcode' field (string or array of strings)")
+        raise WebhookError(
+            "Payload must contain a 'barcode' field (string or array of strings)"
+        )
 
     val = data["barcode"]
 
@@ -120,7 +122,9 @@ def parse_webhook_payload(data: dict[str, Any]) -> WebhookRequest:
     cleaned: list[str] = []
     for raw in barcodes_raw:
         if not isinstance(raw, str):
-            raise WebhookError(f"Each barcode must be a string, got {type(raw).__name__}")
+            raise WebhookError(
+                f"Each barcode must be a string, got {type(raw).__name__}"
+            )
         stripped = _strip_angle_brackets(raw)
         if not stripped:
             continue
@@ -200,17 +204,21 @@ async def process_webhook_payload(
 
         if item is None:
             # Mode switch occurred
-            results.append(WebhookItemResult(
-                barcode=barcode,
-                status="mode_switched",
-                new_mode=queue.current_mode.value,
-            ))
+            results.append(
+                WebhookItemResult(
+                    barcode=barcode,
+                    status="mode_switched",
+                    new_mode=queue.current_mode.value,
+                )
+            )
         else:
-            results.append(WebhookItemResult(
-                barcode=barcode,
-                status="queued",
-                item_id=item.id,
-                mode=item.mode,
-            ))
+            results.append(
+                WebhookItemResult(
+                    barcode=barcode,
+                    status="queued",
+                    item_id=item.id,
+                    mode=item.mode,
+                )
+            )
 
     return results

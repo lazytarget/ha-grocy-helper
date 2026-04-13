@@ -184,7 +184,7 @@ class ProductDataBuilder:
         masterdata = self._masterdata
 
         # Keys for parent product form
-        parent_keys = ["name", 'product_group_id', "qu_id_stock", "qu_id_price"]
+        parent_keys = ["name", "product_group_id", "qu_id_stock", "qu_id_price"]
         if not creating_parent:
             parent_keys.extend(
                 [

@@ -69,6 +69,7 @@ class GrocyAddProductQuantityUnitConversion(TypedDict):
     product_id: int
     row_created_timestamp: str
 
+
 class GrocyProductGroup(TypedDict):
     id: int
     name: str
@@ -76,6 +77,7 @@ class GrocyProductGroup(TypedDict):
     row_created_timestamp: str
     active: int
     userfields: dict[str, Any] | None
+
 
 class GrocyProduct(TypedDict):
     id: int

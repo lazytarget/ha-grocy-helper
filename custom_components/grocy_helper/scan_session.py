@@ -38,7 +38,18 @@ from typing import Any
 
 from .barcodebuddyapi import BarcodeBuddyAPI
 from .coordinator import GrocyHelperCoordinator
-from .const import CONF_DEFAULT_LOCATION_FREEZER, CONF_DEFAULT_LOCATION_FRIDGE, CONF_DEFAULT_LOCATION_RECIPE_RESULT, CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT, CONF_ENABLE_AUTO_PRINT, CONF_ENABLE_CALORIES, CONF_ENABLE_PRICES, CONF_ENABLE_PRINTING, CONF_ENABLE_SHOPPING_LOCATIONS, SCAN_MODE
+from .const import (
+    CONF_DEFAULT_LOCATION_FREEZER,
+    CONF_DEFAULT_LOCATION_FRIDGE,
+    CONF_DEFAULT_LOCATION_RECIPE_RESULT,
+    CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT,
+    CONF_ENABLE_AUTO_PRINT,
+    CONF_ENABLE_CALORIES,
+    CONF_ENABLE_PRICES,
+    CONF_ENABLE_PRINTING,
+    CONF_ENABLE_SHOPPING_LOCATIONS,
+    SCAN_MODE,
+)
 from .grocytypes import (
     BarcodeLookup,
     ExtendedGrocyProductStockInfo,
@@ -71,6 +82,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 RECIPE_PRODUCT_NAME_PREFIX = "Matlåda: "
+
 
 class ScanSession:
     """Framework-agnostic barcode scanning workflow session.
@@ -115,23 +127,37 @@ class ScanSession:
         self._state = ScanStateManager(self._api_grocy, self._coordinator)
 
         self.scan_option_defaults = {
-            CONF_ENABLE_PRINTING: bool(config_entry_data.get(CONF_ENABLE_PRINTING, False)),
-            CONF_ENABLE_AUTO_PRINT: bool(config_entry_data.get(CONF_ENABLE_AUTO_PRINT, False)),
+            CONF_ENABLE_PRINTING: bool(
+                config_entry_data.get(CONF_ENABLE_PRINTING, False)
+            ),
+            CONF_ENABLE_AUTO_PRINT: bool(
+                config_entry_data.get(CONF_ENABLE_AUTO_PRINT, False)
+            ),
             CONF_ENABLE_PRICES: bool(config_entry_data.get(CONF_ENABLE_PRICES, True)),
-            CONF_ENABLE_SHOPPING_LOCATIONS: bool(config_entry_data.get(CONF_ENABLE_SHOPPING_LOCATIONS, True)),
-            CONF_ENABLE_CALORIES: bool(config_entry_data.get(CONF_ENABLE_CALORIES, True)),
+            CONF_ENABLE_SHOPPING_LOCATIONS: bool(
+                config_entry_data.get(CONF_ENABLE_SHOPPING_LOCATIONS, True)
+            ),
+            CONF_ENABLE_CALORIES: bool(
+                config_entry_data.get(CONF_ENABLE_CALORIES, True)
+            ),
             "input_product_details_during_provision": True,
             # TODO: Enable detailed Barcode details; defaults for: [shopping_location_id, qu_id, amount] for specific Barcode
             # Whether the "add_product_barcode" form should be shown for manual input during the creation of a recipe produced product.
             "show_add_product_barcode_form_for_recipe_product": False,
             # The values can be pre-filled during the generation of a recipe produced product
             "locations": {
-                "default_fridge": parse_int(config_entry_data.get(CONF_DEFAULT_LOCATION_FRIDGE)),
-                "default_freezer": parse_int(config_entry_data.get(CONF_DEFAULT_LOCATION_FREEZER)),
+                "default_fridge": parse_int(
+                    config_entry_data.get(CONF_DEFAULT_LOCATION_FRIDGE)
+                ),
+                "default_freezer": parse_int(
+                    config_entry_data.get(CONF_DEFAULT_LOCATION_FREEZER)
+                ),
             },
             "product_groups": {
                 # "Färdiglagat"
-                "default_for_recipe_products": parse_int(config_entry_data.get(CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT)),
+                "default_for_recipe_products": parse_int(
+                    config_entry_data.get(CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT)
+                ),
             },
             # TODO: Add units? or still use "known_qu"
             "defaults_for_product": {
@@ -139,7 +165,9 @@ class ScanSession:
                 # "default_best_before_days_after_open": 3,
             },
             "defaults_for_recipe_product": {
-                "location_id": parse_int(config_entry_data.get(CONF_DEFAULT_LOCATION_RECIPE_RESULT)),
+                "location_id": parse_int(
+                    config_entry_data.get(CONF_DEFAULT_LOCATION_RECIPE_RESULT)
+                ),
                 "should_not_be_frozen": False,
                 "default_best_before_days": 3,
                 "default_best_before_days_after_open": 1,
@@ -406,7 +434,7 @@ class ScanSession:
         # Supports both:
         # - Regular space-separated barcodes: "123 456" -> ["123", "456"]
         # - Angle-bracket-wrapped barcodes with spaces: "<123|n:test> <456>" -> ["123|n:test", "456"]
-        pattern = r'<([^>]+)>|(\S+)'
+        pattern = r"<([^>]+)>|(\S+)"
         matches = re.findall(pattern, barcodes_input)
         self.barcode_queue = [match[0] if match[0] else match[1] for match in matches]
         _LOGGER.info("Parsed barcode queue: %s", self.barcode_queue)
@@ -1001,8 +1029,11 @@ class ScanSession:
         # First render - show form
         if user_input is None:
             return self._show_create_recipe_form(
-                suggestions={**new_recipe, "print": self.scan_options.get(CONF_ENABLE_AUTO_PRINT, False)},
-                printing_enabled=enable_printing
+                suggestions={
+                    **new_recipe,
+                    "print": self.scan_options.get(CONF_ENABLE_AUTO_PRINT, False),
+                },
+                printing_enabled=enable_printing,
             )
 
         # ── process submitted form ──────────────────────────────────
@@ -1121,10 +1152,10 @@ class ScanSession:
 
     def _parse_structured_barcode(self, barcode_str: str) -> dict[str, Any]:
         """Parse structured barcode format into a dictionary.
-        
+
         Parses strings like:
         "3392590205420|q:2|u:st|p:25.0|s:50.0|n:Pizza Surdeg"
-        
+
         Into:
         {
             "barcode": "3392590205420",
@@ -1134,13 +1165,13 @@ class ScanSession:
             "s": "50.0",
             "n": "Pizza Surdeg"
         }
-        
+
         Parameters
         ----------
         barcode_str:
             The barcode string to parse. Can be simple ("123456"), multiple ("123 456") or
             structured ("<123456|q:1|u:st|p:10.0|n:Product Name>")
-        
+
         Returns
         -------
         dict
@@ -1148,13 +1179,13 @@ class ScanSession:
             For simple barcodes, only "barcode" key is present.
             For structured barcodes, includes all key:value pairs found.
         """
-        parts = barcode_str.split('|')
+        parts = barcode_str.split("|")
         result = {"barcode": parts[0]}
 
         # Parse key:value pairs from remaining parts
         for part in parts[1:]:
-            if ':' in part:
-                key, value = part.split(':', 1)  # Split on first ':' only
+            if ":" in part:
+                key, value = part.split(":", 1)  # Split on first ':' only
                 if value:
                     result[key] = value.strip()
 
@@ -1187,14 +1218,21 @@ class ScanSession:
         _LOGGER.debug("PGs: %s", groups)
         if lookup_categories := (off.get("categories") or []):
             # If OpenFoodFacts data has categories, try to match them to active product groups in Grocy
-            _LOGGER.debug("Trying to match OpenFoodFacts categories '%s' to product groups...", lookup_categories)
+            _LOGGER.debug(
+                "Trying to match OpenFoodFacts categories '%s' to product groups...",
+                lookup_categories,
+            )
             for pg in groups:
                 if pg.get("active") != 1:
                     continue
-                group_categories = (pg.get("userfields") or {}).get("off_categories") or ""
+                group_categories = (pg.get("userfields") or {}).get(
+                    "off_categories"
+                ) or ""
                 if not group_categories:
                     continue
-                group_categories = [c.strip() for c in group_categories.split(",") if c.strip()]
+                group_categories = [
+                    c.strip() for c in group_categories.split(",") if c.strip()
+                ]
                 if any(x in group_categories for x in lookup_categories):
                     return pg
 
@@ -1272,7 +1310,7 @@ class ScanSession:
                 "barcode": self.current_barcode,
                 "product_aliases": "\n".join([f"- {a.strip()}" for a in aliases if a]),
                 "lookup_output": self._format_lookup_output(),
-                "name_description": f"Can be prefixed with \"{RECIPE_PRODUCT_NAME_PREFIX}\" for easier identification of cooked products",
+                "name_description": f'Can be prefixed with "{RECIPE_PRODUCT_NAME_PREFIX}" for easier identification of cooked products',
             },
             errors=errors,
         )
@@ -1496,7 +1534,7 @@ class ScanSession:
             try:
                 await self._state.load_product_by_barcode(code)
                 _LOGGER.info("Product lookup: %s", self.current_product_stock_info)
-                
+
                 lookup = await self._state.load_lookup(code)
                 _LOGGER.info("Barcode lookup: %s", lookup)
             except Exception as ex:
@@ -1851,11 +1889,14 @@ class ScanSession:
 
                 _LOGGER.info(
                     "Recipe #%s fulfillment — costs: %s, calories: %s",
-                    recipe["id"], recipe_cost, fulfillment_calories,
+                    recipe["id"],
+                    recipe_cost,
+                    fulfillment_calories,
                 )
             except Exception:
                 _LOGGER.warning(
-                    "Could not fetch recipe fulfillment for #%s", recipe["id"],
+                    "Could not fetch recipe fulfillment for #%s",
+                    recipe["id"],
                     exc_info=True,
                 )
 
@@ -1884,8 +1925,7 @@ class ScanSession:
                 description_placeholders={
                     "name": product.get("name"),
                     "recipe_info": (
-                        f"## Produce: {recipe['name']}\n"
-                        f"Base servings: {base_servings}"
+                        f"## Produce: {recipe['name']}\nBase servings: {base_servings}"
                     ),
                 },
                 errors=errors,
@@ -1922,15 +1962,17 @@ class ScanSession:
             )
 
         # ── Stash submitted values and go to confirmation ───────────
-        self._produce_input.update({
-            "produce_consume_ingredients": bool(
-                user_input.get("produce_consume_ingredients", True)
-            ),
-            "produce_servings": produce_servings,
-            "produce_amount": produce_amount,
-            "produce_location_id": int(user_input["produce_location_id"]),
-            "produce_price": user_input.get("produce_price"),
-        })
+        self._produce_input.update(
+            {
+                "produce_consume_ingredients": bool(
+                    user_input.get("produce_consume_ingredients", True)
+                ),
+                "produce_servings": produce_servings,
+                "produce_amount": produce_amount,
+                "produce_location_id": int(user_input["produce_location_id"]),
+                "produce_price": user_input.get("produce_price"),
+            }
+        )
         return await self._step_produce_confirm(user_input=None)
 
     # ── produce_confirm ──────────────────────────────────────────────
@@ -1966,7 +2008,9 @@ class ScanSession:
             # TODO: Validate
             try:
                 total = float(produce_price_total_str)
-                price_per_serving = round(total / produce_servings, 2) if produce_servings > 0 else None
+                price_per_serving = (
+                    round(total / produce_servings, 2) if produce_servings > 0 else None
+                )
                 if price_per_serving is not None:
                     price_per_serving_str = f"{price_per_serving}"
             except (ValueError, ZeroDivisionError):
@@ -2000,7 +2044,7 @@ class ScanSession:
 
         enable_printing = self.scan_options.get(CONF_ENABLE_PRINTING, False)
         auto_print = self.scan_options.get(CONF_ENABLE_AUTO_PRINT, False)
-        default_stock_label_type = product.get('default_stock_label_type')
+        default_stock_label_type = product.get("default_stock_label_type")
         # if enable_printing and auto_print and default_stock_label_type in [1, 2]:
         #     if user_input is None:
         #         _LOGGER.info(
@@ -2068,9 +2112,7 @@ class ScanSession:
                         recipe["id"], {"desired_servings": produce_servings}
                     )
 
-                positions = await self._api_grocy.get_recipes_pos_resolved(
-                    recipe["id"]
-                )
+                positions = await self._api_grocy.get_recipes_pos_resolved(recipe["id"])
                 consumed_count = 0
                 for pos in positions:
                     # Skip positions that are check-only or have no stock
@@ -2098,8 +2140,7 @@ class ScanSession:
                         consumed_count += 1
                     except Exception:
                         _LOGGER.warning(
-                            "Failed to consume ingredient product #%s "
-                            "(%.2f of %.2f)",
+                            "Failed to consume ingredient product #%s (%.2f of %.2f)",
                             pos.get("product_id"),
                             amount_to_consume,
                             ingredient_amount,
@@ -2107,8 +2148,7 @@ class ScanSession:
                         )
 
                 _LOGGER.info(
-                    "Consumed %d/%d ingredient positions for recipe #%s "
-                    "(%d servings)",
+                    "Consumed %d/%d ingredient positions for recipe #%s (%d servings)",
                     consumed_count,
                     len(positions),
                     recipe["id"],
@@ -2153,7 +2193,9 @@ class ScanSession:
                 "note": recipe["name"],
             }
             if should_print:
-                stock_data["stock_label_type"] = 2  # Tell Grocy to print a "Label per unit"
+                stock_data["stock_label_type"] = (
+                    2  # Tell Grocy to print a "Label per unit"
+                )
             if price_per_serving is not None:
                 stock_data["price"] = price_per_serving
             if best_before_date:
@@ -2169,7 +2211,9 @@ class ScanSession:
                     created_count = produce_amount
                 _LOGGER.info(
                     "Created %d stock entries for product #%s: %s",
-                    created_count, product_id, response,
+                    created_count,
+                    product_id,
+                    response,
                 )
             except Exception:
                 _LOGGER.error(
@@ -2308,7 +2352,7 @@ class ScanSession:
             # if self.scan_options.get(CONF_ENABLE_PRINTING) and self.scan_options.get(CONF_ENABLE_AUTO_PRINT):
             #     # Print the label for the newly added stock entry
             #     request["stock_label_type"] = 2  # Tell Grocy to print a "Label per unit"
-            
+
             product_id = self.current_product_stock_info["product"]["id"]
             request.pop("barcode", None)  # Instead go by ´product_id´
             response = await self._coordinator.add_stock(product_id, request)
@@ -2330,7 +2374,9 @@ class ScanSession:
             self.barcode_results.append(str(response))
 
         # Mark queue item as resolved if processing from Handle Queue
-        await self._mark_queue_item_resolved(barcode, str(response) if response else "OK")
+        await self._mark_queue_item_resolved(
+            barcode, str(response) if response else "OK"
+        )
 
         # Re-run process method until queue is empty...
         return await self._step_scan_queue()
@@ -2345,11 +2391,15 @@ class ScanSession:
             fields=cached,
             errors=errors,
             description_placeholders={
-                "name": self.current_product.get("name") if self.current_product else self.current_barcode,
+                "name": self.current_product.get("name")
+                if self.current_product
+                else self.current_barcode,
                 "recipe_info": (
                     f"## Produce: {self.current_recipe['name']}\n"
                     f"Base servings: {self.current_recipe['base_servings']}"
-                ) if self.current_recipe else '',
+                )
+                if self.current_recipe
+                else "",
             },
         )
 

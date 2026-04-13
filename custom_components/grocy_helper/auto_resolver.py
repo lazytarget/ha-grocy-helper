@@ -85,7 +85,10 @@ async def async_try_auto_resolve(
         # (no preliminary None call needed for headless operation).
         result: StepResult = await session.handle_step(
             Step.SCAN_START,
-            {"barcodes": barcode, "mode": mode.value if isinstance(mode, SCAN_MODE) else str(mode)},
+            {
+                "barcodes": barcode,
+                "mode": mode.value if isinstance(mode, SCAN_MODE) else str(mode),
+            },
         )
 
         # ── Product config quality gate ─────────────────────────────
@@ -121,9 +124,7 @@ async def async_try_auto_resolve(
             if isinstance(result, FormRequest):
                 # Error re-display: the previous submission failed
                 if result.errors:
-                    error_msg = "; ".join(
-                        f"{k}: {v}" for k, v in result.errors.items()
-                    )
+                    error_msg = "; ".join(f"{k}: {v}" for k, v in result.errors.items())
                     _LOGGER.info(
                         "Auto-resolve failed: form returned with errors: %s",
                         error_msg,
@@ -155,19 +156,13 @@ async def async_try_auto_resolve(
                         if f.suggested_value is not None and f.default is None
                     ]
                     missing = [
-                        f.key
-                        for f in result.fields
-                        if f.required and f.default is None
+                        f.key for f in result.fields if f.required and f.default is None
                     ]
                     reason_parts: list[str] = []
                     if needs_review:
-                        reason_parts.append(
-                            f"Fields need review: {needs_review}"
-                        )
+                        reason_parts.append(f"Fields need review: {needs_review}")
                     if missing:
-                        reason_parts.append(
-                            f"Missing defaults for fields: {missing}"
-                        )
+                        reason_parts.append(f"Missing defaults for fields: {missing}")
                     reason = "; ".join(reason_parts) or "Cannot auto-fill form"
                     _LOGGER.info(
                         "Auto-resolve needs manual: %s",
@@ -253,8 +248,6 @@ def _validate_product_config(product: dict) -> list[str]:
 
     bb_freeze = product.get("default_best_before_days_after_freezing", 0)
     if bb_freeze == 0:
-        issues.append(
-            "default_best_before_days_after_freezing is 0 — not configured"
-        )
+        issues.append("default_best_before_days_after_freezing is 0 — not configured")
 
     return issues

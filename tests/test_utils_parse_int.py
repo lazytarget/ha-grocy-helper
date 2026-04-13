@@ -15,11 +15,9 @@ def test_parse_int_returns_parsed_value_for_valid_input():
     assert parse_int("42") == 42
 
 
-
 def test_parse_int_returns_default_for_invalid_input():
     """Invalid value should return provided default."""
     assert parse_int("abc", default=7) == 7
-
 
 
 def test_parse_int_returns_default_for_none_input():
@@ -27,11 +25,9 @@ def test_parse_int_returns_default_for_none_input():
     assert parse_int(None, default=9) == 9
 
 
-
 def test_parse_int_returns_default_for_empty_string():
     """Empty string should be treated as invalid and return default."""
     assert parse_int("", default=3) == 3
-
 
 
 def test_parse_int_raise_errors_true_propagates_value_error():
@@ -48,11 +44,9 @@ def test_try_parse_int_returns_success_tuple_for_valid_input():
     assert try_parse_int("123") == (True, 123)
 
 
-
 def test_try_parse_int_accepts_whitespace_wrapped_integer():
     """Whitespace around digits should still parse as int."""
     assert try_parse_int(" 5 ") == (True, 5)
-
 
 
 def test_try_parse_int_returns_failure_tuple_for_invalid_string():
@@ -60,11 +54,9 @@ def test_try_parse_int_returns_failure_tuple_for_invalid_string():
     assert try_parse_int("abc") == (False, 0)
 
 
-
 def test_try_parse_int_returns_failure_tuple_for_none():
     """None should return (False, 0)."""
     assert try_parse_int(None) == (False, 0)
-
 
 
 def test_try_parse_int_returns_failure_tuple_for_empty_string():

@@ -151,7 +151,10 @@ class GrocyAPI:
         response = await async_get(self._session, url, self._api_key, params=params)
         if response and isinstance(response, list) and len(response) > 0:
             if len(response) > 1:
-                raise ApiException(400, f"Multiple stock entries found for stock_id {stock_id}: {response}")
+                raise ApiException(
+                    400,
+                    f"Multiple stock entries found for stock_id {stock_id}: {response}",
+                )
             return response[0]
         return None
 
