@@ -11,7 +11,11 @@ from custom_components.grocy_helper.auto_resolver import (
     async_try_auto_resolve,
     _validate_product_config,
 )
-from custom_components.grocy_helper.const import CONF_ENABLE_PRICES, CONF_ENABLE_SHOPPING_LOCATIONS, SCAN_MODE
+from custom_components.grocy_helper.const import (
+    CONF_ENABLE_PRICES,
+    CONF_ENABLE_SHOPPING_LOCATIONS,
+    SCAN_MODE,
+)
 
 from tests.conftest import (
     FakeBarcodeBuddyAPI,
@@ -390,7 +394,8 @@ async def test_auto_resolve_rejects_after_freezing_zero():
     coordinator = FakeCoordinator(grocy_api=grocy_api, bbuddy_api=bbuddy_api)
 
     product = make_product(
-        id=42, name="Chicken",
+        id=42,
+        name="Chicken",
         default_best_before_days=5,
         default_best_before_days_after_freezing=0,
     )
@@ -417,7 +422,8 @@ async def test_auto_resolve_accepts_never_expires():
     coordinator = FakeCoordinator(grocy_api=grocy_api, bbuddy_api=bbuddy_api)
 
     product = make_product(
-        id=42, name="Salt",
+        id=42,
+        name="Salt",
         default_best_before_days=-1,
         default_best_before_days_after_freezing=-1,
     )
@@ -442,7 +448,8 @@ async def test_auto_resolve_accepts_after_open_zero():
     coordinator = FakeCoordinator(grocy_api=grocy_api, bbuddy_api=bbuddy_api)
 
     product = make_product(
-        id=42, name="Pasta",
+        id=42,
+        name="Pasta",
         default_best_before_days=365,
         default_best_before_days_after_open=0,
         default_best_before_days_after_freezing=90,

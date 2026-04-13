@@ -64,9 +64,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     bbuddy_api_url = entry.data.get(CONF_BBUDDY_API_URL)
     if bbuddy_api_url and (bbuddy_api_key := entry.data.get(CONF_BBUDDY_API_KEY)):
         bbuddy = BarcodeBuddyAPI(
-                bbuddy_api_url,
-                ["BBUDDY-API-KEY", bbuddy_api_key],
-                websession,
+            bbuddy_api_url,
+            ["BBUDDY-API-KEY", bbuddy_api_key],
+            websession,
         )
     else:
         bbuddy = BarcodeBuddyAPI_Fake()
@@ -131,21 +131,15 @@ def _build_webhook_handler(coordinator: GrocyHelperCoordinator):
         try:
             data = await request.json()
         except Exception:
-            return web.json_response(
-                {"error": "Invalid JSON"}, status=400
-            )
+            return web.json_response({"error": "Invalid JSON"}, status=400)
 
         try:
             results = await process_webhook_payload(coordinator.queue, data)
         except WebhookError as err:
-            return web.json_response(
-                {"error": str(err)}, status=400
-            )
+            return web.json_response({"error": str(err)}, status=400)
         except Exception:
             _LOGGER.exception("Unexpected error processing webhook")
-            return web.json_response(
-                {"error": "Internal error"}, status=500
-            )
+            return web.json_response({"error": "Internal error"}, status=500)
 
         # Attempt auto-resolve for each queued item
         for item_result in results:
@@ -165,9 +159,7 @@ def _build_webhook_handler(coordinator: GrocyHelperCoordinator):
                         resolve_result.result_text or "auto-resolved",
                     )
                     item_result.status = "auto_resolved"
-                    _LOGGER.info(
-                        "Auto-resolved barcode %s", item_result.barcode
-                    )
+                    _LOGGER.info("Auto-resolved barcode %s", item_result.barcode)
                 elif resolve_result.needs_manual:
                     _LOGGER.info(
                         "Barcode %s needs manual processing: %s",

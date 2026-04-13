@@ -10,7 +10,19 @@ from __future__ import annotations
 from typing import Any
 
 from .coordinator import GrocyHelperCoordinator
-from .const import CONF_DEFAULT_LOCATION_FREEZER, CONF_DEFAULT_LOCATION_FRIDGE, CONF_DEFAULT_LOCATION_RECIPE_RESULT, CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT, CONF_ENABLE_AUTO_PRINT, CONF_ENABLE_CALORIES, CONF_ENABLE_PRICES, CONF_ENABLE_PRINTING, CONF_ENABLE_SHOPPING_LOCATIONS, DEV_CONST, SCAN_MODE
+from .const import (
+    CONF_DEFAULT_LOCATION_FREEZER,
+    CONF_DEFAULT_LOCATION_FRIDGE,
+    CONF_DEFAULT_LOCATION_RECIPE_RESULT,
+    CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT,
+    CONF_ENABLE_AUTO_PRINT,
+    CONF_ENABLE_CALORIES,
+    CONF_ENABLE_PRICES,
+    CONF_ENABLE_PRINTING,
+    CONF_ENABLE_SHOPPING_LOCATIONS,
+    DEV_CONST,
+    SCAN_MODE,
+)
 from .grocytypes import GrocyMasterData, GrocyProduct
 from .scan_types import FieldType, FormField, NumberMode, SelectMode, SelectOption
 
@@ -237,9 +249,7 @@ class ScanFormBuilder:
                         key="treat_opened_as_out_of_stock",
                         field_type=FieldType.BOOLEAN,
                         required=False,
-                        default=suggested.get(
-                            "treat_opened_as_out_of_stock", False
-                        ),
+                        default=suggested.get("treat_opened_as_out_of_stock", False),
                     ),
                     FormField(
                         key="default_best_before_days",
@@ -577,13 +587,15 @@ class ScanFormBuilder:
             )
         ]
         if printing_enabled:
-            fields.append(FormField(
-                key="print",
-                field_type=FieldType.BOOLEAN,
-                required=False,
-                default=False,
-                suggested_value=suggestions.get("print", False),
-            ))
+            fields.append(
+                FormField(
+                    key="print",
+                    field_type=FieldType.BOOLEAN,
+                    required=False,
+                    default=False,
+                    suggested_value=suggestions.get("print", False),
+                )
+            )
         return fields
 
     def build_scan_process_fields(
@@ -605,7 +617,11 @@ class ScanFormBuilder:
         masterdata = self._masterdata
         fields: list[FormField] = []
 
-        if price is None and scan_options.get(CONF_ENABLE_PRICES, True) and not current_recipe:
+        if (
+            price is None
+            and scan_options.get(CONF_ENABLE_PRICES, True)
+            and not current_recipe
+        ):
             fields.append(
                 FormField(
                     key="price",
@@ -615,11 +631,7 @@ class ScanFormBuilder:
                 ),
             )
 
-        bb_str = (
-            str(best_before_in_days)
-            if best_before_in_days is not None
-            else None
-        )
+        bb_str = str(best_before_in_days) if best_before_in_days is not None else None
         # default is only set when the value is trustworthy:
         # >0 = configured days, -1 = never expires.
         # 0 = "expires today" (Grocy default) — suspicious, needs review.
@@ -669,9 +681,7 @@ class ScanFormBuilder:
                     ),
                 )
 
-            sl_value = (
-                str(shopping_location_id) if shopping_location_id else None
-            )
+            sl_value = str(shopping_location_id) if shopping_location_id else None
             fields.append(
                 FormField(
                     key="shopping_location_id",
@@ -762,7 +772,9 @@ class ScanFormBuilder:
                     key="produce_price",
                     field_type=FieldType.TEXT,
                     required=False,
-                    suggested_value=str(round(recipe_cost, 2)) if recipe_cost > 0 else None,
+                    suggested_value=str(round(recipe_cost, 2))
+                    if recipe_cost > 0
+                    else None,
                 ),
             )
 
@@ -808,8 +820,10 @@ class ScanFormBuilder:
                     key=CONF_DEFAULT_LOCATION_FRIDGE,
                     field_type=FieldType.SELECT,
                     required=False,
-                    default=None, # Allow for clearing the value
-                    suggested_value=self._str_val(suggested.get(CONF_DEFAULT_LOCATION_FRIDGE)),
+                    default=None,  # Allow for clearing the value
+                    suggested_value=self._str_val(
+                        suggested.get(CONF_DEFAULT_LOCATION_FRIDGE)
+                    ),
                     options=loc_options,
                     select_mode=SelectMode.DROPDOWN,
                     multiple=False,
@@ -819,8 +833,10 @@ class ScanFormBuilder:
                     key=CONF_DEFAULT_LOCATION_FREEZER,
                     field_type=FieldType.SELECT,
                     required=False,
-                    default=None, # Allow for clearing the value
-                    suggested_value=self._str_val(suggested.get(CONF_DEFAULT_LOCATION_FREEZER)),
+                    default=None,  # Allow for clearing the value
+                    suggested_value=self._str_val(
+                        suggested.get(CONF_DEFAULT_LOCATION_FREEZER)
+                    ),
                     options=loc_options,
                     select_mode=SelectMode.DROPDOWN,
                     multiple=False,
@@ -830,8 +846,10 @@ class ScanFormBuilder:
                     key=CONF_DEFAULT_LOCATION_RECIPE_RESULT,
                     field_type=FieldType.SELECT,
                     required=False,
-                    default=None, # Allow for clearing the value
-                    suggested_value=self._str_val(suggested.get(CONF_DEFAULT_LOCATION_RECIPE_RESULT)),
+                    default=None,  # Allow for clearing the value
+                    suggested_value=self._str_val(
+                        suggested.get(CONF_DEFAULT_LOCATION_RECIPE_RESULT)
+                    ),
                     options=loc_options,
                     select_mode=SelectMode.DROPDOWN,
                     multiple=False,
@@ -841,8 +859,10 @@ class ScanFormBuilder:
                     key=CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT,
                     field_type=FieldType.SELECT,
                     required=False,
-                    default=None, # Allow for clearing the value
-                    suggested_value=self._str_val(suggested.get(CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT)),
+                    default=None,  # Allow for clearing the value
+                    suggested_value=self._str_val(
+                        suggested.get(CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT)
+                    ),
                     options=product_group_options,
                     select_mode=SelectMode.DROPDOWN,
                     multiple=False,
@@ -852,35 +872,35 @@ class ScanFormBuilder:
                     key=CONF_ENABLE_PRINTING,
                     field_type=FieldType.BOOLEAN,
                     required=False,
-                    default=None, # Allow for clearing the value
+                    default=None,  # Allow for clearing the value
                     suggested_value=suggested.get(CONF_ENABLE_PRINTING),
                 ),
                 FormField(
                     key=CONF_ENABLE_AUTO_PRINT,
                     field_type=FieldType.BOOLEAN,
                     required=False,
-                    default=None, # Allow for clearing the value
+                    default=None,  # Allow for clearing the value
                     suggested_value=suggested.get(CONF_ENABLE_AUTO_PRINT),
                 ),
                 FormField(
                     key=CONF_ENABLE_PRICES,
                     field_type=FieldType.BOOLEAN,
                     required=False,
-                    default=None, # Allow for clearing the value
+                    default=None,  # Allow for clearing the value
                     suggested_value=suggested.get(CONF_ENABLE_PRICES, True),
                 ),
                 FormField(
                     key=CONF_ENABLE_SHOPPING_LOCATIONS,
                     field_type=FieldType.BOOLEAN,
                     required=False,
-                    default=None, # Allow for clearing the value
+                    default=None,  # Allow for clearing the value
                     suggested_value=suggested.get(CONF_ENABLE_SHOPPING_LOCATIONS, True),
                 ),
                 FormField(
                     key=CONF_ENABLE_CALORIES,
                     field_type=FieldType.BOOLEAN,
                     required=False,
-                    default=None, # Allow for clearing the value
+                    default=None,  # Allow for clearing the value
                     suggested_value=suggested.get(CONF_ENABLE_CALORIES),
                 ),
             ]

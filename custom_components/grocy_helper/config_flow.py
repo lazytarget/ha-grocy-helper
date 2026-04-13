@@ -144,7 +144,7 @@ class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Handle the reconfigure step."""
         # if self._async_current_entries():
         #     return self.async_abort(reason="single_instance_allowed")
-        
+
         config_entry = self._get_reconfigure_entry()
 
         errors: dict[str, str] = {}
@@ -171,18 +171,29 @@ class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             new_config_entry_data[CONF_BBUDDY_API_URL] = bbuddy_url
             new_config_entry_data[CONF_BBUDDY_API_KEY] = bbuddy_api_key
 
-            has_diffs = any(config_entry.data.get(k) != new_config_entry_data.get(k) for k in new_config_entry_data.keys())
+            has_diffs = any(
+                config_entry.data.get(k) != new_config_entry_data.get(k)
+                for k in new_config_entry_data.keys()
+            )
             if has_diffs:
-                _LOGGER.info("API credentials changed during reconfigure. Updating config entry with new credentials: %s -> %s", config_entry.data, new_config_entry_data)
+                _LOGGER.info(
+                    "API credentials changed during reconfigure. Updating config entry with new credentials: %s -> %s",
+                    config_entry.data,
+                    new_config_entry_data,
+                )
                 # Persist changed Grocy API credentials and exit
                 return self.async_update_reload_and_abort(
                     config_entry,
                     data_updates=new_config_entry_data,
                 )
             else:
-                _LOGGER.info("No changes to API credentials detected during reconfigure. Edit scan options instead.")
+                _LOGGER.info(
+                    "No changes to API credentials detected during reconfigure. Edit scan options instead."
+                )
                 # Instead show the scan options form, as no changes to the API credentials were made
-                return await self.async_step_reconfigure(user_input=None, edit_options=True)
+                return await self.async_step_reconfigure(
+                    user_input=None, edit_options=True
+                )
         elif user_input is not None and edit_options:
             # Submitted scan options
             user_input = transform_input(
@@ -190,10 +201,10 @@ class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 persisted=None,
                 # if the following fields are None, then fallback to these values...
                 suggested={
-                    CONF_DEFAULT_LOCATION_FRIDGE: '',
-                    CONF_DEFAULT_LOCATION_FREEZER: '',
-                    CONF_DEFAULT_LOCATION_RECIPE_RESULT: '',
-                    CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT: '',
+                    CONF_DEFAULT_LOCATION_FRIDGE: "",
+                    CONF_DEFAULT_LOCATION_FREEZER: "",
+                    CONF_DEFAULT_LOCATION_RECIPE_RESULT: "",
+                    CONF_DEFAULT_PRODUCT_GROUP_FOR_RECIPE_RESULT: "",
                     CONF_ENABLE_PRINTING: False,
                     CONF_ENABLE_AUTO_PRINT: False,
                     CONF_ENABLE_PRICES: True,
@@ -210,7 +221,12 @@ class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 suggested=None,
                 str_keys=[],
             )
-            _LOGGER.info("Updating config entry with new scan options: %s + %s -> %s", config_entry.data, user_input, new_config_entry_data)
+            _LOGGER.info(
+                "Updating config entry with new scan options: %s + %s -> %s",
+                config_entry.data,
+                user_input,
+                new_config_entry_data,
+            )
             return self.async_update_reload_and_abort(
                 config_entry,
                 data_updates=new_config_entry_data,
@@ -238,9 +254,7 @@ class GrocyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
         schema = STEP_USER_DATA_SCHEMA
-        schema = self.add_suggested_values_to_schema(
-            schema, config_entry.data
-        )
+        schema = self.add_suggested_values_to_schema(schema, config_entry.data)
         return self.async_show_form(
             step_id="reconfigure",
             data_schema=schema,
@@ -313,10 +327,16 @@ class GrocyOptionsFlowHandler(OptionsFlow):
             return self.async_abort(reason="No operation chosen")
 
         pending_count, failed_count = self._get_queue_counts(self._session._coordinator)
-        handle_queue_label = f"Handle Queue ({pending_count} pending / {failed_count} failed)"
+        handle_queue_label = (
+            f"Handle Queue ({pending_count} pending / {failed_count} failed)"
+        )
         menu_options = [
-            selector.SelectOptionDict(value=Step.SCAN_START.value, label="Scan barcodes"),
-            selector.SelectOptionDict(value=Step.HANDLE_QUEUE.value, label=handle_queue_label),
+            selector.SelectOptionDict(
+                value=Step.SCAN_START.value, label="Scan barcodes"
+            ),
+            selector.SelectOptionDict(
+                value=Step.HANDLE_QUEUE.value, label=handle_queue_label
+            ),
         ]
 
         schema = vol.Schema(

@@ -39,9 +39,7 @@ def test_parse_single_barcode_string():
 
 def test_parse_multiple_barcodes_array():
     """Multiple barcodes as array."""
-    result = parse_webhook_payload(
-        {"barcode": ["1234567890123", "9876543210987"]}
-    )
+    result = parse_webhook_payload({"barcode": ["1234567890123", "9876543210987"]})
     assert result.barcodes == ["1234567890123", "9876543210987"]
 
 
@@ -61,9 +59,7 @@ def test_parse_mixed_array_structured_and_plain():
 
 def test_parse_with_explicit_mode():
     """Explicit mode in payload."""
-    result = parse_webhook_payload(
-        {"barcode": "1234567890123", "mode": "BBUDDY-P"}
-    )
+    result = parse_webhook_payload({"barcode": "1234567890123", "mode": "BBUDDY-P"})
     assert result.mode == "BBUDDY-P"
 
 
@@ -112,9 +108,7 @@ def test_parse_invalid_mode_raises():
 async def test_process_single_barcode():
     """Single barcode is added to the queue."""
     queue = _make_queue()
-    results = await process_webhook_payload(
-        queue, {"barcode": "1234567890123"}
-    )
+    results = await process_webhook_payload(queue, {"barcode": "1234567890123"})
 
     assert len(results) == 1
     assert results[0].barcode == "1234567890123"
@@ -125,9 +119,7 @@ async def test_process_single_barcode():
 async def test_process_multiple_barcodes():
     """Multiple barcodes are all added to the queue."""
     queue = _make_queue()
-    results = await process_webhook_payload(
-        queue, {"barcode": ["111", "222", "333"]}
-    )
+    results = await process_webhook_payload(queue, {"barcode": ["111", "222", "333"]})
 
     assert len(results) == 3
     assert all(r.status == "queued" for r in results)
@@ -151,9 +143,7 @@ async def test_process_without_mode_uses_queue_current_mode():
     queue = _make_queue()
     queue._current_mode = SCAN_MODE.ADD_TO_SHOPPING_LIST
 
-    await process_webhook_payload(
-        queue, {"barcode": "111"}
-    )
+    await process_webhook_payload(queue, {"barcode": "111"})
 
     items = queue.get_pending_items()
     assert items[0].mode == SCAN_MODE.ADD_TO_SHOPPING_LIST
@@ -164,9 +154,7 @@ async def test_process_mode_barcode_switches_mode():
     queue = _make_queue()
     assert queue.current_mode == SCAN_MODE.PURCHASE
 
-    results = await process_webhook_payload(
-        queue, {"barcode": "BBUDDY-AS"}
-    )
+    results = await process_webhook_payload(queue, {"barcode": "BBUDDY-AS"})
 
     assert len(results) == 1
     assert results[0].status == "mode_switched"
@@ -215,9 +203,7 @@ async def test_process_invalid_payload_raises():
 async def test_process_returns_item_id():
     """Each queued result includes the item_id for tracking."""
     queue = _make_queue()
-    results = await process_webhook_payload(
-        queue, {"barcode": "111"}
-    )
+    results = await process_webhook_payload(queue, {"barcode": "111"})
 
     assert results[0].item_id is not None
     assert results[0].item_id == queue.get_pending_items()[0].id
@@ -260,7 +246,9 @@ def test_webhook_response_to_dict():
     """WebhookResponse serializes all results."""
     results = [
         WebhookItemResult(barcode="123", status="queued", item_id="a", mode="BBUDDY-P"),
-        WebhookItemResult(barcode="BBUDDY-AS", status="mode_switched", new_mode="BBUDDY-AS"),
+        WebhookItemResult(
+            barcode="BBUDDY-AS", status="mode_switched", new_mode="BBUDDY-AS"
+        ),
     ]
     resp = WebhookResponse(status="ok", results=results)
     d = resp.to_dict()

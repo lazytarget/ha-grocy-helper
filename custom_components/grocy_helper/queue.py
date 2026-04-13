@@ -198,9 +198,7 @@ class ScanQueue:
 
     async def async_clear_resolved(self) -> None:
         """Remove all RESOLVED items from the queue."""
-        self._items = [
-            i for i in self._items if i.status != QueueStatus.RESOLVED
-        ]
+        self._items = [i for i in self._items if i.status != QueueStatus.RESOLVED]
         await self._async_save()
 
     # ── Persistence ──────────────────────────────────────────────────

@@ -231,9 +231,7 @@ async def test_auto_resolve_response_contains_updated_statuses():
 
     request = _make_request(json_data={"barcode": "1234567890123"})
 
-    resolve_result = AutoResolveResult(
-        success=True, result_text="Done"
-    )
+    resolve_result = AutoResolveResult(success=True, result_text="Done")
     with patch(
         f"{MODULE}.async_try_auto_resolve",
         return_value=resolve_result,
@@ -242,5 +240,6 @@ async def test_auto_resolve_response_contains_updated_statuses():
 
     # Parse the response body to check status field
     import json
+
     body = json.loads(response.body)
     assert body["results"][0]["status"] == "auto_resolved"

@@ -2,12 +2,14 @@ from typing import Any, Iterable
 
 from .const import NUMERIC_FIELDS
 
+
 def parse_int(value: Any, default: int = 0, raise_errors: bool = False) -> int:
     """Parsing a value as int. If failure, then return default. Raise errors if raise_errors is True."""
     if raise_errors:
         return int(value)
     (success, parsed) = try_parse_int(value)
     return parsed if success else default
+
 
 def try_parse_int(value: Any) -> tuple[bool, int]:
     """Try parsing a value as int. Return as a tuple."""

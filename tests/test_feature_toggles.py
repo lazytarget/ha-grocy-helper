@@ -374,7 +374,9 @@ class TestPrintToggleCombinations:
         session.barcode_queue = ["grcy:r:12"]
         return session
 
-    async def test_produce_confirm_field_defaults_when_printing_and_auto_print_enabled(self):
+    async def test_produce_confirm_field_defaults_when_printing_and_auto_print_enabled(
+        self,
+    ):
         """Form includes produce_print=True default when both toggles are enabled."""
         session = self._make_produce_session(
             enable_printing=True,
@@ -389,7 +391,9 @@ class TestPrintToggleCombinations:
         assert produce_print is not None
         assert produce_print.default is True
 
-    async def test_produce_confirm_field_present_but_false_when_auto_print_disabled(self):
+    async def test_produce_confirm_field_present_but_false_when_auto_print_disabled(
+        self,
+    ):
         """Form includes produce_print field with default=False when auto-print is off."""
         session = self._make_produce_session(
             enable_printing=True,
@@ -417,7 +421,9 @@ class TestPrintToggleCombinations:
         assert result.step_id == "scan_produce_confirm"
         assert _get_field(result.fields, "produce_print") is None
 
-    async def test_produce_confirm_applies_stock_label_type_when_printing_enabled_and_selected(self):
+    async def test_produce_confirm_applies_stock_label_type_when_printing_enabled_and_selected(
+        self,
+    ):
         """Submission sets stock_label_type=2 only when printing is enabled and selected."""
         captured: dict[str, dict] = {}
 
@@ -450,9 +456,7 @@ class TestPrintToggleCombinations:
         session.barcode_queue = ["grcy:r:12"]
         session._step_scan_queue = AsyncMock(return_value=CompletedResult(summary="ok"))
 
-        result = await session._step_produce_confirm(
-            user_input={"produce_print": True}
-        )
+        result = await session._step_produce_confirm(user_input={"produce_print": True})
 
         assert isinstance(result, CompletedResult)
         assert captured["stock_data"]["stock_label_type"] == 2
@@ -530,9 +534,7 @@ class TestPrintToggleCombinations:
         session.barcode_queue = ["grcy:r:12"]
         session._step_scan_queue = AsyncMock(return_value=CompletedResult(summary="ok"))
 
-        result = await session._step_produce_confirm(
-            user_input={"produce_print": True}
-        )
+        result = await session._step_produce_confirm(user_input={"produce_print": True})
 
         assert isinstance(result, CompletedResult)
         assert "stock_label_type" not in captured["stock_data"]

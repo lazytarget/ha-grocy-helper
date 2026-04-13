@@ -38,7 +38,6 @@ def test_build_recipe_from_input_happy_path_sets_expected_fields():
     assert recipe["product_id"] == 55
 
 
-
 def test_build_recipe_from_input_defaults_optional_fields_when_missing():
     """Missing optional fields should fall back to documented defaults."""
     user_input = {
@@ -52,7 +51,6 @@ def test_build_recipe_from_input_defaults_optional_fields_when_missing():
     assert recipe["desired_servings"] == 1
     assert recipe["description"] == ""
     assert recipe["type"] == "normal"
-
 
 
 def test_build_recipe_from_input_overwrites_existing_base_values():
@@ -79,7 +77,6 @@ def test_build_recipe_from_input_overwrites_existing_base_values():
     assert recipe["desired_servings"] == 2
     assert recipe["description"] == "Spicy"
     assert recipe["type"] == "normal"
-
 
 
 def test_build_recipe_from_input_sets_timestamp_in_expected_format():

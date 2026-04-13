@@ -90,7 +90,9 @@ async def test_produce_form_includes_price_field_when_cost_available():
     recipe = make_recipe(id=7, name="Cheesecake", product_id=1, base_servings=2)
     grocy_api.register_product(product, barcodes=[])
     # Override fulfillment to return a non-zero recipe cost
-    grocy_api.get_recipe_fulfillment = AsyncMock(return_value={"costs": 8.0, "calories": 0})
+    grocy_api.get_recipe_fulfillment = AsyncMock(
+        return_value={"costs": 8.0, "calories": 0}
+    )
 
     coordinator = FakeCoordinator(
         grocy_api=grocy_api,
