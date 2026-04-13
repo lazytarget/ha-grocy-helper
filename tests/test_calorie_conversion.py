@@ -56,7 +56,9 @@ class TestCalorieConversion100g:
         )
         session._state.set_stock_info(make_stock_info(product=product, barcodes=[]))
         session._state.current_product_openfoodfacts = {
-            "nutriments": {"energy_kcal_100g": 88}
+            "product_quantity": 100,
+            "product_quantity_unit": "g",
+            "nutriments": {"energy_kcal_100g": 88},
         }
         session._step_add_product_parent = AsyncMock(
             return_value=CompletedResult(summary="ok")
@@ -200,3 +202,57 @@ class TestCalorieOptionDefault:
         )
 
         assert session.scan_options.get(CONF_ENABLE_CALORIES) is True
+
+
+class TestCalorieUnsupportedBasis:
+    """Unsupported OFF quantity bases should skip calorie updates."""
+
+    async def test_piece_unit_does_not_write_calories(self):
+        """Per-piece style quantity unit should not be converted via g/ml."""
+        grocy_api = FakeGrocyAPI()
+        bbuddy_api = FakeBarcodeBuddyAPI()
+
+        class CapturingCoordinator(FakeCoordinator):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.product_updates: list[dict] = []
+
+            async def update_product(self, product_id: int, changes: dict) -> dict:
+                self.product_updates.append(changes)
+                return {}
+
+        coordinator = CapturingCoordinator(
+            grocy_api=grocy_api,
+            bbuddy_api=bbuddy_api,
+            master_data=make_master_data(),
+        )
+
+        product = make_product(id=44, name="Chocolate Bar", qu_id=1)
+        session = ScanSession(
+            coordinator=coordinator,
+            api_bbuddy=bbuddy_api,
+            scan_options={CONF_ENABLE_CALORIES: True},
+            config_entry_data={},
+        )
+        session._state.set_stock_info(make_stock_info(product=product, barcodes=[]))
+        session._state.current_product_openfoodfacts = {
+            "product_quantity": 1,
+            "product_quantity_unit": "Piece",
+            "nutriments": {"energy_kcal_100g": 480},
+        }
+        session._step_add_product_parent = AsyncMock(
+            return_value=CompletedResult(summary="ok")
+        )
+        session._convert_quantity = AsyncMock(
+            return_value={
+                "from_amount": 1,
+                "from_qu_name": "Piece",
+                "to_amount": 50,
+                "to_qu_name": "g",
+            }
+        )
+
+        result = await session._step_update_product_details({})
+
+        assert isinstance(result, CompletedResult)
+        assert not coordinator.product_updates

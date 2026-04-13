@@ -908,7 +908,10 @@ class ScanSession:
         # Calculate calories per pack if possible
         if kcal is not None and self.scan_options.get(CONF_ENABLE_CALORIES, True):
             calories = await self._calculate_calories_per_pack(
-                product, kcal, product_quantity_unit_as_liquid
+                product,
+                kcal,
+                product_quantity_unit_as_liquid,
+                product_quantity_unit_as_weight,
             )
             if calories is not None:
                 product_updates["calories"] = calories
@@ -1809,8 +1812,15 @@ class ScanSession:
         product: dict,
         kcal: float,
         product_quantity_unit_as_liquid: bool,
+        product_quantity_unit_as_weight: bool,
     ) -> float | None:
         """Calculate calories per pack using QU conversion."""
+        if not product_quantity_unit_as_liquid and not product_quantity_unit_as_weight:
+            _LOGGER.warning(
+                "Unsupported OFF quantity basis for calorie conversion; skipping calories update."
+            )
+            return None
+
         gram_unit = self.masterdata["known_qu"].get("g")
         if product_quantity_unit_as_liquid:
             gram_unit = self.masterdata["known_qu"].get("ml")
