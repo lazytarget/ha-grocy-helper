@@ -13,16 +13,9 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from custom_components.grocy_helper import _build_webhook_handler
 from custom_components.grocy_helper.auto_resolver import AutoResolveResult
-from custom_components.grocy_helper.const import SCAN_MODE
 from custom_components.grocy_helper.queue import ScanQueue, QueueStatus
-from custom_components.grocy_helper.webhook import (
-    WebhookError,
-    WebhookItemResult,
-)
 
 from tests.conftest import FakeBarcodeBuddyAPI, FakeStore
 

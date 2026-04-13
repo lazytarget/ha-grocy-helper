@@ -399,10 +399,66 @@ async def test_load_item_missing_barcode_is_skipped(fake_store: FakeStore):
     assert len(queue._items) == 0
 
 
+async def test_load_item_missing_mode_is_skipped(fake_store: FakeStore):
+    """Item missing 'mode' field is skipped gracefully."""
+    await fake_store.async_save({
+        "current_mode": SCAN_MODE.PURCHASE.value,
+        "items": [
+            {
+                "id": "no-mode",
+                "barcode": "222",
+                # missing "mode"
+                "added_at": "2025-01-01T00:00:01+00:00",
+                "status": "pending",
+            },
+            {
+                "id": "good-item",
+                "barcode": "333",
+                "mode": SCAN_MODE.PURCHASE.value,
+                "added_at": "2025-01-01T00:00:02+00:00",
+                "status": "pending",
+            },
+        ],
+    })
+    queue = ScanQueue(store=fake_store)
+    await queue.async_load()
+
+    assert len(queue._items) == 1
+    assert queue._items[0].id == "good-item"
+
+
+async def test_load_item_missing_added_at_is_skipped(fake_store: FakeStore):
+    """Item missing 'added_at' field is skipped gracefully."""
+    await fake_store.async_save({
+        "current_mode": SCAN_MODE.PURCHASE.value,
+        "items": [
+            {
+                "id": "no-added-at",
+                "barcode": "444",
+                "mode": SCAN_MODE.PURCHASE.value,
+                # missing "added_at"
+                "status": "pending",
+            },
+            {
+                "id": "good-item",
+                "barcode": "555",
+                "mode": SCAN_MODE.PURCHASE.value,
+                "added_at": "2025-01-01T00:00:03+00:00",
+                "status": "pending",
+            },
+        ],
+    })
+    queue = ScanQueue(store=fake_store)
+    await queue.async_load()
+
+    assert len(queue._items) == 1
+    assert queue._items[0].id == "good-item"
+
+
 async def test_mark_resolved_unknown_id_is_silent(fake_store: FakeStore):
     """async_mark_resolved with an unknown item_id silently does nothing."""
     queue = ScanQueue(store=fake_store)
-    item = await queue.async_add("111")
+    _ = await queue.async_add("111")
 
     # Should not raise
     await queue.async_mark_resolved("nonexistent-id", "OK")
@@ -414,7 +470,7 @@ async def test_mark_resolved_unknown_id_is_silent(fake_store: FakeStore):
 async def test_mark_failed_unknown_id_is_silent(fake_store: FakeStore):
     """async_mark_failed with an unknown item_id silently does nothing."""
     queue = ScanQueue(store=fake_store)
-    item = await queue.async_add("111")
+    _ = await queue.async_add("111")
 
     # Should not raise
     await queue.async_mark_failed("nonexistent-id", "error msg")
@@ -461,3 +517,27 @@ async def test_store_save_failure_propagates_from_mark_resolved():
 
     with pytest.raises(OSError, match="Disk full"):
         await queue.async_mark_resolved(item.id, "OK")
+
+
+async def test_store_save_failure_propagates_from_mark_failed():
+    """If the store raises during save, async_mark_failed propagates."""
+
+    class BrokenOnSecondSave:
+        def __init__(self):
+            self._saved = 0
+
+        async def async_load(self):
+            return None
+
+        async def async_save(self, data):
+            self._saved += 1
+            if self._saved > 1:
+                raise OSError("Disk full")
+
+    import pytest
+    store = BrokenOnSecondSave()
+    queue = ScanQueue(store=store)
+    item = await queue.async_add("111")  # first save succeeds
+
+    with pytest.raises(OSError, match="Disk full"):
+        await queue.async_mark_failed(item.id, "something broke")

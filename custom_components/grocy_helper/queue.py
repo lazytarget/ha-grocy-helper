@@ -106,10 +106,11 @@ class ScanQueue:
                     result=raw.get("result"),
                     metadata=raw.get("metadata", {}),
                 )
-            except (ValueError, KeyError):
+            except (ValueError, KeyError) as exc:
                 _LOGGER.warning(
-                    "Corrupt persisted queue item (missing/invalid field); skipping: %r",
-                    raw.get("id"),
+                    "Corrupt persisted queue item (missing/invalid field); skipping: %r — %r",
+                    raw,
+                    exc,
                 )
                 continue
 

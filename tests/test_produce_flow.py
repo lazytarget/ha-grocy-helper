@@ -7,7 +7,7 @@ and ingredient consumption.
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 from custom_components.grocy_helper.scan_session import ScanSession
 from custom_components.grocy_helper.scan_types import (
