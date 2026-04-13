@@ -23,6 +23,7 @@ version-resolver:
       - "new-feature"
   patch:
     labels:
+      - "bug"
       - "bugfix"
       - "chore"
       - "ci"
@@ -86,6 +87,7 @@ autolabeler:
       - '/bug\/.+/'
       - '/bugfix\/.+/'
     title:
+      - '/fix/i'
       - '/^fix:/i'
       - '/^bug:/i'
       - '/^bugfix:/i'
@@ -97,6 +99,11 @@ autolabeler:
       - '/^feat:/i'
     body:
       - '/JIRA-[0-9]{1,4}/'
+  - label: 'refactor'
+    branch:
+      - '/^refactor\/.+/'
+    title:
+      - '/^refactor:/i'
 commitish: refs/heads/main
 template: |
   ## What's changed?
