@@ -717,7 +717,10 @@ class ScanSession:
             suggested: dict[str, Any] = {
                 "note": new_product["name"] if new_product else "",
             }
-            fields = self._form_builder.build_create_barcode_fields(suggested)
+            fields = self._form_builder.build_create_barcode_fields(
+                suggested,
+                scan_options=self.scan_options,
+            )
             aliases = self._get_aliases()
             plc = {
                 "name": new_product.get("name") if new_product else None,
@@ -739,12 +742,16 @@ class ScanSession:
             return self._cached_form
 
         # ── process ─────────────────────────────────────────────────
+        shopping_location_id = None
+        if self.scan_options.get(CONF_ENABLE_SHOPPING_LOCATIONS, True):
+            shopping_location_id = user_input.get("shopping_location_id")
+
         br: GrocyProductBarcode = {
             "barcode": code,
             "note": user_input.get("note", ""),
             "product_id": new_product["id"],
             "qu_id": user_input.get("qu_id"),
-            "shopping_location_id": user_input.get("shopping_location_id"),
+            "shopping_location_id": shopping_location_id,
             "amount": user_input.get("amount"),
             "row_created_timestamp": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }

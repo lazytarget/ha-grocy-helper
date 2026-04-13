@@ -314,7 +314,11 @@ class ScanFormBuilder:
 
         return fields
 
-    def build_create_barcode_fields(self, suggested: dict[str, Any]) -> list[FormField]:
+    def build_create_barcode_fields(
+        self,
+        suggested: dict[str, Any],
+        scan_options: dict[str, Any] | None = None,
+    ) -> list[FormField]:
         """Build fields for the create-barcode form."""
 
         masterdata = self._masterdata
@@ -327,37 +331,48 @@ class ScanFormBuilder:
         ]
         qu_options = self._qu_options()
 
-        return [
+        fields = [
             FormField(
                 key="note",
                 field_type=FieldType.TEXT,
                 required=False,
                 suggested_value=suggested.get("note"),
             ),
-            FormField(
-                key="shopping_location_id",
-                field_type=FieldType.SELECT,
-                required=False,
-                options=shop_options,
-                select_mode=SelectMode.DROPDOWN,
-            ),
-            FormField(
-                key="qu_id",
-                field_type=FieldType.SELECT,
-                required=False,
-                suggested_value=self._str_val(
-                    suggested.get("qu_id", suggested.get("qu_id_purchase"))
-                ),
-                options=qu_options,
-                select_mode=SelectMode.DROPDOWN,
-            ),
-            FormField(
-                key="amount",
-                field_type=FieldType.NUMBER,
-                required=False,
-                suggested_value=suggested.get("amount"),
-            ),
         ]
+
+        if (scan_options or {}).get(CONF_ENABLE_SHOPPING_LOCATIONS, True):
+            fields.append(
+                FormField(
+                    key="shopping_location_id",
+                    field_type=FieldType.SELECT,
+                    required=False,
+                    options=shop_options,
+                    select_mode=SelectMode.DROPDOWN,
+                )
+            )
+
+        fields.extend(
+            [
+                FormField(
+                    key="qu_id",
+                    field_type=FieldType.SELECT,
+                    required=False,
+                    suggested_value=self._str_val(
+                        suggested.get("qu_id", suggested.get("qu_id_purchase"))
+                    ),
+                    options=qu_options,
+                    select_mode=SelectMode.DROPDOWN,
+                ),
+                FormField(
+                    key="amount",
+                    field_type=FieldType.NUMBER,
+                    required=False,
+                    suggested_value=suggested.get("amount"),
+                ),
+            ]
+        )
+
+        return fields
 
     def build_update_product_details_fields(
         self,
