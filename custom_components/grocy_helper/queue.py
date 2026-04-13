@@ -96,16 +96,7 @@ class ScanQueue:
         for raw in data.get("items", []):
             try:
                 status = QueueStatus(raw["status"])
-            except (ValueError, KeyError):
-                _LOGGER.warning(
-                    "Invalid persisted queue item status %r for item %r; skipping",
-                    raw.get("status"),
-                    raw.get("id"),
-                )
-                continue
-
-            self._items.append(
-                QueueItem(
+                item = QueueItem(
                     id=raw["id"],
                     barcode=raw["barcode"],
                     mode=raw["mode"],
@@ -115,7 +106,15 @@ class ScanQueue:
                     result=raw.get("result"),
                     metadata=raw.get("metadata", {}),
                 )
-            )
+            except (ValueError, KeyError) as exc:
+                _LOGGER.warning(
+                    "Corrupt persisted queue item (missing/invalid field); skipping: %r — %r",
+                    raw,
+                    exc,
+                )
+                continue
+
+            self._items.append(item)
 
     async def async_add(
         self,

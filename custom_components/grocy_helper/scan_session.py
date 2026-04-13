@@ -717,7 +717,10 @@ class ScanSession:
             suggested: dict[str, Any] = {
                 "note": new_product["name"] if new_product else "",
             }
-            fields = self._form_builder.build_create_barcode_fields(suggested)
+            fields = self._form_builder.build_create_barcode_fields(
+                suggested,
+                scan_options=self.scan_options,
+            )
             aliases = self._get_aliases()
             plc = {
                 "name": new_product.get("name") if new_product else None,
@@ -739,12 +742,16 @@ class ScanSession:
             return self._cached_form
 
         # ── process ─────────────────────────────────────────────────
+        shopping_location_id = None
+        if self.scan_options.get(CONF_ENABLE_SHOPPING_LOCATIONS, True):
+            shopping_location_id = user_input.get("shopping_location_id")
+
         br: GrocyProductBarcode = {
             "barcode": code,
             "note": user_input.get("note", ""),
             "product_id": new_product["id"],
             "qu_id": user_input.get("qu_id"),
-            "shopping_location_id": user_input.get("shopping_location_id"),
+            "shopping_location_id": shopping_location_id,
             "amount": user_input.get("amount"),
             "row_created_timestamp": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
@@ -1885,19 +1892,15 @@ class ScanSession:
             )
 
         # ── Validate submitted values before stashing ───────────────
-        produce_servings = try_parse_int(user_input.get("produce_servings"))
-        produce_amount = try_parse_int(user_input.get("produce_amount"))
+        _ok_s, produce_servings = try_parse_int(user_input.get("produce_servings"))
+        _ok_a, produce_amount = try_parse_int(user_input.get("produce_amount"))
 
-        if produce_servings is None or produce_servings < 1:
+        if not _ok_s or produce_servings < 1:
             errors["produce_servings"] = "produce_servings_min_1"
         if (
-            produce_amount is None
+            not _ok_a
             or produce_amount < 0
-            or (
-                produce_servings is not None
-                and produce_servings >= 1
-                and produce_amount > produce_servings
-            )
+            or (_ok_s and produce_servings >= 1 and produce_amount > produce_servings)
         ):
             errors["produce_amount"] = "produce_amount_invalid"
 
@@ -2214,7 +2217,11 @@ class ScanSession:
     ) -> tuple[str | None, int | None, str | None]:
         """Extract input values for scan process."""
         # TODO: Input default price from Recipe (cost of ingredients)
-        price = user_input.get("price") if user_input else None
+        price = (
+            user_input.get("price")
+            if user_input and self.scan_options.get(CONF_ENABLE_PRICES, True)
+            else None
+        )
         best_before_in_days = (
             user_input.get(
                 "best_before_in_days", product.get("default_best_before_days")
@@ -2223,7 +2230,10 @@ class ScanSession:
             else product.get("default_best_before_days")
         )
         shopping_location_id = (
-            user_input.get("shopping_location_id") if user_input else None
+            user_input.get("shopping_location_id")
+            if user_input
+            and self.scan_options.get(CONF_ENABLE_SHOPPING_LOCATIONS, True)
+            else None
         )
         return price, best_before_in_days, shopping_location_id
 
