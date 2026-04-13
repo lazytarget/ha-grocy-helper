@@ -11,6 +11,7 @@ import datetime as dt
 import logging
 from typing import Any
 
+from .calorie_basis import classify_quantity_unit_basis
 from .coordinator import GrocyHelperCoordinator
 from .const import NUMERIC_FIELDS
 from .grocytypes import GrocyMasterData
@@ -397,18 +398,10 @@ class ProductDataBuilder:
                 ):
                     product_quantity_unit = qq["id"]
                     _LOGGER.warning("Unit: %s, QQ: %s", unit, qq)
-                    product_quantity_unit_as_liquid = qq["name"] in [
-                        "ml",
-                        "cl",
-                        "dl",
-                        "l",
-                        "L",
-                    ]
-                    product_quantity_unit_as_weight = qq["name"] in [
-                        "g",
-                        "hg",
-                        "kg",
-                    ]
+                    (
+                        product_quantity_unit_as_liquid,
+                        product_quantity_unit_as_weight,
+                    ) = classify_quantity_unit_basis(qq.get("name"))
 
         # TODO: fill in info from ICA
 

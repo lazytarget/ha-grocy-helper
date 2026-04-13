@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock
 
+from custom_components.grocy_helper.calorie_basis import classify_quantity_unit_basis
 from custom_components.grocy_helper.const import CONF_ENABLE_CALORIES
 from custom_components.grocy_helper.scan_product_builders import ProductDataBuilder
 from custom_components.grocy_helper.scan_form_builders import ScanFormBuilder
@@ -359,6 +360,28 @@ class TestCalorieZeroValue:
         assert isinstance(result, CompletedResult)
         assert coordinator.product_updates
         assert coordinator.product_updates[-1].get("calories") == 0
+
+
+class TestCalorieBasisClassifier:
+    """Shared unit basis classifier for calorie conversion."""
+
+    def test_liquid_units_classified_as_liquid(self):
+        """Liquid quantity units should map to liquid basis only."""
+        is_liquid, is_weight = classify_quantity_unit_basis("ml")
+        assert is_liquid is True
+        assert is_weight is False
+
+    def test_weight_units_classified_as_weight(self):
+        """Weight quantity units should map to weight basis only."""
+        is_liquid, is_weight = classify_quantity_unit_basis("kg")
+        assert is_liquid is False
+        assert is_weight is True
+
+    def test_unknown_units_are_unsupported(self):
+        """Piece/pack and unknown units should be unsupported for now."""
+        is_liquid, is_weight = classify_quantity_unit_basis("Piece")
+        assert is_liquid is False
+        assert is_weight is False
 
     async def test_liquid_basis_without_conversion_skips_calories(self):
         """100ml basis without stock->ml conversion must not write calories."""

@@ -38,6 +38,7 @@ import re
 from typing import Any
 
 from .barcodebuddyapi import BarcodeBuddyAPI
+from .calorie_basis import classify_quantity_unit_basis
 from .coordinator import GrocyHelperCoordinator
 from .const import (
     CONF_DEFAULT_LOCATION_FREEZER,
@@ -1689,14 +1690,10 @@ class ScanSession:
                 self.masterdata["quantity_units"],
             ):
                 _LOGGER.warning("Chosen unit: %s", qq)
-                product_quantity_unit_as_liquid = qq["name"] in [
-                    "ml",
-                    "cl",
-                    "dl",
-                    "l",
-                    "L",
-                ]
-                product_quantity_unit_as_weight = qq["name"] in ["g", "hg", "kg"]
+                (
+                    product_quantity_unit_as_liquid,
+                    product_quantity_unit_as_weight,
+                ) = classify_quantity_unit_basis(qq.get("name"))
                 break
 
         if not skip_add_qu_conversions:
