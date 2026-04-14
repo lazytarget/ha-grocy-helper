@@ -1810,8 +1810,8 @@ class ScanSession:
         kcal: float,
         product_quantity_unit_as_liquid: bool,
         product_quantity_unit_as_weight: bool,
-    ) -> float | None:
-        """Calculate calories per pack using QU conversion."""
+    ) -> int | None:
+        """Calculate rounded-up calories per pack using QU conversion."""
         if not product_quantity_unit_as_liquid and not product_quantity_unit_as_weight:
             _LOGGER.warning(
                 "Unsupported OFF quantity basis for calorie conversion; skipping calories update."

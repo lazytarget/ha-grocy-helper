@@ -405,16 +405,27 @@ class ProductDataBuilder:
 
         # TODO: fill in info from ICA
 
-        kcal = user_input.get("calories_per_100")
+        raw_kcal = user_input.get("calories_per_100")
+        # Treat blank strings (user cleared an optional field) the same as missing.
+        if isinstance(raw_kcal, str) and not raw_kcal.strip():
+            raw_kcal = None
         nutriments = (current_product_openfoodfacts or {}).get("nutriments", {})
-        if kcal is None:
+        if raw_kcal is None:
             # OFF currently exposes the kcal value through the same field,
             # while the product quantity unit determines whether this means
             # per 100g or per 100ml.
-            kcal = nutriments.get("energy_kcal_100g")
+            raw_kcal = nutriments.get("energy_kcal_100g")
 
-        if kcal is not None:
-            kcal = float(kcal)
+        if raw_kcal is not None:
+            try:
+                kcal = float(raw_kcal)
+            except (TypeError, ValueError):
+                _LOGGER.warning(
+                    "Ignoring non-numeric calories_per_100 value: %r", raw_kcal
+                )
+                kcal = None
+        else:
+            kcal = None
         user_input["calories_per_100"] = kcal
 
         return (

@@ -25,6 +25,18 @@ def _get_field(fields: list, key: str):
     return next((f for f in fields if f.key == key), None)
 
 
+class CapturingCoordinator(FakeCoordinator):
+    """FakeCoordinator variant that records all product update payloads."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.product_updates: list[dict] = []
+
+    async def update_product(self, product_id: int, changes: dict) -> dict:
+        self.product_updates.append(changes)
+        return {}
+
+
 class TestCalorieConversion100g:
     """100g calorie basis conversion behavior."""
 
@@ -32,16 +44,6 @@ class TestCalorieConversion100g:
         """100g kcal values are converted to per-stock-unit and rounded up."""
         grocy_api = FakeGrocyAPI()
         bbuddy_api = FakeBarcodeBuddyAPI()
-
-        class CapturingCoordinator(FakeCoordinator):
-            def __init__(self, *args, **kwargs):
-                super().__init__(*args, **kwargs)
-                self.product_updates: list[dict] = []
-
-            async def update_product(self, product_id: int, changes: dict) -> dict:
-                self.product_updates.append(changes)
-                return {}
-
         coordinator = CapturingCoordinator(
             grocy_api=grocy_api,
             bbuddy_api=bbuddy_api,
@@ -88,16 +90,6 @@ class TestCalorieConversion100ml:
         """Liquid OFF data should use 100ml calories when available."""
         grocy_api = FakeGrocyAPI()
         bbuddy_api = FakeBarcodeBuddyAPI()
-
-        class CapturingCoordinator(FakeCoordinator):
-            def __init__(self, *args, **kwargs):
-                super().__init__(*args, **kwargs)
-                self.product_updates: list[dict] = []
-
-            async def update_product(self, product_id: int, changes: dict) -> dict:
-                self.product_updates.append(changes)
-                return {}
-
         coordinator = CapturingCoordinator(
             grocy_api=grocy_api,
             bbuddy_api=bbuddy_api,
@@ -212,16 +204,6 @@ class TestCalorieUnsupportedBasis:
         """Per-piece style quantity unit should not be converted via g/ml."""
         grocy_api = FakeGrocyAPI()
         bbuddy_api = FakeBarcodeBuddyAPI()
-
-        class CapturingCoordinator(FakeCoordinator):
-            def __init__(self, *args, **kwargs):
-                super().__init__(*args, **kwargs)
-                self.product_updates: list[dict] = []
-
-            async def update_product(self, product_id: int, changes: dict) -> dict:
-                self.product_updates.append(changes)
-                return {}
-
         coordinator = CapturingCoordinator(
             grocy_api=grocy_api,
             bbuddy_api=bbuddy_api,
@@ -266,16 +248,6 @@ class TestCalorieMissingConversion:
         """100g basis without stock->g conversion must not write calories."""
         grocy_api = FakeGrocyAPI()
         bbuddy_api = FakeBarcodeBuddyAPI()
-
-        class CapturingCoordinator(FakeCoordinator):
-            def __init__(self, *args, **kwargs):
-                super().__init__(*args, **kwargs)
-                self.product_updates: list[dict] = []
-
-            async def update_product(self, product_id: int, changes: dict) -> dict:
-                self.product_updates.append(changes)
-                return {}
-
         coordinator = CapturingCoordinator(
             grocy_api=grocy_api,
             bbuddy_api=bbuddy_api,
@@ -314,16 +286,6 @@ class TestCalorieZeroValue:
         """OFF kcal=0 with valid conversion should update Grocy calories to 0."""
         grocy_api = FakeGrocyAPI()
         bbuddy_api = FakeBarcodeBuddyAPI()
-
-        class CapturingCoordinator(FakeCoordinator):
-            def __init__(self, *args, **kwargs):
-                super().__init__(*args, **kwargs)
-                self.product_updates: list[dict] = []
-
-            async def update_product(self, product_id: int, changes: dict) -> dict:
-                self.product_updates.append(changes)
-                return {}
-
         coordinator = CapturingCoordinator(
             grocy_api=grocy_api,
             bbuddy_api=bbuddy_api,
@@ -362,6 +324,52 @@ class TestCalorieZeroValue:
         assert coordinator.product_updates[-1].get("calories") == 0
 
 
+class TestCalorieBlankStringGuard:
+    """Blank-string kcal from user clearing a form field must not crash."""
+
+    def test_blank_string_calories_per_100_treated_as_missing(self):
+        """Empty string in user_input calories_per_100 falls back to OFF data."""
+        coordinator = FakeCoordinator(
+            grocy_api=FakeGrocyAPI(),
+            bbuddy_api=FakeBarcodeBuddyAPI(),
+            master_data=make_master_data(),
+        )
+        builder = ProductDataBuilder(coordinator)
+
+        (_, _, _, _, kcal) = builder.parse_openfoodfacts_data(
+            user_input={"calories_per_100": ""},
+            current_product_openfoodfacts={
+                "product_quantity": 100,
+                "product_quantity_unit": "g",
+                "nutriments": {"energy_kcal_100g": 52},
+            },
+        )
+
+        assert kcal == 52.0
+
+    def test_non_numeric_string_calories_per_100_treated_as_missing(self):
+        """Non-numeric string in calories_per_100 is warned and yields None."""
+        coordinator = FakeCoordinator(
+            grocy_api=FakeGrocyAPI(),
+            bbuddy_api=FakeBarcodeBuddyAPI(),
+            master_data=make_master_data(),
+        )
+        builder = ProductDataBuilder(coordinator)
+
+        (_, _, _, _, kcal) = builder.parse_openfoodfacts_data(
+            user_input={"calories_per_100": "abc"},
+            current_product_openfoodfacts={
+                "product_quantity": 100,
+                "product_quantity_unit": "g",
+                "nutriments": {"energy_kcal_100g": 52},
+            },
+        )
+
+        # Non-empty but non-numeric: the user typed something invalid; we warn
+        # and return None rather than silently overriding with OFF data.
+        assert kcal is None
+
+
 class TestCalorieBasisClassifier:
     """Shared unit basis classifier for calorie conversion."""
 
@@ -387,16 +395,6 @@ class TestCalorieBasisClassifier:
         """100ml basis without stock->ml conversion must not write calories."""
         grocy_api = FakeGrocyAPI()
         bbuddy_api = FakeBarcodeBuddyAPI()
-
-        class CapturingCoordinator(FakeCoordinator):
-            def __init__(self, *args, **kwargs):
-                super().__init__(*args, **kwargs)
-                self.product_updates: list[dict] = []
-
-            async def update_product(self, product_id: int, changes: dict) -> dict:
-                self.product_updates.append(changes)
-                return {}
-
         coordinator = CapturingCoordinator(
             grocy_api=grocy_api,
             bbuddy_api=bbuddy_api,
