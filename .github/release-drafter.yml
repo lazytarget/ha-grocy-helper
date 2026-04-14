@@ -1,7 +1,7 @@
 ---
 name-template: 'v$RESOLVED_VERSION'
 tag-template: 'v$RESOLVED_VERSION'
-change-template: '- #$NUMBER $TITLE'
+change-template: "- $TITLE @$AUTHOR ([#$NUMBER]($URL))"
 sort-direction: ascending
 exclude-contributors:
   - 'github-actions[bot]'
@@ -11,29 +11,6 @@ exclude-contributors:
   - 'crowdin-bot'
 exclude-labels:
   - 'skip-changelog'
-
-version-resolver:
-  major:
-    labels:
-      - 'major'
-      - "breaking-change"
-  minor:
-    labels:
-      - 'minor'
-      - "new-feature"
-  patch:
-    labels:
-      - "bug"
-      - "bugfix"
-      - "chore"
-      - "ci"
-      - "dependencies"
-      - "documentation"
-      - "enhancement"
-      - "performance"
-      - "refactor"
-      - 'patch'
-  default: patch
 
 categories:
   - title: "🚨 Breaking changes"
@@ -66,10 +43,35 @@ categories:
     labels:
       - "dependencies"
 
+version-resolver:
+  major:
+    labels:
+      - 'major'
+      - "breaking-change"
+  minor:
+    labels:
+      - 'minor'
+      - "new-feature"
+  patch:
+    labels:
+      - "bug"
+      - "bugfix"
+      - "chore"
+      - "ci"
+      - "dependencies"
+      - "documentation"
+      - "enhancement"
+      - "performance"
+      - "refactor"
+      - 'patch'
+  default: patch
+
 autolabeler:
   - label: 'ci'
     files:
       - '/.github/**/*'
+    title:
+      - '/^ci:/i'
   - label: 'blueprint'
     files:
       - '/custom_components/*/blueprints/**/*'
@@ -81,6 +83,8 @@ autolabeler:
       - '/tests/*.md'
     branch:
       - '/^(docs?)\/.+/'
+    title:
+      - '/^(docs?):/i'
   - label: 'bugfix'
     branch:
       - '/fix\/.+/'
@@ -104,7 +108,6 @@ autolabeler:
       - '/^refactor\/.+/'
     title:
       - '/^refactor:/i'
-commitish: refs/heads/main
 template: |
   ## What's changed?
 
