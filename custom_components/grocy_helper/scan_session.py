@@ -33,10 +33,12 @@ from __future__ import annotations
 import datetime as dt
 import json
 import logging
+import math
 import re
 from typing import Any
 
 from .barcodebuddyapi import BarcodeBuddyAPI
+from .calorie_basis import classify_quantity_unit_basis
 from .coordinator import GrocyHelperCoordinator
 from .const import (
     CONF_DEFAULT_LOCATION_FREEZER,
@@ -905,11 +907,14 @@ class ScanSession:
             product_updates["default_best_before_days_after_thawing"] = int(val)
 
         # Calculate calories per pack if possible
-        if kcal and self.scan_options.get(CONF_ENABLE_CALORIES, True):
+        if kcal is not None and self.scan_options.get(CONF_ENABLE_CALORIES, True):
             calories = await self._calculate_calories_per_pack(
-                product, kcal, product_quantity_unit_as_liquid
+                product,
+                kcal,
+                product_quantity_unit_as_liquid,
+                product_quantity_unit_as_weight,
             )
-            if calories:
+            if calories is not None:
                 product_updates["calories"] = calories
 
         # Apply updates
@@ -1685,14 +1690,10 @@ class ScanSession:
                 self.masterdata["quantity_units"],
             ):
                 _LOGGER.warning("Chosen unit: %s", qq)
-                product_quantity_unit_as_liquid = qq["name"] in [
-                    "ml",
-                    "cl",
-                    "dl",
-                    "l",
-                    "L",
-                ]
-                product_quantity_unit_as_weight = qq["name"] in ["g", "hg", "kg"]
+                (
+                    product_quantity_unit_as_liquid,
+                    product_quantity_unit_as_weight,
+                ) = classify_quantity_unit_basis(qq.get("name"))
                 break
 
         if not skip_add_qu_conversions:
@@ -1808,8 +1809,15 @@ class ScanSession:
         product: dict,
         kcal: float,
         product_quantity_unit_as_liquid: bool,
-    ) -> float | None:
-        """Calculate calories per pack using QU conversion."""
+        product_quantity_unit_as_weight: bool,
+    ) -> int | None:
+        """Calculate rounded-up calories per pack using QU conversion."""
+        if not product_quantity_unit_as_liquid and not product_quantity_unit_as_weight:
+            _LOGGER.warning(
+                "Unsupported OFF quantity basis for calorie conversion; skipping calories update."
+            )
+            return None
+
         gram_unit = self.masterdata["known_qu"].get("g")
         if product_quantity_unit_as_liquid:
             gram_unit = self.masterdata["known_qu"].get("ml")
@@ -1841,7 +1849,7 @@ class ScanSession:
             c["to_qu_name"],
         )
         grams_per_pack = c["to_amount"]
-        return kcal_per_gram * grams_per_pack
+        return math.ceil(kcal_per_gram * grams_per_pack)
 
     # ── Produce flow ────────────────────────────────────────────────
 

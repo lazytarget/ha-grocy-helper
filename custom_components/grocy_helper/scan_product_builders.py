@@ -11,6 +11,7 @@ import datetime as dt
 import logging
 from typing import Any
 
+from .calorie_basis import classify_quantity_unit_basis
 from .coordinator import GrocyHelperCoordinator
 from .const import NUMERIC_FIELDS
 from .grocytypes import GrocyMasterData
@@ -397,27 +398,35 @@ class ProductDataBuilder:
                 ):
                     product_quantity_unit = qq["id"]
                     _LOGGER.warning("Unit: %s, QQ: %s", unit, qq)
-                    product_quantity_unit_as_liquid = qq["name"] in [
-                        "ml",
-                        "cl",
-                        "dl",
-                        "l",
-                        "L",
-                    ]
-                    product_quantity_unit_as_weight = qq["name"] in [
-                        "g",
-                        "hg",
-                        "kg",
-                    ]
+                    (
+                        product_quantity_unit_as_liquid,
+                        product_quantity_unit_as_weight,
+                    ) = classify_quantity_unit_basis(qq.get("name"))
 
         # TODO: fill in info from ICA
 
-        kcal = user_input.get("calories_per_100") or (
-            current_product_openfoodfacts or {}
-        ).get("nutriments", {}).get("energy_kcal_100g")
+        raw_kcal = user_input.get("calories_per_100")
+        # Treat blank strings (user cleared an optional field) the same as missing.
+        if isinstance(raw_kcal, str) and not raw_kcal.strip():
+            raw_kcal = None
+        nutriments = (current_product_openfoodfacts or {}).get("nutriments", {})
+        if raw_kcal is None:
+            # OFF currently exposes the kcal value through the same field,
+            # while the product quantity unit determines whether this means
+            # per 100g or per 100ml.
+            raw_kcal = nutriments.get("energy_kcal_100g")
+
+        if raw_kcal is not None:
+            try:
+                kcal = float(raw_kcal)
+            except (TypeError, ValueError):
+                _LOGGER.warning(
+                    "Ignoring non-numeric calories_per_100 value: %r", raw_kcal
+                )
+                kcal = None
+        else:
+            kcal = None
         user_input["calories_per_100"] = kcal
-        if kcal:
-            kcal = float(kcal)
 
         return (
             product_quantity,
